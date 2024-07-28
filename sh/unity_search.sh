@@ -74,35 +74,25 @@ sf() {
     exts=($(rg_filter_exts $@))
     rg_prefix="rg ${rg_opts_file[@]} ${exts[@]}"
     fzf ${fzf_opts_rg[@]} --disabled \
-        --bind "start:reload:$1 {q}" \
-        --bind "change:reload:sleep 0.02;$1 {q} || true"
+        --bind "start:reload:$rg_prefix {q}" \
+        --bind "change:reload:sleep 0.02;$rg_prefix {q} || true"
 }
 
 sfpkg() {
     exts=($(rg_filter_exts $@))
     rg_prefix="rg ${rg_opts_file[@]} ${exts[@]}"
     fzf ${fzf_opts_rg[@]} --disabled \
-        --bind "start:reload:$1 {q}" \
-        --bind "change:reload:sleep 0.02;$1 {q} Library/PackageCache || true"
+        --bind "start:reload:$rg_prefix {q}" \
+        --bind "change:reload:sleep 0.02;$rg_prefix {q} Library/PackageCache || true"
 }
 
 fref() {
-    meta_path=$(fd ${fd_opts_file[@]} -e meta | fzf ${fzf_opts_preview[@]})
-
-    # cancel
+    local meta_path=$(fd ${fd_opts_file[@]} -e meta | fzf ${fzf_opts_preview[@]})
     if [[ -z $meta_path ]]; then
         return
     fi
 
-    meta_guid=$(rg_guid_from_meta $meta_path)
-    ref_files=$(rg ${rg_opts_file[@]} $meta_guid)
-
-    if [[ -z $ref_files ]]; then
-        echo "No references"
-        return
-    fi
-
-    echo "$ref_files" | fzf ${fzf_opts_rg}
+    rg ${rg_opts_file[@]} -g '*.{asset,unity,prefab}' $(rg_guid_from_meta $meta_path) | fzf ${fzf_opts_rg[@]}
 }
 
 alias ffasset="ff asset unity prefab"
