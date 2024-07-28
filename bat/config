@@ -1,0 +1,5 @@
+--theme="Catppuccin-Mocha"
+--map-syntax='*.meta:YAML'
+--map-syntax='*.prefab:YAML'
+--map-syntax='*.unity:YAML'
+--map-syntax='*.asset:YAML'
