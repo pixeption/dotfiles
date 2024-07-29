@@ -15,11 +15,13 @@ rg_opts_file=(
 fzf_opts_open_file=(
     --bind 'alt-enter:become(nvim {})'
     --bind 'enter:become(code {})'
+    --bind 'tab:execute-silent(code {})'
 )
 
 fzf_opts_open_file_line=(
     --bind 'alt-enter:become(nvim {1} +{2})'
     --bind 'enter:become(code -g {1}:{2})'
+    --bind 'tab:execute-silent(code -g {1}:{2})'
 )
 
 fzf_opts_preview=(
@@ -34,8 +36,8 @@ fzf_opts_preview_line=(
 fzf_opts_rg=(
     --ansi
     --delimiter :
-    ${fzf_opts_preview_line[@]}
-    ${fzf_opts_open_file_line[@]}
+    $fzf_opts_preview_line
+    $fzf_opts_open_file_line
 )
 
 fd_filter_exts() {
@@ -61,38 +63,38 @@ rg_guid_from_meta() {
 
 ff() {
     exts=($(fd_filter_exts $@))
-    fd ${fd_opts_file[@]} ${exts[@]} | fzf ${fzf_opts_open_file[@]} ${fzf_opts_preview[@]}
+    fd $fd_opts_file $exts | fzf $fzf_opts_open_file $fzf_opts_preview
 }
 
 ffpkg() {
     exts=($(fd_filter_exts $@) --search-path Library/PackageCache)
-    fd ${fd_opts_file[@]} ${exts[@]} | fzf ${fzf_opts_open_file[@]} ${fzf_opts_preview[@]}
+    fd $fd_opts_file $exts | fzf $fzf_opts_open_file $fzf_opts_preview
 }
 
 
 sf() {
     exts=($(rg_filter_exts $@))
-    rg_prefix="rg ${rg_opts_file[@]} ${exts[@]}"
-    fzf ${fzf_opts_rg[@]} --disabled \
+    rg_prefix="rg $rg_opts_file $exts"
+    fzf $fzf_opts_rg --disabled \
         --bind "start:reload:$rg_prefix {q}" \
         --bind "change:reload:sleep 0.02;$rg_prefix {q} || true"
 }
 
 sfpkg() {
     exts=($(rg_filter_exts $@))
-    rg_prefix="rg ${rg_opts_file[@]} ${exts[@]}"
-    fzf ${fzf_opts_rg[@]} --disabled \
+    rg_prefix="rg $rg_opts_file $exts"
+    fzf $fzf_opts_rg --disabled \
         --bind "start:reload:$rg_prefix {q}" \
         --bind "change:reload:sleep 0.02;$rg_prefix {q} Library/PackageCache || true"
 }
 
 fref() {
-    local meta_path=$(fd ${fd_opts_file[@]} -e meta | fzf ${fzf_opts_preview[@]})
+    local meta_path=$(fd $fd_opts_file -e meta | fzf $fzf_opts_preview)
     if [[ -z $meta_path ]]; then
         return
     fi
 
-    rg ${rg_opts_file[@]} -g '*.{asset,unity,prefab}' $(rg_guid_from_meta $meta_path) | fzf ${fzf_opts_rg[@]}
+    rg $rg_opts_file -g '*.{asset,unity,prefab}' $(rg_guid_from_meta $meta_path) | fzf $fzf_opts_rg
 }
 
 alias ffasset="ff asset unity prefab"
