@@ -1,3 +1,5 @@
+script_path=$0
+
 fd_opts_file=(
     --type file
     --exclude obj
@@ -88,13 +90,32 @@ sfpkg() {
         --bind "change:reload:sleep 0.02;$rg_prefix {q} Library/PackageCache || true"
 }
 
-fref() {
-    local meta_path=$(fd $fd_opts_file -e meta | fzf $fzf_opts_preview)
-    if [[ -z $meta_path ]]; then
+fref_unity()
+{
+    meta="$1.meta"
+    if [ ! -f $meta ]; then
         return
     fi
 
-    rg $rg_opts_file -g '*.{asset,unity,prefab}' $(rg_guid_from_meta $meta_path) | fzf $fzf_opts_rg
+    guid="$(rg --no-line-number --max-count=1 "guid: ([0-9a-z].+)" --only-matching --replace='$1' $meta)"
+    refs=$(rg $rg_opts_file -g '*.{asset,unity,prefab}' $guid)
+
+    if [[ ! -z "$refs" ]]; then
+        echo "$refs"
+    fi
+}
+
+fref() {
+    fd_prefix="fd $fd_opts_file -e cs -e prefab -e asset"
+    f_fref_unity="source $script_path; fref_unity"
+    fzf --ansi \
+        --delimiter : \
+        --prompt "1. Choose File> " \
+        --bind "ctrl-space:reload($fd_prefix)+change-prompt(1. Choose File> )+clear-query" \
+        --bind "start:reload($fd_prefix)" \
+        --bind "tab:execute-silent(code -g {1}:{2})" \
+        --bind "enter:transform-prompt(echo \"2. \$(basename {1})> \")+reload($f_fref_unity {1})+clear-query" \
+        --preview "$f_fref_unity {1}"
 }
 
 alias ffasset="ff asset unity prefab"
