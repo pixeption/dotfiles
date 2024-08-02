@@ -106,7 +106,7 @@ fref_unity()
 }
 
 fref() {
-    fd_prefix="fd $fd_opts_file -e cs -e prefab -e asset"
+    fd_prefix="fd $fd_opts_file --exclude '*.meta'"
     f_fref_unity="source $script_path; fref_unity"
     fzf --ansi \
         --delimiter : \
