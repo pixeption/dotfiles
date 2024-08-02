@@ -98,7 +98,7 @@ fref_unity()
     fi
 
     guid="$(rg --no-line-number --max-count=1 "guid: ([0-9a-z].+)" --only-matching --replace='$1' $meta)"
-    refs=$(rg $rg_opts_file -g '*.{asset,unity,prefab}' $guid)
+    refs=$(rg $rg_opts_file -g '*.{asset,unity,prefab,mat,spriteatlas,anim,controller}' $guid)
 
     if [[ ! -z "$refs" ]]; then
         echo "$refs"
