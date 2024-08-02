@@ -6,3 +6,4 @@ vim.g.autoformat = false
 vim.opt.shiftwidth = 4
 vim.opt.timeoutlen = 1000
 vim.opt.ttimeoutlen = 0
+vim.opt.scrolloff = 10
