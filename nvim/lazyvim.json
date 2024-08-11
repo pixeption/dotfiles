@@ -1,8 +1,7 @@
 {
   "extras": [
     "lazyvim.plugins.extras.lang.markdown",
-    "lazyvim.plugins.extras.lang.omnisharp",
-    "lazyvim.plugins.extras.lsp.none-ls"
+    "lazyvim.plugins.extras.lang.omnisharp"
   ],
   "news": {
     "NEWS.md": "6520"
