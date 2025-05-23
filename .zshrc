@@ -29,3 +29,7 @@ source $ZSH/oh-my-zsh.sh
 source ~/.config/sh/unity_search.sh
 
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+
+alias lz=lazygit
+alias nv=nvim
+# bindkey '^I' autosuggest-accept
