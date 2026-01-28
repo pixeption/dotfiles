@@ -32,4 +32,6 @@ source ~/.config/sh/unity_search.sh
 
 alias lz=lazygit
 alias nv=nvim
+alias bu="brew upgrade"
+bindkey "^U" backward-kill-line
 # bindkey '^I' autosuggest-accept
