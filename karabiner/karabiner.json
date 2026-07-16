@@ -1,0 +1,130 @@
+{
+    "global": { "show_in_menu_bar": false },
+    "profiles": [
+        {
+            "complex_modifications": {
+                "rules": [
+                    {
+                        "conditions": [
+                            {
+                                "identifiers": [
+                                    {
+                                        "product_id": 1149,
+                                        "vendor_id": 33129
+                                    }
+                                ],
+                                "type": "device_if"
+                            }
+                        ],
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "keypad_plus",
+                                    "modifiers": { "mandatory": ["left_command"] }
+                                },
+                                "to": [{ "pointing_button": "button10" }],
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "conditions": [
+                            {
+                                "identifiers": [
+                                    {
+                                        "product_id": 1149,
+                                        "vendor_id": 33129
+                                    }
+                                ],
+                                "type": "device_if"
+                            }
+                        ],
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "keypad_hyphen",
+                                    "modifiers": { "mandatory": ["left_command"] }
+                                },
+                                "to": [{ "pointing_button": "button9" }],
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "conditions": [
+                            {
+                                "identifiers": [
+                                    {
+                                        "product_id": 1149,
+                                        "vendor_id": 33129
+                                    }
+                                ],
+                                "type": "device_if"
+                            }
+                        ],
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "open_bracket",
+                                    "modifiers": { "mandatory": ["left_command"] }
+                                },
+                                "to": [{ "pointing_button": "button4" }],
+                                "type": "basic"
+                            }
+                        ]
+                    },
+                    {
+                        "conditions": [
+                            {
+                                "identifiers": [
+                                    {
+                                        "product_id": 1149,
+                                        "vendor_id": 33129
+                                    }
+                                ],
+                                "type": "device_if"
+                            }
+                        ],
+                        "description": "Button function 1",
+                        "manipulators": [
+                            {
+                                "from": {
+                                    "key_code": "close_bracket",
+                                    "modifiers": { "mandatory": ["left_command"] }
+                                },
+                                "to": [{ "pointing_button": "button5" }],
+                                "type": "basic"
+                            }
+                        ]
+                    }
+                ]
+            },
+            "devices": [
+                {
+                    "identifiers": {
+                        "is_keyboard": true,
+                        "product_id": 33129,
+                        "vendor_id": 1149
+                    },
+                    "simple_modifications": [
+                        {
+                            "from": { "consumer_key_code": "play_or_pause" },
+                            "to": [{ "pointing_button": "button6" }]
+                        },
+                        {
+                            "from": { "consumer_key_code": "volume_decrement" },
+                            "to": [{ "pointing_button": "button7" }]
+                        },
+                        {
+                            "from": { "consumer_key_code": "volume_increment" },
+                            "to": [{ "pointing_button": "button8" }]
+                        }
+                    ]
+                }
+            ],
+            "name": "Default profile",
+            "selected": true,
+            "virtual_hid_keyboard": { "keyboard_type_v2": "ansi" }
+        }
+    ]
+}
