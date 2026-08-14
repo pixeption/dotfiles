@@ -11,10 +11,6 @@
                                     {
                                         "product_id": 1149,
                                         "vendor_id": 33129
-                                    },
-                                    {
-                                        "product_id": 1149,
-                                        "vendor_id": 33128
                                     }
                                 ],
                                 "type": "device_if"
@@ -38,10 +34,6 @@
                                     {
                                         "product_id": 1149,
                                         "vendor_id": 33129
-                                    },
-                                    {
-                                        "product_id": 1149,
-                                        "vendor_id": 33128
                                     }
                                 ],
                                 "type": "device_if"
@@ -65,10 +57,6 @@
                                     {
                                         "product_id": 1149,
                                         "vendor_id": 33129
-                                    },
-                                    {
-                                        "product_id": 1149,
-                                        "vendor_id": 33128
                                     }
                                 ],
                                 "type": "device_if"
@@ -92,10 +80,6 @@
                                     {
                                         "product_id": 1149,
                                         "vendor_id": 33129
-                                    },
-                                    {
-                                        "product_id": 1149,
-                                        "vendor_id": 33128
                                     }
                                 ],
                                 "type": "device_if"
@@ -120,27 +104,6 @@
                     "identifiers": {
                         "is_keyboard": true,
                         "product_id": 33129,
-                        "vendor_id": 1149
-                    },
-                    "simple_modifications": [
-                        {
-                            "from": { "consumer_key_code": "play_or_pause" },
-                            "to": [{ "pointing_button": "button6" }]
-                        },
-                        {
-                            "from": { "consumer_key_code": "volume_decrement" },
-                            "to": [{ "pointing_button": "button7" }]
-                        },
-                        {
-                            "from": { "consumer_key_code": "volume_increment" },
-                            "to": [{ "pointing_button": "button8" }]
-                        }
-                    ]
-                },
-                {
-                    "identifiers": {
-                        "is_keyboard": true,
-                        "product_id": 33128,
                         "vendor_id": 1149
                     },
                     "simple_modifications": [
