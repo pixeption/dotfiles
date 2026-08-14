@@ -2,7 +2,16 @@ import Foundation
 import ApplicationServices
 import Darwin
 
-// Find the running Unity Editor (any version) by executable path; skip Unity Hub.
+func parentPid(_ pid: pid_t) -> pid_t {
+    var info = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+    guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return -1 }
+    return pid_t(info.pbi_ppid)
+}
+
+// Find the running Unity Editor (any version) by executable path; skip Unity Hub and
+// the AssetImportWorker children, which share the editor's executable path but have no
+// windows. The editor is the match whose parent is not itself a Unity process.
 func findUnity() -> pid_t? {
     var n = proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)
     let cap = Int(n) / MemoryLayout<pid_t>.size + 32
@@ -10,13 +19,17 @@ func findUnity() -> pid_t? {
     n = proc_listpids(UInt32(PROC_ALL_PIDS), 0, &pids, Int32(cap * MemoryLayout<pid_t>.size))
     let count = Int(n) / MemoryLayout<pid_t>.size
     var buf = [CChar](repeating: 0, count: 4096)
+    var matches: [(pid: pid_t, ppid: pid_t)] = []
     for i in 0..<count {
         let p = pids[i]; if p == 0 { continue }
         if proc_pidpath(p, &buf, 4096) <= 0 { continue }
         let path = String(cString: buf)
-        if path.hasSuffix("/Unity.app/Contents/MacOS/Unity") && !path.contains("Unity Hub") { return p }
+        if path.hasSuffix("/Unity.app/Contents/MacOS/Unity") && !path.contains("Unity Hub") {
+            matches.append((p, parentPid(p)))
+        }
     }
-    return nil
+    let pidSet = Set(matches.map { $0.pid })
+    return matches.first { !pidSet.contains($0.ppid) }?.pid
 }
 
 func boolAttr(_ ax: AXUIElement, _ key: String) -> Bool {
