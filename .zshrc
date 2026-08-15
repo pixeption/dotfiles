@@ -39,3 +39,6 @@ alias nv=nvim
 alias bu="brew upgrade"
 bindkey "^U" backward-kill-line
 # bindkey '^I' autosuggest-accept
+
+# Unity CLI
+. "/Users/vbnn2/.unity/env"
