@@ -3,11 +3,10 @@ export XDG_CONFIG_HOME="$HOME/.config"
 if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
-source <(fzf --zsh)
 
 # fzf configs
 export FZF_DEFAULT_COMMAND="fd --exclude obj --exclude Library"
-export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
+export FZF_CTRL_T_COMMAND="fd --type f --exclude obj --exclude Library"
 export FZF_DEFAULT_OPTS=" \
     --color=bg+:#313244,bg:#1e1e2e,spinner:#f5e0dc,hl:#fab387 \
     --color=fg:#cdd6f4,header:#f38ba8,info:#cba6f7,pointer:#f5e0dc \
@@ -27,10 +26,11 @@ zstyle ':omz:update' mode auto
 zstyle ':omz:update' frequency 30
 
 # plugins
-plugins=(git z zsh-autosuggestions zsh-syntax-highlighting colored-man-pages)
+plugins=(git z colored-man-pages zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
-source ~/.config/sh/unity_search.sh
+source <(fzf --zsh)
+[[ -r ~/.config/sh/unity_search.sh ]] && source ~/.config/sh/unity_search.sh
 
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
@@ -41,4 +41,9 @@ bindkey "^U" backward-kill-line
 # bindkey '^I' autosuggest-accept
 
 # Unity CLI
-. "/Users/vbnn2/.unity/env"
+[[ -r "$HOME/.unity/env" ]] && . "$HOME/.unity/env"
+
+case ":${PATH}:" in
+  *:"$HOME/.local/bin":*) ;;
+  *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
