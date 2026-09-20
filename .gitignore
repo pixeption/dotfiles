@@ -5,3 +5,5 @@ gtk-2.0
 Alfred.alfredpreferences
 configstore
 swiftpm
+/zed
+/opencode
