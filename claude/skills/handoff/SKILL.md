@@ -25,15 +25,21 @@ working immediately — no process-wait, no `ListAgents`, no `SendMessage` round
    the work with `--task`** so it is self-describing in `ListAgents` and the kitty tab bar:
    ```bash
    ~/.claude/skills/handoff/scripts/spawn-handoff.sh \
-     --cwd "$(pwd)" --task "fix pipeline-ui frictions" /path/to/message.txt
+     --cwd "$(pwd)" --task "fix pipeline-ui frictions" \
+     --model 'claude-opus-5[1m]' /path/to/message.txt
    # or: printf '%s' "$msg" | .../spawn-handoff.sh --cwd "$(pwd)" --task "…"
    ```
    `--task` is slugified into a mentionable name plus an `-HHMMSS` suffix for uniqueness
    (`fix-pipeline-ui-frictions-170939`). Use `--name` instead to set an exact name verbatim (no
-   suffix); with neither it falls back to `handoff-HHMMSS`. The new session runs on
-   **`claude-opus-4-8` at `medium` effort by default**; override with `--model <alias|full-id>` and
-   `--effort low|medium|high|xhigh|max` when the task wants more (or less) horsepower — note the bare
-   `opus` alias now resolves to Opus 5, so the default pins the full `claude-opus-4-8` id. The script
+   suffix); with neither it falls back to `handoff-HHMMSS`.
+
+   **The new session inherits your model and effort.** Effort comes free — the script defaults
+   `--effort` to `$CLAUDE_EFFORT`, which Claude Code exports into your own shell. The model is not in
+   the environment, so **always pass `--model` with the exact model id of the session you are handing
+   off from** (your system prompt states it, e.g. `claude-opus-5[1m]`); quote it, since ids can carry
+   `[...]`. Without it the new session falls back to the CLI default, which is how a handoff silently
+   lands on the wrong model. Override either flag only when the user asks for a different model or
+   effort for the new session. The script
    resolves the `claude` binary
    (even off a non-login PATH), checks kitty remote control, opens a tab in `--cwd`, and launches
    `claude --name <name> --settings '{"crossSessionInbound":"accept"}' "<message>"`. The message is
@@ -68,7 +74,8 @@ script fails a precondition (kitty RC off, no `claude` binary), fall back to the
    ```bash
    cwd="$(pwd)"
    wid=$(kitty @ launch --type=tab --cwd="$cwd" --title="$name" \
-     -- claude --name "$name" --settings '{"crossSessionInbound":"accept"}')
+     -- claude --name "$name" --model 'claude-opus-5[1m]' --effort "$CLAUDE_EFFORT" \
+     --settings '{"crossSessionInbound":"accept"}')
    echo "spawned window=$wid name=$name"
    ```
    Capture both `$name` and `$wid` — you need `$name` to message it, and `$wid` to close it later if the user asks. Use `--type=os-window` instead of `--type=tab` if the user prefers a separate window.

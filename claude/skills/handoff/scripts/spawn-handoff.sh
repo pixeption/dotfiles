@@ -14,8 +14,10 @@
 #     --name     exact session name to use verbatim (still sanitized to letters/digits/hyphens);
 #                overrides --task and adds no suffix
 #     --cwd      working dir for the new session (default: $PWD)
-#     --model    model for the new session (alias or full id); default claude-opus-4-8
-#     --effort   reasoning effort: low|medium|high|xhigh|max; default medium
+#     --model    model for the new session (alias or full id); defaults to $CLAUDE_MODEL, i.e. the
+#                spawning session's own model when the caller exports it
+#     --effort   reasoning effort: low|medium|high|xhigh|max; defaults to $CLAUDE_EFFORT, the
+#                spawning session's own effort
 #     --os-window  open a separate OS window instead of a tab
 #     --dry-run  print what would run, spawn nothing
 #   Name precedence: --name (verbatim) > --task (slug + -HHMMSS) > handoff-HHMMSS.
@@ -33,7 +35,9 @@ slugify() {
 }
 
 cwd="$PWD"; name=""; task=""; wtype="tab"; dry=0
-model="claude-opus-4-8"; effort="medium"
+# Inherit the spawning session's model/effort by default: CLAUDE_EFFORT is exported by Claude Code
+# itself; CLAUDE_MODEL is exported by the caller (the skill tells Claude to pass its own model id).
+model="${CLAUDE_MODEL:-}"; effort="${CLAUDE_EFFORT:-medium}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --cwd)       cwd="$2"; shift 2;;
@@ -48,6 +52,9 @@ while [ $# -gt 0 ]; do
     *)           break;;
   esac
 done
+
+model_args=()
+[ -n "$model" ] && model_args=(--model "$model")
 
 case "$effort" in
   low|medium|high|xhigh|max) ;;
@@ -77,12 +84,12 @@ claude_bin="$(command -v claude 2>/dev/null || zsh -lic 'command -v claude' 2>/d
 if [ "$dry" -eq 1 ]; then
   echo "claude:  $claude_bin"
   echo "name:    $name"
-  echo "model:   $model"
+  echo "model:   ${model:-<session default>}"
   echo "effort:  $effort"
   echo "cwd:     $cwd"
   echo "wtype:   $wtype"
   echo "message: $(wc -c < "$msgfile") bytes, $(wc -l < "$msgfile") lines"
-  echo "would run: kitty @ launch --type=$wtype --cwd=$cwd --title=$name -- $claude_bin --name $name --model $model --effort $effort --settings {\"crossSessionInbound\":\"accept\"} <message>"
+  echo "would run: kitty @ launch --type=$wtype --cwd=$cwd --title=$name -- $claude_bin --name $name ${model:+--model $model} --effort $effort --settings {\"crossSessionInbound\":\"accept\"} <message>"
   exit 0
 fi
 
@@ -93,7 +100,7 @@ kitty @ ls >/dev/null 2>&1 || { echo "kitty remote control is off; enable allow_
 # never tokenizes it — newlines/quotes/$/backticks in the handoff are all safe. The
 # new session accepts inbound messages unattended so a follow-up needs no approval.
 wid="$(kitty @ launch --type="$wtype" --cwd="$cwd" --title="$name" -- \
-  "$claude_bin" --name "$name" --model "$model" --effort "$effort" \
+  "$claude_bin" --name "$name" ${model_args[@]+"${model_args[@]}"} --effort "$effort" \
   --settings '{"crossSessionInbound":"accept"}' "$(cat "$msgfile")")"
 
 echo "NAME=$name"
