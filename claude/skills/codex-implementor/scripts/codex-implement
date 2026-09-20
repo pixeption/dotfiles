@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Safe runner for a codex NON-INTERACTIVE IMPLEMENTATION (codex edits files), with session reuse.
+#
+# Sibling of the codex-review wrapper, but codex WRITES here: --sandbox workspace-write, a chosen
+# model/effort, and it runs inside a directory you pass (a git worktree, so the edits are isolated).
+#
+# FOUR JOBS OF THIS WRAPPER:
+#
+# 1. Always close stdin with `< /dev/null`.
+#    `codex exec` appends stdin as a <stdin> block EVEN WHEN the prompt is an argument. Launched as a
+#    background job it inherits an fd that never EOFs, so it hangs forever at
+#    "Reading additional input from stdin...". Never remove the `< /dev/null`.
+#
+# 2. Write ONLY the final message to the out-file (`--output-last-message`); the JSONL event stream
+#    (tool calls, edits, usage) goes to <out-file>.log — a liveness aid, never read it into context.
+#
+# 3. Record the session id (<out-file>.session, from `thread_id`) so a follow-up round RESUMES the
+#    same codex conversation (-r), keeping the repo + prior edits in context.
+#
+# 4. Record token usage (<out-file>.usage) — the last input_tokens/cached_input_tokens/output_tokens
+#    in the log — so you can report cost. cached_input_tokens is the cheap part; the real spend is
+#    (input_tokens - cached_input_tokens) + output_tokens.
+#
+# codex CANNOT run Unity / a build / project-specific validation. This wrapper only produces a DIFF.
+# Validate the result yourself afterward (compile check, tests) — for Unity, drive the LIVE editor
+# (`unity command recompile`/`run_tests`), never batch `unity test` while a GUI editor holds the
+# project.
+#
+# Usage:
+#   codex-implement -C <workdir> -p <prompt-file> -o <out-file> \
+#                   [-m gpt-5.6-luna|gpt-5.6-terra|gpt-5.6-sol] [-e low|medium|high|xhigh|max|ultra] \
+#                   [-t fast|standard] [-s workspace-write|read-only|danger-full-access] [-r <session-id>]
+#
+#   -C  the directory codex runs in and may write to (create a git worktree first:
+#         git worktree add -b <arm> <path> HEAD   — DO NOT rely on any auto-worktree basing on the
+#         branch tip; base it explicitly on HEAD).
+#   -m  model (default gpt-5.6-luna). PRICING ($/M tok, cached=90% off input): luna $0.20/$1.20
+#       (budget), terra $2/$12, sol $5/$30 (premium flagship). Measured on a bounded task all three
+#       produced the same correct diff, and luna-max cost ~7x LESS than sol-low. Reserve sol/terra
+#       for tasks hard enough that capability changes the outcome.
+#   -e  reasoning effort (default max).
+#   -t  service tier: fast (codex "priority" tier, 1.5x speed, more usage) or standard. Default:
+#       fast for luna, standard for every other model — luna is cheap enough that the speed-up is
+#       worth it; sol/terra run at their normal rate.
+#   -r  resumes a session id (sandbox/model carried over). REFUSED when the session's last activity
+#       is older than 30 minutes: codex's prompt cache TTL is 30m, so resuming after that re-pays
+#       the whole context at full price — start a new session instead (omit -r).
+#
+# A NEW session gets a preamble prepended to the brief: read ~/.claude/CLAUDE.md and every CLAUDE.md
+# in the workdir, and treat ~/.claude/skills + <workdir>/.claude/skills as available skills — the
+# same guidance a Claude session loads. CLAUDE.md is also registered as codex's project-doc fallback
+# (loaded natively when no AGENTS.md exists). A resumed session already has all of that in context.
+#
+# Run it via the Bash tool with run_in_background:true; you're notified on completion, then read the
+# out-file (final message) and `git -C <workdir> diff` (the actual change).
+set -euo pipefail
+
+model="gpt-5.6-luna"
+effort="max"
+tier=""
+sandbox="workspace-write"
+workdir=""
+promptfile=""
+outfile=""
+session=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -m|--model)       model="$2"; shift 2 ;;
+    -e|--effort)      effort="$2"; shift 2 ;;
+    -t|--tier)        tier="$2"; shift 2 ;;
+    -C|--cd)          workdir="$2"; shift 2 ;;
+    -p|--prompt-file) promptfile="$2"; shift 2 ;;
+    -o|--out)         outfile="$2"; shift 2 ;;
+    -s|--sandbox)     sandbox="$2"; shift 2 ;;
+    -r|--resume)      session="$2"; shift 2 ;;
+    -h|--help)
+      grep '^#' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) echo "codex-implement: unknown arg '$1'" >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$workdir" ] && [ -d "$workdir" ] || { echo "codex-implement: need -C <existing workdir>" >&2; exit 2; }
+[ -n "$promptfile" ] && [ -f "$promptfile" ] || { echo "codex-implement: need -p <prompt-file>" >&2; exit 2; }
+[ -n "$outfile" ] || { echo "codex-implement: need -o <out-file>" >&2; exit 2; }
+command -v codex >/dev/null 2>&1 || { echo "codex-implement: 'codex' not on PATH" >&2; exit 127; }
+
+[ -n "$tier" ] || { [ "$model" = "gpt-5.6-luna" ] && tier="fast" || tier="standard"; }
+case "$tier" in
+  fast)     tier_args=(-c service_tier=priority) ;;
+  standard) tier_args=() ;;
+  *) echo "codex-implement: -t must be fast|standard" >&2; exit 2 ;;
+esac
+
+cache_ttl_secs=1800
+if [ -n "$session" ]; then
+  rollout="$(find "${CODEX_HOME:-$HOME/.codex}/sessions" -type f -name "rollout-*${session}.jsonl" 2>/dev/null | head -1)"
+  [ -n "$rollout" ] || { echo "codex-implement: no rollout file for session $session" >&2; exit 2; }
+  age=$(( $(date +%s) - $(stat -f %m "$rollout") ))
+  [ "$age" -le "$cache_ttl_secs" ] || {
+    echo "codex-implement: session $session last active $((age/60))m ago (> 30m prompt-cache TTL) — do not resume; start a new session without -r" >&2
+    exit 2
+  }
+fi
+
+claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
+preamble="Before acting, read ~/.claude/CLAUDE.md, then every CLAUDE.md in this repository (root first, nearer ones apply to their subtree):
+$claude_docs
+Follow them as user and repository guidance. Skills are available at ~/.claude/skills/<name>/SKILL.md and $workdir/.claude/skills/<name>/SKILL.md; when the task names one or clearly matches one's description, read its SKILL.md completely before acting.
+
+---
+
+"
+prompt="$(cat "$promptfile")"
+[ -n "$session" ] || prompt="${preamble}${prompt}"
+logfile="${outfile}.log"
+sessionfile="${outfile}.session"
+usagefile="${outfile}.usage"
+
+# < /dev/null is the whole point — never remove it.
+if [ -n "$session" ]; then
+  # `codex exec resume` has no -C; the session's cwd is what it was, so run from the workdir.
+  (cd "$workdir" && codex exec resume "$session" \
+    -m "$model" -c model_reasoning_effort="$effort" "${tier_args[@]}" \
+    --skip-git-repo-check --json --output-last-message "$outfile" \
+    "$prompt" < /dev/null > "$logfile" 2>&1) || true
+else
+  codex exec -C "$workdir" \
+    -m "$model" -c model_reasoning_effort="$effort" "${tier_args[@]}" \
+    -c 'project_doc_fallback_filenames=["CLAUDE.md"]' \
+    --sandbox "$sandbox" \
+    --skip-git-repo-check --json --output-last-message "$outfile" \
+    "$prompt" < /dev/null > "$logfile" 2>&1 || true
+fi
+
+thread="$(grep -m1 -o '"thread_id":"[^"]*"' "$logfile" | cut -d'"' -f4 || true)"
+[ -n "$thread" ] && printf '%s\n' "$thread" > "$sessionfile"
+grep -oE '"(input_tokens|cached_input_tokens|output_tokens)":[0-9]+' "$logfile" | tail -3 > "$usagefile" || true
+
+echo "codex-implement: $model/$effort/$tier done -> $outfile (final msg); diff: git -C $workdir diff; session ${thread:-unknown}; usage $usagefile; log $logfile" >&2

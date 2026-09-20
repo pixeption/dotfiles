@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# unity-test <filter> [--type name|assembly|category] [--mode editmode|playmode] [--project-path <dir>]
+#                     [--deadline <seconds>]
+# EditMode runs detach (`--detach` + `unity job wait`, survives the domain reload a compile causes).
+# PlayMode cannot detach — entering Play mode drops the request — so it runs --async_tests and polls
+# test_status. Exit 0 all passed, 1 failures / no tests matched / filter mismatch, 2 could not run.
+set -uo pipefail
+source "$(dirname "$0")/_common.sh"
+DIE_CODE=2
+
+FILTER=""; TYPE=testName; MODE=EditMode; PROJECT_ARG="${UNITY_PROJECT_PATH:-.}"; DEADLINE=900
+while [[ $# -gt 0 ]]; do case "$1" in
+  --type) TYPE=$([[ $2 == name ]] && echo testName || echo "$2"); shift 2;;
+  --mode) MODE=$([[ ${2,,} == playmode ]] && echo PlayMode || echo EditMode); shift 2;;
+  --project-path) PROJECT_ARG=$2; shift 2;;
+  --deadline) DEADLINE=$2; shift 2;;
+  -*) die "unknown option $1";;
+  *) FILTER=$1; shift;;
+esac; done
+[[ -n "$FILTER" ]] || die "a test filter is required — an empty one runs the WHOLE suite"
+PROJECT=$(resolve_project "$PROJECT_ARG") || exit 2
+editor_open "$PROJECT" || die "no live editor for $PROJECT — unity-editor up '$PROJECT'"
+
+PM=$(result_json "$PROJECT" editor_status | field playMode)
+[[ "$MODE" == PlayMode || -z "$PM" || "$PM" == stopped ]] \
+  || die "editor is in Play Mode (playMode: $PM) — an EditMode run makes no progress; stop it first"
+
+unity command clear_console --project-path "$PROJECT" --format json >/dev/null 2>&1
+
+run_tests() { unity command run_tests --project-path "$PROJECT" --mode "$MODE" --filter "$FILTER" --filter_type "$TYPE" --format json "$@"; }
+
+if [[ "$MODE" == EditMode ]]; then
+  JOB=$(run_tests --detach | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["jobId"])') \
+    || die "run did not start (editor busy or compiling?)"
+  RESULT=$(unity job wait "$JOB" --project-path "$PROJECT" --timeout "$DEADLINE" --format json \
+           | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin)["data"]["result"]))') \
+    || die "job wait failed for $JOB"
+else
+  run_tests --async_tests true >/dev/null || die "run did not start"
+  LAST=""
+  finished() { LAST=$(result_json "$PROJECT" test_status); [[ "$(printf '%s' "$LAST" | field status)" == completed ]]; }
+  wait_for "$DEADLINE" finished || exit 2
+  RESULT=$LAST
+fi
+
+printf '%s' "$RESULT" | python3 -c '
+import sys, json
+r = json.load(sys.stdin); k = lambda *names: next((r[n] for n in names if n in r), None)
+want = f"{sys.argv[1]}: {sys.argv[2]}".lower(); applied = (k("FilterApplied", "filterApplied") or "").lower()
+if applied and applied != want:
+    print(f"FILTER MISMATCH: asked {want!r}, ran {applied!r}", file=sys.stderr); sys.exit(1)
+s = {n.lower(): v for n, v in (k("Summary", "summary") or {}).items()}
+print("%s/%s passed, %s failed, %s skipped" % tuple(s.get(n) for n in ("passed", "total", "failed", "skipped")))
+if not s.get("total"):
+    print(f"no tests matched {sys.argv[2]!r} ({sys.argv[1]})", file=sys.stderr); sys.exit(1)
+bad = [t for t in (k("Results", "results") or []) if (t.get("Status") or t.get("status")) not in ("Passed", "Skipped")]
+for t in bad: print("FAIL", t.get("FullName") or t.get("fullName")); print("   ", (t.get("Message") or t.get("message") or "").strip()[:300])
+sys.exit(1 if bad else 0)
+' "$TYPE" "$FILTER"

@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# Poll a Unity Pipeline operation to completion without hanging.
+#
+# Three things make a naive `until ... grep -q completed; do sleep; done` hang forever:
+# an editor mid-domain-reload refuses connections, `data.result` is a JSON-encoded *string*
+# rather than an object, and there is no deadline. This handles all three.
+#
+#   unity-wait recompile [deadline_seconds]   trigger a recompile, wait, report errors
+#   unity-wait job <job-id> [deadline]        wait on a ui_* job record on disk
+#   unity-wait ready [deadline]               wait until the editor answers at all; exit 1 fast
+#                                             if it opened into Safe Mode (prints the compile errors)
+#
+# For tests, use `unity-test` (--detach + `unity job wait`) instead of this script.
+#
+# Exit 0 on success, 1 on failure, 2 on deadline. Always terminates.
+set -uo pipefail
+source "$(dirname "$0")/_common.sh"
+
+MODE="${1:-}"
+DEADLINE_DEFAULT=300
+
+# `|| exit` is load-bearing: die runs inside the command substitution, so its exit kills only
+# the subshell. Without it the script carried on with an empty PROJECT.
+PROJECT=$(resolve_project "${UNITY_PROJECT_PATH:-.}") || exit 1
+
+# An editor that is not running looks exactly like one that is busy, and only one is worth
+# waiting for — checked once, up front, so the answer is a sentence instead of a deadline.
+require_editor() { editor_open "$PROJECT" || die "no live editor for $PROJECT — unity-editor up '$PROJECT'"; }
+
+status_json() { result_json "$PROJECT" "$1"; }
+
+case "$MODE" in
+  ready)
+    # Two ways a launch never answers, neither worth waiting out: the editor opened into Safe Mode
+    # (compile error - no server will ever start; exit 1 with the errors), or the process is gone.
+    DEADLINE=${2:-$DEADLINE_DEFAULT}; START=$SECONDS
+    while (( SECONDS - START < DEADLINE )); do
+      [[ "$(status_json editor_status)" != unreachable ]] && { echo "editor ready"; exit 0; }
+      if in_safe_mode; then
+        echo "editor opened into Safe Mode - compile errors, the pipeline server will never start:" >&2
+        compile_errors >&2
+        exit 1
+      fi
+      not_running && die "editor process for $PROJECT exited before answering - see $EDITOR_LOG"
+      sleep 3
+    done
+    echo "timed out after ${DEADLINE}s" >&2
+    exit 2
+    ;;
+
+  recompile)
+    DEADLINE=${2:-$DEADLINE_DEFAULT}
+    SETTLE=${UNITY_WAIT_SETTLE:-60}
+    require_editor
+    # A recompile is DEFERRED while the editor is in Play Mode: the request never completes, so this
+    # would wait out the whole deadline while the editor silently keeps running the OLD code. Stop
+    # Play and carry on - the agent owns the editor during a run; a human watching it is inspecting,
+    # not working in it. UNITY_WAIT_NO_STOP=1 fails fast instead for a session worth protecting.
+    PM=$(status_json editor_status | field playMode)
+    if [[ -n "$PM" && "$PM" != stopped ]]; then
+      [[ -n "${UNITY_WAIT_NO_STOP:-}" ]] && die "editor is in Play Mode (playMode: $PM) - a recompile is deferred and will not take effect.
+stop it first:  unity command editor_stop --project-path '$PROJECT'
+then re-run this; resume with editor_play afterwards."
+      echo "editor was in Play Mode ($PM) - stopping it so the recompile can land" >&2
+      unity command editor_stop --project-path "$PROJECT" --format json >/dev/null 2>&1
+      check_stopped() { [[ "$(status_json editor_status | field playMode)" == stopped ]]; }
+      wait_for 60 check_stopped || die "editor_stop did not take effect within 60s - check: unity status"
+    fi
+    unity command recompile --project-path "$PROJECT" --format json >/dev/null 2>&1
+    LAST=""
+    check_compiled() {
+      LAST=$(status_json recompile_status)
+      [[ "$LAST" == unreachable ]] && return 1
+      local s; s=$(printf '%s' "$LAST" | field status)
+      [[ "$s" == completed || "$s" == up_to_date ]]
+    }
+    wait_for "$DEADLINE" check_compiled || exit 2
+    if [[ "$(printf '%s' "$LAST" | field failed)" == "True" ]]; then
+      printf '%s' "$LAST" | python3 -c '
+import sys, json
+for e in json.loads(sys.stdin.read()).get("errors", [])[:20]: print(e)
+'
+      exit 1
+    fi
+    # `recompile_status: completed` is not a reconnect signal: the domain reload lands after it, so
+    # the very next command can hit a mid-reload editor and fail with a bare network error. Wait for
+    # two consecutive answers a poll apart - one is satisfied by the pre-reload domain still holding
+    # the socket - before calling it clean.
+    settled() {
+      local start=$SECONDS streak=0
+      while (( SECONDS - start < SETTLE )); do
+        if [[ "$(status_json editor_status)" == unreachable ]]; then streak=0
+        elif (( ++streak >= 2 )); then return 0
+        fi
+        sleep 3
+      done
+      return 2
+    }
+    if ! settled; then
+      echo "compiled, but the editor has not answered again within ${SETTLE}s - it is still reloading
+or has died; check with: unity status" >&2
+      exit 2
+    fi
+    echo "compiled clean"
+    ;;
+
+  job)
+    JOB="${2:-}"; DEADLINE=${3:-600}
+    [[ -n "$JOB" ]] || die "usage: unity-wait job <job-id> [deadline]"
+    # The record is written straight to disk, so it stays readable while PlayMode has the
+    # server unreachable - which is exactly when you need to know how the job is doing.
+    RECORD="$PROJECT/.agent/unity/jobs/$JOB.json"
+    require_editor
+    check_job() {
+      python3 -c '
+import json, sys
+try: sys.exit(0 if json.load(open(sys.argv[1]))["State"] in ("Succeeded","Failed","Cancelled") else 1)
+except Exception: sys.exit(1)
+' "$RECORD"
+    }
+    wait_for "$DEADLINE" check_job || exit 2
+    python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+print("state:", d["State"])
+for line in d.get("ProfileResults") or []: print("  ", line)
+if d.get("Error"): print("error:", d["Error"])
+sys.exit(0 if d["State"] == "Succeeded" else 1)
+' "$RECORD"
+    ;;
+
+  *)
+    die "usage: unity-wait {ready|recompile|job <id>} [deadline_seconds]"
+    ;;
+esac

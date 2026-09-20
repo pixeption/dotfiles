@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Safe runner for a READ-ONLY OpenCode review session (second opinion, never edits), with a
+# persistent, HUMAN-ATTACHABLE server and session reuse. Same codex-family MODELS as codex-review
+# (openai/gpt-5.6-sol default) but a different harness: the session lives on a long-running
+# `opencode serve`, so the review loop continues round after round with NO 30-min resume cliff
+# (you apply findings between rounds — that easily exceeds codex's cache TTL), and the owner can
+# watch the reasoning live in a TUI.
+#
+# Read-only is HARD: `--agent plan` denies the edit tool (opencode's analogue of codex
+# --sandbox read-only); reads and read-only bash (grep/git) still work. --auto approves the
+# reads/bash/external-dir prompts so a backgrounded run never blocks, while edits stay denied.
+#
+# What it does:
+# 1. Ensures one `opencode serve` is up on --port (starts it headless if not) and prints the
+#    ATTACH URL:  opencode attach http://127.0.0.1:<port> --dir <repo> [--session <id>]  (/sessions is scoped to --dir)
+# 2. Runs one review round against the repo via `--dir` with `--agent plan --auto`.
+# 3. Writes ONLY the final answer (findings + verdict) to the out-file; the raw JSONL stream goes
+#    to <out-file>.log (a liveness aid, never read it into context).
+# 4. Records the session id (<out-file>.session) so later rounds RESUME it (-s). No 30-min TTL.
+# 5. Records tokens/cost (<out-file>.usage) from the final step_finish event.
+#
+# Usage:
+#   opencode-review -C <repo> -p <prompt-file> -o <out-file>
+#                   [-m openai/gpt-5.6-sol] [-e medium] [-s <session-id>]
+#                   [--port 4096] [--url http://127.0.0.1:4096] [--title <artifact>]
+#   -m  provider/model (default openai/gpt-5.6-sol). -e  effort -> --variant (default medium).
+#   -s  resume a session id (from a previous <out-file>.session). No TTL — server-held.
+#   --port  server port (default 4096). --url overrides the base URL. --title  TUI session title.
+set -euo pipefail
+
+model="openai/gpt-5.6-sol"
+effort="medium"
+workdir=""
+promptfile=""
+outfile=""
+session=""
+port="4096"
+url=""
+title=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -m|--model)       model="$2"; shift 2 ;;
+    -e|--effort)      effort="$2"; shift 2 ;;
+    -C|--cd)          workdir="$2"; shift 2 ;;
+    -p|--prompt-file) promptfile="$2"; shift 2 ;;
+    -o|--out)         outfile="$2"; shift 2 ;;
+    -s|--session)     session="$2"; shift 2 ;;
+    --port)           port="$2"; shift 2 ;;
+    --url)            url="$2"; shift 2 ;;
+    --title)          title="$2"; shift 2 ;;
+    -h|--help)
+      grep '^#' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) echo "opencode-review: unknown arg '$1'" >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$workdir" ] && [ -d "$workdir" ] || { echo "opencode-review: need -C <existing repo dir>" >&2; exit 2; }
+[ -n "$promptfile" ] && [ -f "$promptfile" ] || { echo "opencode-review: need -p <prompt-file>" >&2; exit 2; }
+[ -n "$outfile" ] || { echo "opencode-review: need -o <out-file>" >&2; exit 2; }
+command -v opencode >/dev/null 2>&1 || { echo "opencode-review: 'opencode' not on PATH" >&2; exit 127; }
+command -v jq >/dev/null 2>&1 || { echo "opencode-review: 'jq' not on PATH" >&2; exit 127; }
+[ -n "$url" ] || url="http://127.0.0.1:${port}"
+[ -n "$title" ] || title="review $(basename "$outfile")"
+
+if ! curl -sf "${url}/config" >/dev/null 2>&1; then
+  echo "opencode-review: no server at ${url} — starting one" >&2
+  serverlog="${outfile%/*}/opencode-serve-${port}.log"
+  nohup opencode serve --port "$port" --hostname 127.0.0.1 >"$serverlog" 2>&1 &
+  disown || true
+  for _ in $(seq 1 30); do curl -sf "${url}/config" >/dev/null 2>&1 && break; sleep 1; done
+  curl -sf "${url}/config" >/dev/null 2>&1 || { echo "opencode-review: server did not come up on ${url}" >&2; exit 1; }
+fi
+echo "opencode-review: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
+
+claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
+preamble="You are a READ-ONLY reviewer: raise findings, never edit files. Before reviewing, read ~/.claude/CLAUDE.md, then every CLAUDE.md in this repository (root first, nearer ones apply to their subtree):
+$claude_docs
+Follow them as user and repository guidance. Skills are available at ~/.claude/skills/<name>/SKILL.md and $workdir/.claude/skills/<name>/SKILL.md; when the task names one or clearly matches one's description, read its SKILL.md completely before acting.
+
+---
+
+"
+prompt="$(cat "$promptfile")"
+[ -n "$session" ] || prompt="${preamble}${prompt}"
+logfile="${outfile}.log"
+sessionfile="${outfile}.session"
+usagefile="${outfile}.usage"
+
+session_args=()
+[ -n "$session" ] && session_args=(--session "$session")
+
+# --agent plan denies the edit tool (hard read-only); --auto approves the read/bash/external
+# prompts so a backgrounded run never blocks. < /dev/null keeps stdin closed.
+opencode run --attach "$url" --dir "$workdir" --agent plan --auto \
+  -m "$model" --variant "$effort" --title "$title" \
+  --format json "${session_args[@]}" \
+  "$prompt" < /dev/null > "$logfile" 2>&1 || true
+
+jq -r 'select(.type=="text") | .part.text' "$logfile" 2>/dev/null > "$outfile" || true
+sid="$(jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true)"
+[ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
+jq -c 'select(.type=="step_finish") | {tokens: .part.tokens, cost: .part.cost}' "$logfile" 2>/dev/null | tail -1 > "$usagefile" || true
+
+echo "opencode-review: $model/$effort (read-only) done -> $outfile (findings+verdict); session ${sid:-unknown}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2

@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+# unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode]
+#
+# Game/CLAUDE.md's clean-suite rule: a Play-mode session poisons a live editor, so the full suite
+# must run in a fresh batch editor with nothing holding the project lock. This closes any live
+# editor first, runs `unity test`, reopens the editor if one was open, then reports pass/fail by
+# parsing the NUnit XML report — `unity test`'s exit code collapses every failure into a plain 6,
+# so it only tells you the run started, never why it ended.
+# Exit 0 all passed, 1 some failed, 2 the run never produced a report.
+set -uo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+source "$HERE/_common.sh"
+DIE_CODE=2
+
+ARG="."; MODE=EditMode; REPORT=""
+while [[ $# -gt 0 ]]; do case "$1" in
+  --failed-only) REPORT=$2; shift 2;;
+  --mode) MODE=$2; shift 2;;
+  -*) die "usage: unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode]";;
+  *) ARG=$1; shift;;
+esac; done
+PROJECT=$(resolve_project "$ARG") || exit 2
+
+# --rerun-failed reads the *previous* run's report from wherever --output points (there is no
+# separate "report to rerun" flag) — so rerunning failures means pointing --output at that same file.
+RERUN=""
+if [[ -n "$REPORT" ]]; then
+  [[ -f "$REPORT" ]] || die "--failed-only report not found: $REPORT"
+  RERUN=--rerun-failed
+else
+  REPORT=$(mktemp -t unity-suite-XXXXXX).xml
+fi
+
+WAS_OPEN=0; SCENE=""
+if editor_open "$PROJECT"; then
+  WAS_OPEN=1
+  SCENE=$(result_json "$PROJECT" list_open_scenes | python3 -c '
+import sys, json
+print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] and s["path"]), ""))' 2>/dev/null)
+  "$HERE/unity-editor" down "$PROJECT" || die "could not close the live editor — refusing to run a suite that would get poisoned"
+fi
+
+TEST_JSON=$(unity test --mode "$MODE" "$PROJECT" --output "$REPORT" $RERUN --format json)
+TEST_RC=$?
+
+# A compile error aborts the batch run in seconds with no report; reopening the editor would only
+# put it into Safe Mode, so report the errors and leave it closed.
+if [[ ! -s "$REPORT" ]] && ERRORS=$(compile_errors) && [[ -n "$ERRORS" ]]; then
+  echo "scripts have compiler errors - no tests ran; editor left closed. Fix, then unity-editor up:" >&2
+  printf '%s\n' "$ERRORS" >&2
+  exit 2
+fi
+
+if [[ $WAS_OPEN -eq 1 ]]; then
+  "$HERE/unity-editor" up "$PROJECT" ${SCENE:+--scene "$SCENE"} \
+    || echo "WARNING: could not reopen the editor that was open before this run" >&2
+fi
+
+if [[ ! -s "$REPORT" ]]; then
+  echo "test run produced no report (unity test exit $TEST_RC) — it did not finish" >&2
+  echo "$TEST_JSON" >&2
+  exit 2
+fi
+
+python3 - "$REPORT" <<'PY'
+import sys, xml.etree.ElementTree as ET
+
+root = ET.parse(sys.argv[1]).getroot()
+run = root if root.tag == "test-run" else root.find(".//test-run")
+attrs = run.attrib if run is not None else root.attrib
+total, passed = attrs.get("total", "?"), attrs.get("passed", "?")
+failed, skipped = attrs.get("failed", "0"), attrs.get("skipped", "0")
+print(f"{passed}/{total} passed, {failed} failed, {skipped} skipped")
+
+bad = [tc for tc in root.iter("test-case") if tc.get("result") not in ("Passed", "Skipped", "Warning")]
+for tc in bad:
+    msg = tc.find("./failure/message")
+    print("FAIL", tc.get("fullname") or tc.get("name"))
+    print("   ", (msg.text or "").strip()[:300] if msg is not None else "")
+sys.exit(1 if bad or failed not in ("0",) else 0)
+PY

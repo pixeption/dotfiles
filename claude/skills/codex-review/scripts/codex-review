@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Safe runner for a codex non-interactive review, with session reuse across rounds.
+#
+# THREE JOBS OF THIS WRAPPER:
+#
+# 1. Always close stdin with `< /dev/null`.
+#    `codex exec` (and `codex exec resume`) appends stdin as a <stdin> block EVEN WHEN
+#    the prompt is passed as an argument. Launched as a background job, the process
+#    inherits a stdin fd that never reaches EOF, so that read blocks forever and the
+#    review hangs at "Reading additional input from stdin..." producing no output.
+#
+# 2. Write ONLY the final answer to the out-file, via `--output-last-message`.
+#    The full event stream (JSONL: tool calls, messages, usage) goes to <out-file>.log
+#    for a liveness check; it never needs to be read into context.
+#
+# 3. Keep the session id so later rounds RESUME the same codex conversation.
+#    Round 1 records the thread id (from the `thread.started` event) in <out-file>.session.
+#    Pass it back with -r on every later round; codex then keeps the repo it already read
+#    and every finding it already raised/confirmed in context, instead of starting cold.
+#
+# It reads the prompt from a FILE, not a shell argument, to avoid quoting traps.
+#
+# Usage:
+#   codex-review -p <prompt-file> -o <out-file> [-e medium|high|low] [-s read-only] [-r <session-id>]
+#
+#   -r  resume this codex session id (a UUID — the content of a previous round's
+#       <out-file>.session). Omit on the first round. The sandbox/effort are carried
+#       over by codex from the original session; -s is ignored on resume.
+#
+# Run it via the Bash tool with run_in_background:true (reviews take minutes), then
+# read the out-file (the clean final answer). Progress/liveness = <out-file>.log grows.
+set -euo pipefail
+
+effort="medium"
+sandbox="read-only"
+promptfile=""
+outfile=""
+session=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -e|--effort)      effort="$2"; shift 2 ;;
+    -p|--prompt-file) promptfile="$2"; shift 2 ;;
+    -o|--out)         outfile="$2"; shift 2 ;;
+    -s|--sandbox)     sandbox="$2"; shift 2 ;;
+    -r|--resume)      session="$2"; shift 2 ;;
+    -h|--help)
+      grep '^#' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) echo "codex-review: unknown arg '$1'" >&2; exit 2 ;;
+  esac
+done
+
+if [ -z "$promptfile" ] || [ ! -f "$promptfile" ]; then
+  echo "codex-review: need -p <prompt-file> (an existing file)" >&2
+  exit 2
+fi
+if [ -z "$outfile" ]; then
+  echo "codex-review: need -o <out-file>" >&2
+  exit 2
+fi
+if ! command -v codex >/dev/null 2>&1; then
+  echo "codex-review: the 'codex' CLI is not on PATH" >&2
+  exit 127
+fi
+
+prompt="$(cat "$promptfile")"
+logfile="${outfile}.log"
+sessionfile="${outfile}.session"
+
+# < /dev/null is the whole point — never remove it.
+if [ -n "$session" ]; then
+  codex exec resume "$session" \
+    -c model_reasoning_effort="$effort" \
+    --skip-git-repo-check --json \
+    --output-last-message "$outfile" \
+    "$prompt" < /dev/null > "$logfile" 2>&1 || true
+else
+  codex exec \
+    -c model_reasoning_effort="$effort" \
+    --sandbox "$sandbox" \
+    --skip-git-repo-check --json \
+    --output-last-message "$outfile" \
+    "$prompt" < /dev/null > "$logfile" 2>&1 || true
+fi
+
+thread="$(grep -m1 -o '"thread_id":"[^"]*"' "$logfile" | cut -d'"' -f4 || true)"
+[ -n "$thread" ] && printf '%s\n' "$thread" > "$sessionfile"
+
+echo "codex-review: done -> $outfile (final answer); session ${thread:-unknown} (-r for the next round); $logfile (event stream)" >&2

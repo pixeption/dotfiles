@@ -1,0 +1,9 @@
+{
+  "name": "img-diff-skill",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright screenshot helper for the img-diff skill",
+  "dependencies": {
+    "@playwright/cli": "0.1.19"
+  }
+}

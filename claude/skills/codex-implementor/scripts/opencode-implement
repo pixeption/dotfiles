@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# Safe runner for an OpenCode IMPLEMENTATION session (opencode edits files), with a persistent,
+# HUMAN-ATTACHABLE server and session reuse. Same codex-family MODELS as codex-implement
+# (openai/gpt-5.6-luna, sol, ...) but a different harness: the session lives on a long-running
+# `opencode serve`, so the orchestrator drives it round after round with NO 30-min resume cliff,
+# and the owner can watch/steer the SAME session live in a TUI.
+#
+# What it does:
+# 1. Ensures one `opencode serve` is up on --port (starts it headless if not) and prints the
+#    ATTACH URL so the owner can run:  opencode attach http://127.0.0.1:<port> --dir <workdir> [--session <id>]
+#    (the TUI scopes /sessions to --dir; attached from another directory the session is invisible)
+# 2. Runs one round via `--dir` against ANY directory: a git worktree (the default — the
+#    orchestrator reviews a diff and merges deliberately) or the REAL project checkout for an
+#    in-place editor-drive unit (brief names the unity-cli skill; the unit holds that project's
+#    slot). OpenCode has no OS sandbox; --auto approves everything not denied, and the fence is
+#    the `permission` block in ~/.config/opencode/opencode.jsonc (external_directory deny-by-default,
+#    forbidden git commands denied).
+# 3. Writes ONLY the final assistant message to the out-file; the raw JSONL event stream goes to
+#    <out-file>.log (a liveness aid, never read it into context).
+# 4. Records the session id (<out-file>.session) so a follow-up round RESUMES it (-s). Unlike codex,
+#    there is no 30-min TTL — the server keeps the session; resume it whenever.
+# 5. Records tokens/cost (<out-file>.usage) from the final step_finish event.
+#
+# A NEW session (no -s) gets a preamble prepended: read ~/.claude/CLAUDE.md and every CLAUDE.md in
+# the worktree, and the skills folders — so opencode loads the same guidance a Claude/codex session
+# does. A resumed session already has that in context.
+#
+# In a worktree opencode cannot run Unity or your build (no Library); validate the diff yourself.
+# In place it drives the live editor through the `unity` CLI and verifies itself.
+#
+# Usage:
+#   opencode-implement -C <worktree|real checkout> -p <prompt-file> -o <out-file>
+#                      [-m openai/gpt-5.6-luna] [-e max] [-s <session-id>]
+#                      [--port 4096] [--url http://127.0.0.1:4096] [--title <unit>]
+#   -m  provider/model (default openai/gpt-5.6-luna). sol: openai/gpt-5.6-sol.
+#   -e  reasoning effort -> opencode --variant (minimal|low|medium|high|max). Default: max.
+#   -s  resume a session id (from a previous <out-file>.session). No TTL — server-held.
+#   --port  server port (default 4096). --url overrides the full base URL.
+#   --title session title shown in the attach TUI (default: out-file basename).
+set -euo pipefail
+
+model="openai/gpt-5.6-luna"
+effort="max"
+workdir=""
+promptfile=""
+outfile=""
+session=""
+port="4096"
+url=""
+title=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -m|--model)       model="$2"; shift 2 ;;
+    -e|--effort)      effort="$2"; shift 2 ;;
+    -C|--cd)          workdir="$2"; shift 2 ;;
+    -p|--prompt-file) promptfile="$2"; shift 2 ;;
+    -o|--out)         outfile="$2"; shift 2 ;;
+    -s|--session)     session="$2"; shift 2 ;;
+    --port)           port="$2"; shift 2 ;;
+    --url)            url="$2"; shift 2 ;;
+    --title)          title="$2"; shift 2 ;;
+    -h|--help)
+      grep '^#' "$0" | sed 's/^# \{0,1\}//'
+      exit 0 ;;
+    *) echo "opencode-implement: unknown arg '$1'" >&2; exit 2 ;;
+  esac
+done
+
+[ -n "$workdir" ] && [ -d "$workdir" ] || { echo "opencode-implement: need -C <existing worktree>" >&2; exit 2; }
+[ -n "$promptfile" ] && [ -f "$promptfile" ] || { echo "opencode-implement: need -p <prompt-file>" >&2; exit 2; }
+[ -n "$outfile" ] || { echo "opencode-implement: need -o <out-file>" >&2; exit 2; }
+command -v opencode >/dev/null 2>&1 || { echo "opencode-implement: 'opencode' not on PATH" >&2; exit 127; }
+command -v jq >/dev/null 2>&1 || { echo "opencode-implement: 'jq' not on PATH" >&2; exit 127; }
+[ -n "$url" ] || url="http://127.0.0.1:${port}"
+[ -n "$title" ] || title="$(basename "$outfile")"
+
+# Ensure one server is up on the port; start it headless if not. It survives this process so the
+# owner can keep an `opencode attach` TUI open across rounds.
+if ! curl -sf "${url}/config" >/dev/null 2>&1; then
+  echo "opencode-implement: no server at ${url} — starting one" >&2
+  serverlog="${outfile%/*}/opencode-serve-${port}.log"
+  nohup opencode serve --port "$port" --hostname 127.0.0.1 >"$serverlog" 2>&1 &
+  disown || true
+  for _ in $(seq 1 30); do curl -sf "${url}/config" >/dev/null 2>&1 && break; sleep 1; done
+  curl -sf "${url}/config" >/dev/null 2>&1 || { echo "opencode-implement: server did not come up on ${url}" >&2; exit 1; }
+fi
+echo "opencode-implement: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
+
+claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
+preamble="Before acting, read ~/.claude/CLAUDE.md, then every CLAUDE.md in this repository (root first, nearer ones apply to their subtree):
+$claude_docs
+Follow them as user and repository guidance. Skills are available at ~/.claude/skills/<name>/SKILL.md and $workdir/.claude/skills/<name>/SKILL.md; when the task names one or clearly matches one's description, read its SKILL.md completely before acting.
+
+---
+
+"
+prompt="$(cat "$promptfile")"
+[ -n "$session" ] || prompt="${preamble}${prompt}"
+logfile="${outfile}.log"
+sessionfile="${outfile}.session"
+usagefile="${outfile}.usage"
+
+session_args=()
+[ -n "$session" ] && session_args=(--session "$session")
+
+# --dir is the only isolation opencode has: a worktree is reviewed as a diff before merging; a real
+# checkout is edited in place (the permission block in opencode.jsonc is the fence). < /dev/null keeps
+# stdin closed.
+opencode run --attach "$url" --dir "$workdir" --auto \
+  -m "$model" --variant "$effort" --title "$title" \
+  --format json "${session_args[@]}" \
+  "$prompt" < /dev/null > "$logfile" 2>&1 || true
+
+# Final assistant message = the text parts (the answer, not the reasoning), one per line.
+jq -r 'select(.type=="text") | .part.text' "$logfile" 2>/dev/null > "$outfile" || true
+# Session id: present on every event.
+sid="$(jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true)"
+[ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
+# Usage/cost from the final step_finish.
+jq -c 'select(.type=="step_finish") | {tokens: .part.tokens, cost: .part.cost}' "$logfile" 2>/dev/null | tail -1 > "$usagefile" || true
+
+echo "opencode-implement: $model/$effort done -> $outfile (final msg); diff: git -C $workdir diff; session ${sid:-unknown}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2

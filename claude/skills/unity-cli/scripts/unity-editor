@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# unity-editor up [project] [--scene <path.unity>]   open (or reuse) a live editor
+# unity-editor down [project] [--force]              close it
+# unity-editor restart [project] [--scene <s>]       force-close, then up
+# unity-editor ensure [project] [--deadline 30]      restart only if editor_status stays silent
+#
+# ensure: an editor that answers nothing for the deadline is hung (a modal dialog, a main-thread
+# deadlock - "/api/exec ... Main thread operation timed out"), and no further command will get
+# through; force-close and relaunch it rather than retrying. Long work never trips this: tests
+# detach (unity-test), compiles poll (unity-wait recompile), so editor_status keeps answering.
+#
+# up: skips `unity open` if the project already has a live editor (checked via `unity status`,
+# never assumed from a prior run), waits for it with unity-wait, enables autotick (an unfocused
+# GUI editor stalls recompiles/tests without it), clears the console, then reports the active
+# scene — opening --scene first when a different one is active (a fresh editor restores whatever
+# was last open, rarely the boot scene). A compile error opens the editor into Safe Mode, where no
+# pipeline server ever starts: up then fails within seconds, prints the errors, and closes that
+# editor (exit 1) instead of waiting out the deadline. down: `unity close` exits 0 for a project
+# with no editor.
+set -uo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+source "$HERE/_common.sh"
+
+MODE="${1:-}"
+case "$MODE" in up|down|restart|ensure) ;; *) die "usage: unity-editor up|down|restart|ensure [project] [--scene <s>] [--force] [--deadline <s>]";; esac
+shift
+ARG="."; SCENE=""; FORCE=""; DEADLINE=30
+while [[ $# -gt 0 ]]; do case "$1" in
+  --scene) SCENE=$2; shift 2;;
+  --force) FORCE=--force; shift;;
+  --deadline) DEADLINE=$2; shift 2;;
+  -*) die "unknown option $1";;
+  *) ARG=$1; shift;;
+esac; done
+PROJECT=$(resolve_project "$ARG") || exit 1
+
+if [[ "$MODE" == down ]]; then
+  unity close "$PROJECT" $FORCE
+  exit $?
+fi
+
+answers() { [[ "$(result_json "$PROJECT" editor_status)" != unreachable ]]; }
+
+if [[ "$MODE" == ensure ]]; then
+  if ! editor_open "$PROJECT"; then echo "no live editor for $PROJECT"; exit 3; fi
+  if wait_for "$DEADLINE" answers 2>/dev/null; then echo "editor responsive"; exit 0; fi
+  echo "editor silent for ${DEADLINE}s - hung; restarting" >&2
+  MODE=restart
+fi
+
+if [[ "$MODE" == restart ]]; then
+  unity close "$PROJECT" --force >/dev/null
+  wait_for 30 not_running || die "unity close --force left the editor running - check: pgrep -fl 'Unity -projectpath'"
+fi
+
+if ! editor_open "$PROJECT"; then
+  unity open "$PROJECT" --args "-automated" >/dev/null || die "unity open failed"
+  UNITY_PROJECT_PATH="$PROJECT" "$HERE/unity-wait" ready
+  case $? in
+    0) ;;
+    1) # Safe Mode: nothing to drive, and a lingering process only blocks the next `unity open`.
+       unity close "$PROJECT" --force >/dev/null 2>&1
+       die "closed the Safe Mode editor - fix the compile errors above, then re-run unity-editor up";;
+    *) exit 2;;
+  esac
+fi
+
+unity command set_autotick --project-path "$PROJECT" --enable true --format json >/dev/null \
+  || die "set_autotick failed — is the editor really up?"
+unity command clear_console --project-path "$PROJECT" --format json >/dev/null 2>&1 || true
+
+active_scene() {
+  result_json "$PROJECT" list_open_scenes | python3 -c '
+import sys, json
+a = next((s for s in json.load(sys.stdin)["scenes"] if s["isActive"]), None)
+print("%s\t%s" % (a["path"] or a["name"] or "(untitled)", a["rootCount"]) if a else "(none)\t0")'
+}
+
+IFS=$'\t' read -r ACTIVE ROOTS <<<"$(active_scene)"
+if [[ -n "$SCENE" && "$SCENE" != "$ACTIVE" ]]; then
+  unity command open_scene --project-path "$PROJECT" --path "$SCENE" --format json >/dev/null \
+    || die "open_scene failed for $SCENE (active: $ACTIVE)"
+  IFS=$'\t' read -r ACTIVE ROOTS <<<"$(active_scene)"
+fi
+echo "active scene: $ACTIVE (rootCount $ROOTS)"
