@@ -37,6 +37,8 @@ source <(fzf --zsh)
 alias lz=lazygit
 alias nv=nvim
 alias bu="brew upgrade"
+alias cc=claude
+alias ocs="~/.claude/skills/codex-implementor/scripts/opencode-sessions --attach"
 bindkey "^U" backward-kill-line
 # bindkey '^I' autosuggest-accept
 
