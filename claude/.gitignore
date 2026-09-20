@@ -1,0 +1,23 @@
+# This directory IS ~/.claude (symlinked), so sessions, history, caches and credentials
+# live here next to the config. Ignore everything, then track the config explicitly.
+/*
+!/.gitignore
+!/README.md
+!/CLAUDE.md
+!/settings.json
+!/statusline.sh
+!/skills/
+!/agents/
+
+# local cache of the built-in anthropic-skills bundle, regenerated on demand
+/skills/synced/
+
+node_modules/
+__pycache__/
+.pytest_cache/
+.DS_Store
+
+# never publish credentials or gateway tokens
+.credentials.json
+settings_company.json
+settings*.local.json
