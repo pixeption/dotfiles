@@ -29,6 +29,7 @@ zstyle ':omz:update' frequency 30
 plugins=(git z colored-man-pages zsh-autosuggestions zsh-syntax-highlighting)
 
 source $ZSH/oh-my-zsh.sh
+eval "$(direnv hook zsh)"
 source <(fzf --zsh)
 [[ -r ~/.config/sh/unity_search.sh ]] && source ~/.config/sh/unity_search.sh
 
