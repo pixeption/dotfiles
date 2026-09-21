@@ -1,6 +1,6 @@
 ---
 name: codex-implementor
-description: Delegate a bounded, well-specified implementation unit to a codex-family model (openai/gpt-5.6-luna default, sol for hard units) with the same powers a Claude sub-agent has — including driving a live Unity editor and running suites IN PLACE in the real checkout — as a multi-round conversation you review and accept. DEFAULT channel is OpenCode (`opencode-implement`) — persistent, attachable, no resume TTL, worktree or in place. FALLBACK is the `codex` CLI (`codex-implement`) only when the OpenCode server won't start or an OS sandbox is required. Use whenever the user asks to "have codex implement/build/write" something, delegate a unit to codex, or run a model bake-off. For a read-only second opinion use codex-review instead.
+description: Delegate a bounded, well-specified implementation unit to a codex-family model (openai/gpt-5.6-luna default, sol for hard units) with the same powers a Claude sub-agent has — including driving a live Unity editor and running suites IN PLACE in the real checkout — as a multi-round conversation you review and accept. DEFAULT channel is OpenCode (`opencode-implement`) — persistent, attachable, session pinned to one directory, worktree or in place. FALLBACK is the `codex` CLI (`codex-implement`) only when the OpenCode server won't start or an OS sandbox is required. Use whenever the user asks to "have codex implement/build/write" something, delegate a unit to codex, or run a model bake-off. For a read-only second opinion use codex-review instead.
 ---
 
 # Codex implementor
@@ -17,14 +17,22 @@ suite count or a real run, never on its claim. Verified against `opencode 1.18.3
 |---|---|---|
 | how | `opencode run` against one persistent `opencode serve` | `codex exec` background process |
 | where it runs | `-C <any directory>`: a worktree **or the real checkout** | same, plus `--sandbox` tiers |
-| session | server-held, **no TTL** — resume any time with `-s` | prompt cache **30-min TTL**; resume within it or start cold |
+| session | server-held; resume with `-s` **in the same `-C` only** (pinned to its directory); cache warm **30 min**, one cold turn after | prompt cache **30 min**; the wrapper refuses a resume older than that |
 | live view | owner attaches a TUI to the very session (`opencode-sessions --attach`) | read-only tail of the JSONL `.log` |
-| isolation | none built in; the fence is the `permission` block in `~/.config/opencode/opencode.jsonc` | OS seatbelt (`workspace-write` / `danger-full-access`) |
+| isolation | none built in; the fence is the `permission` block in `~/.config/opencode/opencode.jsonc`, loaded at server **startup** | OS seatbelt (`workspace-write` / `danger-full-access`) |
 | use when | every unit | server won't start, or the unit must run under an OS sandbox |
 
-**Prefer the default.** Rounds continue with no 30-minute cliff, the owner watches and can steer,
-and it runs in place as well as in a worktree. The CLI's only extra is the seatbelt — a restriction,
-not a capability. (Until 2026-09-20 this skill claimed in-place drive needed the CLI; it does not.)
+**Prefer the default.** The session survives idle gaps (a cold resume costs one full re-read, not a
+fresh session), the owner watches and can steer, and it runs in place as well as in a worktree. The
+CLI's only extra is the seatbelt — a restriction, not a capability. (Until 2026-09-20 this skill
+claimed in-place drive needed the CLI; it does not.)
+
+**Resume or fresh — one rule, both vendors (bees §3).** Read `tokens.total` from `.usage`: it is
+the session's context size, re-read on every step. Below 120k resume freely; 120–200k only for a
+short recheck in the same files; at 200k, or for **any other directory**, start a new session. A
+codex session is pinned to the directory it was created in — a brief for another repo trips the
+external-directory fence and asks a human who is not there (a round waited from 23:18 to morning
+on exactly that, 2026-09-20). The wrapper now refuses such a resume up front.
 
 ## Models and effort
 
@@ -56,8 +64,14 @@ Edits land on the real branch; the fence and the brief carry the git discipline.
 
 ## Run it — OpenCode
 
-`scripts/opencode-implement` ensures one `opencode serve` is up (starts it headless if not),
-runs one round via `--dir` with `--auto`, and records the final message, session id and usage.
+`scripts/opencode-implement` ensures one `opencode serve` is up **with the fence loaded** (starts
+it headless if absent; restarts an idle server that predates `opencode.jsonc`, refuses when one is
+busy), refuses a `-s` resume whose session is pinned to another directory, runs one round via
+`--dir` with `--auto`, watches it, and records the final message, session id and usage. The
+watcher polls the server's pending-permission list every 15 s (local HTTP, no tokens): an ask for
+this session means the unit reached outside the fence, so it rejects it, stops the run and appends
+`Blocked: permission … <patterns>` to the out-file. Widen the fence or re-brief; never answer it by
+hand in the TUI and carry on.
 
 ```bash
 # in place (editor-drive) — the common Unity case
@@ -66,7 +80,7 @@ runs one round via `--dir` with `--auto`, and records the final message, session
 # worktree (pure diff)
 git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
 ~/.claude/skills/codex-implementor/scripts/opencode-implement -C "$T/wt-<unit>" -p "$T/brief.md" -o "$T/r1-out.txt"
-# follow-up round, same session, any time
+# follow-up round, same session, same -C, context < 200k (warm inside 30 min)
 ... -p "$T/r2.md" -o "$T/r2-out.txt" -s "$(cat "$T/r1-out.txt.session")"
 # harder unit
 ... -m openai/gpt-5.6-sol -e high
@@ -75,8 +89,13 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
 - Run via the **Bash tool with `run_in_background: true`**; you are notified on completion.
   `$T` is your scratchpad, never `/tmp`.
 - Read **`<out-file>`** (final message) and the change (`git -C <dir> diff`, or the commits it
-  reports). The `.log` is a liveness aid only — never read it into context. `.usage` holds the
-  **last step only**; the session total is in the `.log`'s `step_finish` events.
+  reports). The `.log` is a liveness aid only — never read it into context. `.usage` is the
+  **last step**: its `tokens.total` is the session's context size (the budget figure); spend over
+  the round is the sum of the `.log`'s `step_finish` events.
+- **A quiet round is inspected, not waited on.** If the `.log` has not grown in ~20 min:
+  `curl -s http://127.0.0.1:4096/permission` (should be `[]` — the watcher handles asks, this is
+  the belt), then `scripts/opencode-sessions` (BUSY = a long tool call, e.g. a Unity suite; idle
+  with no final message = the run died → `pkill -f "opencode run"`, resume the session).
 - **Watching**: one server serves every repo; the TUI's `/sessions` shows only one directory —
   the server's start directory unless `--dir` is given, whatever folder you attach from — and
   never shows child sessions. Use `scripts/opencode-sessions` (cross-repo list, BUSY flag) or
@@ -89,7 +108,9 @@ holds. `external_directory` is deny-by-default with `~/code/**`, `~/.claude/**`,
 `~/.unity/**`, `~/Library/Logs/Unity/**` and the temp dirs allowed; bash denies `git reset --hard`,
 `git checkout -- <path>`, `git stash`, `git clean`, force push, `rm -rf` on root/home. If a unit
 reports a denied path it legitimately needed, the owner widens the fence; the unit never works
-around it.
+around it. **The server reads this file once, at startup**: after editing it, `pkill -f "opencode
+serve"` when no session is busy — the wrapper does this itself when it finds a fenceless idle
+server, and checks with `curl -s :4096/config | jq .permission`.
 
 ## Run it — codex CLI fallback
 

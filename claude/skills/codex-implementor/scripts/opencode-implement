@@ -17,9 +17,19 @@
 #    forbidden git commands denied).
 # 3. Writes ONLY the final assistant message to the out-file; the raw JSONL event stream goes to
 #    <out-file>.log (a liveness aid, never read it into context).
-# 4. Records the session id (<out-file>.session) so a follow-up round RESUMES it (-s). Unlike codex,
-#    there is no 30-min TTL — the server keeps the session; resume it whenever.
-# 5. Records tokens/cost (<out-file>.usage) from the final step_finish event.
+# 4. Records the session id (<out-file>.session) so a follow-up round RESUMES it (-s). The server
+#    keeps the session; its prompt cache is warm for 30 min, and it is PINNED to the directory it
+#    was created in — a resume with a different -C is refused here (it would hit the
+#    external-directory fence and ask a human instead of running).
+# 5. Records tokens/cost (<out-file>.usage) from the final step_finish event. `tokens.total` is the
+#    session's context size — the figure the bees budget rule reads (continue < 120k, none ≥ 200k).
+# 6. Refuses to run when the live server has no `permission` block: the server reads
+#    opencode.jsonc at STARTUP only, so a server older than the fence has none and every external
+#    path becomes an "ask" nobody answers (one round waited a whole night on that, 2026-09-20).
+#    If no session is busy it restarts the server itself.
+# 7. Watches the run: a pending permission ask for this session means the fence did not cover it.
+#    The watcher rejects it, stops the run and writes `Blocked: permission <patterns>` to the
+#    out-file so the orchestrator's notification carries the reason. Local HTTP only, no tokens.
 #
 # A NEW session (no -s) gets a preamble prepended: read ~/.claude/CLAUDE.md and every CLAUDE.md in
 # the worktree, and the skills folders — so opencode loads the same guidance a Claude/codex session
@@ -34,7 +44,8 @@
 #                      [--port 4096] [--url http://127.0.0.1:4096] [--title <unit>]
 #   -m  provider/model (default openai/gpt-5.6-luna). sol: openai/gpt-5.6-sol.
 #   -e  reasoning effort -> opencode --variant (minimal|low|medium|high|max). Default: max.
-#   -s  resume a session id (from a previous <out-file>.session). No TTL — server-held.
+#   -s  resume a session id (from a previous <out-file>.session). Same -C as the session's
+#       directory only; cache warm 30 min, one cold turn after that.
 #   --port  server port (default 4096). --url overrides the full base URL.
 #   --title session title shown in the attach TUI (default: out-file basename).
 set -euo pipefail
@@ -75,15 +86,43 @@ command -v jq >/dev/null 2>&1 || { echo "opencode-implement: 'jq' not on PATH" >
 [ -n "$url" ] || url="http://127.0.0.1:${port}"
 [ -n "$title" ] || title="$(basename "$outfile")"
 
-# Ensure one server is up on the port; start it headless if not. It survives this process so the
-# owner can keep an `opencode attach` TUI open across rounds.
-if ! curl -sf "${url}/config" >/dev/null 2>&1; then
-  echo "opencode-implement: no server at ${url} — starting one" >&2
+server_up() { curl -sf "${url}/config" >/dev/null 2>&1; }
+server_has_fence() { [ "$(curl -sf "${url}/config" | jq -r '.permission.external_directory // empty')" != "" ]; }
+server_busy() { [ "$(curl -sf "${url}/session/status" | jq 'length')" != "0" ]; }
+
+start_server() {
+  echo "opencode-implement: starting opencode serve on ${url}" >&2
   serverlog="${outfile%/*}/opencode-serve-${port}.log"
   nohup opencode serve --port "$port" --hostname 127.0.0.1 >"$serverlog" 2>&1 &
   disown || true
-  for _ in $(seq 1 30); do curl -sf "${url}/config" >/dev/null 2>&1 && break; sleep 1; done
-  curl -sf "${url}/config" >/dev/null 2>&1 || { echo "opencode-implement: server did not come up on ${url}" >&2; exit 1; }
+  for _ in $(seq 1 30); do server_up && break; sleep 1; done
+  server_up || { echo "opencode-implement: server did not come up on ${url}" >&2; exit 1; }
+}
+
+# Ensure one server is up on the port; start it headless if not. It survives this process so the
+# owner can keep an `opencode attach` TUI open across rounds. A server that predates the fence
+# (config is read at startup only) is restarted when idle, refused when busy.
+server_up || start_server
+if ! server_has_fence; then
+  if server_busy; then
+    echo "opencode-implement: server at ${url} has NO permission fence (started before opencode.jsonc was written) and a session is busy — let it finish, then: pkill -f 'opencode serve'" >&2
+    exit 1
+  fi
+  echo "opencode-implement: server at ${url} has no permission fence — restarting it" >&2
+  pkill -f "opencode serve --port ${port}" || true
+  for _ in $(seq 1 10); do server_up || break; sleep 1; done
+  start_server
+  server_has_fence || { echo "opencode-implement: restarted server still has no fence — check ~/.config/opencode/opencode.jsonc" >&2; exit 1; }
+fi
+
+# A session is pinned to the directory it was created in; a brief for another repo is a new session.
+if [ -n "$session" ]; then
+  pinned="$(curl -sf "${url}/session/${session}" | jq -r '.directory // empty')"
+  [ -n "$pinned" ] || { echo "opencode-implement: session ${session} not found on ${url} — start a new session without -s" >&2; exit 1; }
+  if [ "$(cd "$pinned" 2>/dev/null && pwd -P)" != "$(cd "$workdir" && pwd -P)" ]; then
+    echo "opencode-implement: session ${session} is pinned to ${pinned}, not ${workdir} — start a new session for this directory (the old context is dead weight there anyway)" >&2
+    exit 1
+  fi
 fi
 echo "opencode-implement: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
 
@@ -110,14 +149,33 @@ session_args=()
 opencode run --attach "$url" --dir "$workdir" --auto \
   -m "$model" --variant "$effort" --title "$title" \
   --format json "${session_args[@]}" \
-  "$prompt" < /dev/null > "$logfile" 2>&1 || true
+  "$prompt" < /dev/null > "$logfile" 2>&1 &
+runpid=$!
+
+# Watcher: with the fence loaded, a pending ask means the unit reached for something the fence
+# does not cover. Nobody headless can answer it, so reject it, stop the run and say why.
+session_id() { [ -n "$session" ] && echo "$session" || jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1; }
+blocked=""
+while kill -0 "$runpid" 2>/dev/null; do
+  sleep 15
+  sid="$(session_id)"; [ -n "$sid" ] || continue
+  ask="$(curl -sf "${url}/permission" | jq -c --arg s "$sid" '.[] | select(.sessionID==$s)' | head -1)"
+  [ -n "$ask" ] || continue
+  askid="$(jq -r .id <<<"$ask")"
+  blocked="Blocked: permission $(jq -r '.permission' <<<"$ask") $(jq -c .patterns <<<"$ask") — outside the fence in ~/.config/opencode/opencode.jsonc; widen it or re-brief."
+  curl -sf -X POST "${url}/session/${sid}/permission/${askid}/reply" -H 'content-type: application/json' -d '{"reply":"reject","message":"headless run: outside the fence"}' >/dev/null || true
+  kill "$runpid" 2>/dev/null || true
+done
+wait "$runpid" 2>/dev/null || true
 
 # Final assistant message = the text parts (the answer, not the reasoning), one per line.
 jq -r 'select(.type=="text") | .part.text' "$logfile" 2>/dev/null > "$outfile" || true
+[ -n "$blocked" ] && { printf '\n%s\n' "$blocked" >> "$outfile"; echo "opencode-implement: $blocked" >&2; }
 # Session id: present on every event.
-sid="$(jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true)"
+sid="$(session_id)"
 [ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
 # Usage/cost from the final step_finish.
 jq -c 'select(.type=="step_finish") | {tokens: .part.tokens, cost: .part.cost}' "$logfile" 2>/dev/null | tail -1 > "$usagefile" || true
 
-echo "opencode-implement: $model/$effort done -> $outfile (final msg); diff: git -C $workdir diff; session ${sid:-unknown}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2
+ctx="$(jq -r '.tokens.total // empty' "$usagefile" 2>/dev/null)"
+echo "opencode-implement: $model/$effort done -> $outfile (final msg); diff: git -C $workdir diff; session ${sid:-unknown} pinned to ${workdir}, context ${ctx:-?} tokens (bees: continue < 120k, none ≥ 200k); usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2
