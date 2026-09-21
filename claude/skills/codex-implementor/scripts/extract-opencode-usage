@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Single source of truth for reading the CURRENT CONTEXT SIZE out of an `opencode run
+# --format json` event log. Shared by opencode-implement (this skill) and opencode-review
+# (codex-review skill) — both wrap the same OpenCode channel and previously duplicated this
+# extraction, unscoped by session. Prints one JSON object to stdout:
+#   {"context_tokens":N,"tokens":{...},"cost":N}
+# Prints nothing (exit 0) if no step-finish event for that session is found.
+#
+# WHY tokens.total (via context_tokens): OpenCode's own SessionCompaction.isOverflow — the
+# function that decides when the SERVER itself triggers auto-compaction — keys off exactly
+# this field on the last completed step, compared against the model's context-window budget.
+# It is not a guess; it is what OpenCode's own compaction trigger already treats as "current
+# context". `total` isn't in the published @opencode-ai/sdk type but is present on every real
+# step-finish event (verified directly against a live opencode.db). The fallback sum covers
+# the rare case it's ever absent, matching OpenCode's own fallback formula plus `reasoning`
+# (their internal fallback omits it — a minor inconsistency in their code, not a reason to
+# copy it here).
+#
+# WHY scoped by session id (the fix this consolidation makes): an unscoped
+# `select(.type=="step_finish")` over the whole log can pick up a SUBAGENT's step-finish
+# event instead of the primary session's, if the round used one — silently reporting a much
+# smaller context than the one actually being resumed. The session id is already captured
+# elsewhere in each caller from this same log's top-level `.sessionID` field; pass it in.
+#
+# WHY -R + fromjson?, not plain jq input mode: both wrapper's <out-file>.log is stdout AND
+# stderr combined; a plain-text line (a warning, a crash trace) is invalid JSON and would
+# otherwise abort the whole parse, printing only whatever matched before that line and
+# silently discarding a later, more-current step-finish event (verified: it happens, and
+# `tail -1` on the ones printed before the abort then returns a STALE reading, not the
+# latest). `fromjson?` skips a line that isn't JSON instead of erroring the pipeline.
+#
+# Usage: extract-opencode-usage <logfile> <session-id>
+set -euo pipefail
+logfile="${1:?usage: extract-opencode-usage <logfile> <session-id>}"
+sid="${2:?usage: extract-opencode-usage <logfile> <session-id>}"
+
+jq -cnR --arg sid "$sid" '
+  inputs | fromjson? |
+  select(.type=="step_finish" and .sessionID==$sid) |
+  {
+    context_tokens: (.part.tokens.total //
+      ((.part.tokens.input // 0) + (.part.tokens.output // 0) + (.part.tokens.reasoning // 0)
+        + (.part.tokens.cache.read // 0) + (.part.tokens.cache.write // 0))),
+    tokens: .part.tokens,
+    cost: .part.cost
+  }
+' "$logfile" 2>/dev/null | tail -1

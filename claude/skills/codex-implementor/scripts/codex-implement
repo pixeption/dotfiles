@@ -17,9 +17,11 @@
 # 3. Record the session id (<out-file>.session, from `thread_id`) so a follow-up round RESUMES the
 #    same codex conversation (-r), keeping the repo + prior edits in context.
 #
-# 4. Record token usage (<out-file>.usage) — the last input_tokens/cached_input_tokens/output_tokens
-#    in the log — so you can report cost. cached_input_tokens is the cheap part; the real spend is
-#    (input_tokens - cached_input_tokens) + output_tokens.
+# 4. Record context size (<out-file>.usage) via `extract-codex-cli-usage` (this dir) — the shared
+#    extractor also used by codex-review's CLI-fallback channel. It reads the SEPARATE rollout
+#    file codex persists to ~/.codex/sessions, not this wrapper's own <out-file>.log: `--json`'s
+#    stdout stream never exposes a bounded current-context figure, only a cumulative session
+#    total (see that script for the real numbers that proved this).
 #
 # codex CANNOT run Unity / a build / project-specific validation. This wrapper only produces a DIFF.
 # Validate the result yourself afterward (compile check, tests) — for Unity, drive the LIVE editor
@@ -85,6 +87,7 @@ done
 [ -n "$promptfile" ] && [ -f "$promptfile" ] || { echo "codex-implement: need -p <prompt-file>" >&2; exit 2; }
 [ -n "$outfile" ] || { echo "codex-implement: need -o <out-file>" >&2; exit 2; }
 command -v codex >/dev/null 2>&1 || { echo "codex-implement: 'codex' not on PATH" >&2; exit 127; }
+command -v jq >/dev/null 2>&1 || { echo "codex-implement: 'jq' not on PATH" >&2; exit 127; }
 
 [ -n "$tier" ] || { [ "$model" = "gpt-5.6-luna" ] && tier="fast" || tier="standard"; }
 case "$tier" in
@@ -95,7 +98,7 @@ esac
 
 cache_ttl_secs=1800
 if [ -n "$session" ]; then
-  rollout="$(find "${CODEX_HOME:-$HOME/.codex}/sessions" -type f -name "rollout-*${session}.jsonl" 2>/dev/null | head -1)"
+  rollout="$(find "${CODEX_HOME:-$HOME/.codex}/sessions" -type f -name "rollout-*${session}.jsonl" 2>/dev/null | head -1 || true)"
   [ -n "$rollout" ] || { echo "codex-implement: no rollout file for session $session" >&2; exit 2; }
   age=$(( $(date +%s) - $(stat -f %m "$rollout") ))
   [ "$age" -le "$cache_ttl_secs" ] || {
@@ -135,7 +138,12 @@ else
 fi
 
 thread="$(grep -m1 -o '"thread_id":"[^"]*"' "$logfile" | cut -d'"' -f4 || true)"
+resume_id="${session:-$thread}"
 [ -n "$thread" ] && printf '%s\n' "$thread" > "$sessionfile"
-grep -oE '"(input_tokens|cached_input_tokens|output_tokens)":[0-9]+' "$logfile" | tail -3 > "$usagefile" || true
+# Truncate first, unconditionally: a prior run at this same out-file path could otherwise
+# leave a STALE .usage lingering (misread as current) if this round never gets a session id.
+: > "$usagefile"
+[ -n "$resume_id" ] && { "$(dirname "$0")/extract-codex-cli-usage" "$resume_id" > "$usagefile" || true; }
 
-echo "codex-implement: $model/$effort/$tier done -> $outfile (final msg); diff: git -C $workdir diff; session ${thread:-unknown}; usage $usagefile; log $logfile" >&2
+ctx="$(jq -r '.context_tokens // empty' "$usagefile" 2>/dev/null)"
+echo "codex-implement: $model/$effort/$tier done -> $outfile (final msg); diff: git -C $workdir diff; session ${thread:-unknown}, context ${ctx:-?} tokens (bees: continue < 120k, none ≥ 200k); usage $usagefile; log $logfile" >&2

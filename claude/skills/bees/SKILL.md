@@ -87,9 +87,10 @@ Choosing "full" for a small plan is the error, not the safe default.
    slot table is it. A codex worktree is outside every compile domain; **validating its diff**
    against the real project is not, and needs the resource like any other unit.
 4. **One session budget, both vendors: continue below 120k, finish below 200k, retire at 200k.**
-   The figure is the harness's token count on a Claude agent's last notification, or the `total`
-   in the codex wrapper's `.usage` file — never the agent's own estimate (agents under-report by
-   ~2×). Between 120k and 200k an agent may finish the unit it is on or do one short recheck in
+   The figure is the harness's token count on a Claude agent's last notification, or
+   `context_tokens` in the codex wrapper's `.usage` file — never the agent's own estimate
+   (agents under-report by ~2×). Between 120k and 200k an agent may finish the unit it is on or
+   do one short recheck in
    the same files, nothing new. At 200k it gets no new brief, whatever it holds: spawn fresh and
    hand the resource over (§3 handover). **A unit in a different repo or area always gets a fresh
    session**, regardless of size: the old context is dead weight, and a codex session is pinned
@@ -190,7 +191,7 @@ effort live in the agent files under `~/.claude/agents/` and in the `codex-imple
 |---|---|---|---|---|---|
 | points per brief | ≤ 8 | ≤ 13 (one unit) | one unit's diff | none (one question) | one unit |
 | points per session | ≤ 16 | ≤ 26 | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
-| continue freely below | 120k | 120k | 120k | never continued | 120k (`.usage` total) |
+| continue freely below | 120k | 120k | 120k | never continued | 120k (`.usage` `context_tokens`) |
 | finish / one recheck below | 200k | 200k | 200k | — | 200k |
 | **no new brief at or past** | **200k** | **200k** | **200k** | any — spawn a new scout | **200k**, or any other directory |
 | **cache warm for** | **5 min** idle | **5 min** idle | **5 min** idle | irrelevant | **30 min** idle |
@@ -219,8 +220,8 @@ Rules of continuation:
   a reply. Past the clock, continue only an agent under ~100k; otherwise spawn.
 - Spawn fresh when: context at or past 200k, different bucket, area, resource or repo, a review
   of that agent's own work, or the cache is cold and the context is over ~100k.
-- Read context/turns (Claude) or `.usage` `total` (codex) from every report and write them on the
-  unit's line. An agent that reports no numbers is asked once, in the next brief.
+- Read context/turns (Claude) or `.usage` `context_tokens` (codex) from every report and write
+  them on the unit's line. An agent that reports no numbers is asked once, in the next brief.
 - **Handover instead of continuation.** When a resource holder must be retired, its last message
   is "stop at a safe point; write the state a successor needs (suite command + last green count,
   uncommitted files, what is half-done, resources/Play-mode state) into the status doc's *How to

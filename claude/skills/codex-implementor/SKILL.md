@@ -89,9 +89,12 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
 - Run via the **Bash tool with `run_in_background: true`**; you are notified on completion.
   `$T` is your scratchpad, never `/tmp`.
 - Read **`<out-file>`** (final message) and the change (`git -C <dir> diff`, or the commits it
-  reports). The `.log` is a liveness aid only — never read it into context. `.usage` is the
-  **last step**: its `tokens.total` is the session's context size (the budget figure); spend over
-  the round is the sum of the `.log`'s `step_finish` events.
+  reports). The `.log` is a liveness aid only — never read it into context. `.usage` is written
+  by `scripts/extract-opencode-usage` (this channel) or `codex-review`'s
+  `scripts/extract-codex-cli-usage` (CLI fallback) — the single source of truth for this shared
+  by both this skill's wrappers and codex-review's; its `context_tokens` field is the same
+  budget figure regardless of channel. Spend over the round is the sum of the `.log`'s
+  `step_finish` events.
 - **A quiet round is inspected, not waited on.** If the `.log` has not grown in ~20 min:
   `curl -s http://127.0.0.1:4096/permission` (should be `[]` — the watcher handles asks, this is
   the belt), then `scripts/opencode-sessions` (BUSY = a long tool call, e.g. a Unity suite; idle

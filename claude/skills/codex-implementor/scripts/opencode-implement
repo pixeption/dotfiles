@@ -21,8 +21,10 @@
 #    keeps the session; its prompt cache is warm for 30 min, and it is PINNED to the directory it
 #    was created in — a resume with a different -C is refused here (it would hit the
 #    external-directory fence and ask a human instead of running).
-# 5. Records tokens/cost (<out-file>.usage) from the final step_finish event. `tokens.total` is the
-#    session's context size — the figure the bees budget rule reads (continue < 120k, none ≥ 200k).
+# 5. Records tokens/cost (<out-file>.usage) via `extract-opencode-usage` (this dir) — the shared
+#    extractor also used by opencode-review. It scopes to THIS session's step-finish events
+#    (a subagent's would otherwise contaminate an unscoped read) and reports `context_tokens`,
+#    the figure the bees budget rule reads (continue < 120k, none ≥ 200k).
 # 6. Refuses to run when the live server has no `permission` block: the server reads
 #    opencode.jsonc at STARTUP only, so a server older than the fence has none and every external
 #    path becomes an "ask" nobody answers (one round waited a whole night on that, 2026-09-20).
@@ -154,12 +156,12 @@ runpid=$!
 
 # Watcher: with the fence loaded, a pending ask means the unit reached for something the fence
 # does not cover. Nobody headless can answer it, so reject it, stop the run and say why.
-session_id() { [ -n "$session" ] && echo "$session" || jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1; }
+session_id() { [ -n "$session" ] && echo "$session" || jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true; }
 blocked=""
 while kill -0 "$runpid" 2>/dev/null; do
   sleep 15
   sid="$(session_id)"; [ -n "$sid" ] || continue
-  ask="$(curl -sf "${url}/permission" | jq -c --arg s "$sid" '.[] | select(.sessionID==$s)' | head -1)"
+  ask="$(curl -sf "${url}/permission" | jq -c --arg s "$sid" '.[] | select(.sessionID==$s)' | head -1 || true)"
   [ -n "$ask" ] || continue
   askid="$(jq -r .id <<<"$ask")"
   blocked="Blocked: permission $(jq -r '.permission' <<<"$ask") $(jq -c .patterns <<<"$ask") — outside the fence in ~/.config/opencode/opencode.jsonc; widen it or re-brief."
@@ -174,8 +176,8 @@ jq -r 'select(.type=="text") | .part.text' "$logfile" 2>/dev/null > "$outfile" |
 # Session id: present on every event.
 sid="$(session_id)"
 [ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
-# Usage/cost from the final step_finish.
-jq -c 'select(.type=="step_finish") | {tokens: .part.tokens, cost: .part.cost}' "$logfile" 2>/dev/null | tail -1 > "$usagefile" || true
+# Usage/cost from the final step_finish OF THIS SESSION (scoped — see extract-opencode-usage).
+"$(dirname "$0")/extract-opencode-usage" "$logfile" "$sid" > "$usagefile" || true
 
-ctx="$(jq -r '.tokens.total // empty' "$usagefile" 2>/dev/null)"
+ctx="$(jq -r '.context_tokens // empty' "$usagefile" 2>/dev/null)"
 echo "opencode-implement: $model/$effort done -> $outfile (final msg); diff: git -C $workdir diff; session ${sid:-unknown} pinned to ${workdir}, context ${ctx:-?} tokens (bees: continue < 120k, none ≥ 200k); usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2

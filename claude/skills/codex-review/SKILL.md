@@ -59,7 +59,9 @@ findings — routinely past the CLI's 30-minute cache cliff. OpenCode's session 
 
 Same review, codex's harness (`--sandbox read-only`, 30-min TTL). `scripts/codex-review`
 hardcodes `< /dev/null`, reads the prompt from a file, writes only the final answer, records the
-session id.
+session id, and records context size (`<out-file>.usage`, from the log's last `token_count`
+event's `last_token_usage` — never `total_token_usage`, a cumulative sum across the whole
+session, not the current context).
 
 ```bash
 ~/.claude/skills/codex-review/scripts/codex-review -p "$T/r1-prompt.txt" -o "$T/r1-out.txt" -e medium

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Safe runner for a codex non-interactive review, with session reuse across rounds.
 #
-# THREE JOBS OF THIS WRAPPER:
+# FOUR JOBS OF THIS WRAPPER:
 #
 # 1. Always close stdin with `< /dev/null`.
 #    `codex exec` (and `codex exec resume`) appends stdin as a <stdin> block EVEN WHEN
@@ -17,6 +17,12 @@
 #    Round 1 records the thread id (from the `thread.started` event) in <out-file>.session.
 #    Pass it back with -r on every later round; codex then keeps the repo it already read
 #    and every finding it already raised/confirmed in context, instead of starting cold.
+#
+# 4. Record context size (<out-file>.usage) via `extract-codex-cli-usage`, the single source of
+#    truth for this shared by codex-implement (codex-implementor skill) — both wrap the same
+#    codex CLI channel. It reads the SEPARATE rollout file codex persists to
+#    ~/.codex/sessions, not this wrapper's own <out-file>.log — see that script for the real
+#    numbers proving `--json`'s stdout never exposes a bounded current-context figure.
 #
 # It reads the prompt from a FILE, not a shell argument, to avoid quoting traps.
 #
@@ -63,10 +69,15 @@ if ! command -v codex >/dev/null 2>&1; then
   echo "codex-review: the 'codex' CLI is not on PATH" >&2
   exit 127
 fi
+if ! command -v jq >/dev/null 2>&1; then
+  echo "codex-review: 'jq' is not on PATH" >&2
+  exit 127
+fi
 
 prompt="$(cat "$promptfile")"
 logfile="${outfile}.log"
 sessionfile="${outfile}.session"
+usagefile="${outfile}.usage"
 
 # < /dev/null is the whole point — never remove it.
 if [ -n "$session" ]; then
@@ -85,6 +96,18 @@ else
 fi
 
 thread="$(grep -m1 -o '"thread_id":"[^"]*"' "$logfile" | cut -d'"' -f4 || true)"
+resume_id="${session:-$thread}"
 [ -n "$thread" ] && printf '%s\n' "$thread" > "$sessionfile"
 
-echo "codex-review: done -> $outfile (final answer); session ${thread:-unknown} (-r for the next round); $logfile (event stream)" >&2
+# Truncate first, unconditionally: a prior run at this same out-file path could otherwise
+# leave a STALE .usage lingering (misread as current) if this round never gets a session id.
+: > "$usagefile"
+[ -n "$resume_id" ] && { "$HOME/.claude/skills/codex-implementor/scripts/extract-codex-cli-usage" "$resume_id" > "$usagefile" || true; }
+
+if [ -s "$usagefile" ]; then
+  usage_note="usage $usagefile"
+else
+  usage_note="usage unavailable (no token_count event found for session ${resume_id:-unknown} in ~/.codex/sessions)"
+fi
+
+echo "codex-review: done -> $outfile (final answer); session ${thread:-unknown} (-r for the next round); $usage_note; $logfile (event stream)" >&2

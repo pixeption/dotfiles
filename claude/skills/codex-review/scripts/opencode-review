@@ -17,7 +17,9 @@
 # 3. Writes ONLY the final answer (findings + verdict) to the out-file; the raw JSONL stream goes
 #    to <out-file>.log (a liveness aid, never read it into context).
 # 4. Records the session id (<out-file>.session) so later rounds RESUME it (-s). No 30-min TTL.
-# 5. Records tokens/cost (<out-file>.usage) from the final step_finish event.
+# 5. Records tokens/cost (<out-file>.usage) via `extract-opencode-usage` (codex-implementor
+#    skill) — the shared extractor also used by opencode-implement. It scopes to THIS
+#    session's step-finish events, since an unscoped read can pick up a subagent's instead.
 #
 # Usage:
 #   opencode-review -C <repo> -p <prompt-file> -o <out-file>
@@ -101,6 +103,6 @@ opencode run --attach "$url" --dir "$workdir" --agent plan --auto \
 jq -r 'select(.type=="text") | .part.text' "$logfile" 2>/dev/null > "$outfile" || true
 sid="$(jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true)"
 [ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
-jq -c 'select(.type=="step_finish") | {tokens: .part.tokens, cost: .part.cost}' "$logfile" 2>/dev/null | tail -1 > "$usagefile" || true
+"$HOME/.claude/skills/codex-implementor/scripts/extract-opencode-usage" "$logfile" "$sid" > "$usagefile" || true
 
 echo "opencode-review: $model/$effort (read-only) done -> $outfile (findings+verdict); session ${sid:-unknown}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Single source of truth for reading the CURRENT CONTEXT SIZE of a codex CLI session. Shared by
+# codex-implement (this skill) and codex-review (codex-review skill). Prints one JSON object to
+# stdout: {"context_tokens":N,"last_token_usage":{...}}. Prints nothing (exit 0) if no rollout
+# file or no token_count event is found for the session.
+#
+# READS THE ROLLOUT FILE (~/.codex/sessions/**/*.jsonl), NEVER THE WRAPPER'S OWN <out-file>.log.
+# `codex exec --json` prints events to stdout in codex's newer Thread/Item protocol
+# (thread.started / turn.started / turn.completed / item.*), and `turn.completed.usage` there is
+# CUMULATIVE ACROSS THE WHOLE SESSION, not the current turn — verified against a real historical
+# log (codex-cli 0.155.1): four resumed rounds of one review session showed usage.input_tokens
+# climbing 2.5M -> 3.35M -> 4.6M -> 5.46M, far beyond any real context window. That stdout
+# stream has NO per-turn usage field at all; `--help` confirms `--json` has no verbosity flag to
+# add one. The bounded, current-context figure only exists in the SEPARATE rollout file codex
+# persists to ~/.codex/sessions regardless of --json, whose `token_count` events carry both
+# `total_token_usage` (the same cumulative figure as stdout's turn.completed) and
+# `last_token_usage` (the current turn's context size — sane and window-bounded: verified
+# against the same real session, last_token_usage.total_tokens = 118,840 against a 258,400
+# context window, vs. total_token_usage.total_tokens = 5,482,468 at that same point).
+# `context_tokens = last_token_usage.input_tokens + last_token_usage.output_tokens`: cached
+# tokens are already inside input_tokens and reasoning tokens are already inside output_tokens
+# for this schema, so no further summing is needed.
+#
+# WHY jq -R + fromjson? + the sibling-pair select, not a positional grep on 3 field names: a
+# position-dependent grep silently breaks if the event schema ever reorders
+# total_token_usage/last_token_usage, or matches an unrelated JSON blob elsewhere in the file;
+# requiring BOTH `total_token_usage` and `last_token_usage` as siblings identifies a real
+# token_count event's info block regardless of its enclosing envelope shape.
+#
+# Usage: extract-codex-cli-usage <session-id> [codex-home]
+#   <session-id>  the thread id (same value written to a wrapper's <out-file>.session)
+#   [codex-home]  override for $CODEX_HOME (default: ~/.codex), matching codex-implement's own
+#                 rollout lookup for its resume-TTL check
+set -euo pipefail
+sid="${1:?usage: extract-codex-cli-usage <session-id> [codex-home]}"
+codex_home="${2:-${CODEX_HOME:-$HOME/.codex}}"
+
+rollout="$(find "$codex_home/sessions" -type f -name "rollout-*${sid}.jsonl" 2>/dev/null | head -1 || true)"
+[ -n "$rollout" ] || exit 0
+
+jq -cnR '
+  [inputs | fromjson? | .. | objects
+    | select(has("total_token_usage") and has("last_token_usage"))
+    | .last_token_usage]
+  | last as $l
+  | if $l == null then empty else
+      {context_tokens: (($l.input_tokens // 0) + ($l.output_tokens // 0)), last_token_usage: $l}
+    end
+' "$rollout" 2>/dev/null || true
