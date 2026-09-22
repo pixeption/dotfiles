@@ -1,0 +1,438 @@
+#!/usr/bin/env python3
+"""Own the bees status document so the orchestrator never reads or edits it.
+
+State lives in <plan>-status.json next to the plan; every write re-renders <plan>-status.md
+(the human/handover view) and rolls old rows into <plan>-status-log.md. Each command prints a
+one-line ack. `show` prints one narrow view, never the whole doc, unless `show doc` is asked.
+
+  bees-status [-f status.json] <command> ...        (or set BEES_STATUS=path)
+
+  init <plan.md> --scope S --focus F --by B [--method M] [--setup S]
+  unit add ID --pts N --bucket low|mid|high --impl I [--reviewer R] [--resource R]
+           [--depends A,B] [--acceptance TEXT]
+  unit ID state queued|running|landed|fix|blocked|accepted|dropped [DETAIL]
+  unit ID round N [--done HH:MMZ] [--verdict HH:MMZ] [--fixed IDS] [--open IDS]
+  unit ID finding add FID TEXT [--ref path:line] | unit ID finding fix FID
+  unit ID accept WHAT [--commit SHA] [--evidence TEXT]    (collapses the unit to a Done line)
+  unit ID drop WHY
+  slot set NAME --agent A [--holds H] [--unit U] [--ctx C] [--since HH:MMZ] | slot clear NAME
+  decision add ID RULE [--who owner] | decision supersede OLD NEW | decision done ID [NOTE]
+  log add UNIT --by WHO --outcome O [--cost "0.4M / 190k / 17"] [--commits SHA] [--note N] [--pts P]
+  next TEXT | owner-open TEXT | takeover TEXT | updated TEXT | noise add TEXT | noise drop PREFIX
+  friction add ID WHAT [--evidence E] [--fix F] | friction resolve ID FIX
+  show [brief|triage|now|unit ID|decisions|log|frictions|done|doc]
+  roll | import <old-status.md>      (one-time migration of a hand-written doc into a fresh state)
+"""
+import argparse, datetime as dt, glob, json, os, sys
+
+MARK = {"queued": "⚪ queued", "running": "🟡 running", "landed": "🔵 landed", "fix": "🟠 fix round",
+        "blocked": "🔴 blocked", "accepted": "🟢 accepted", "dropped": "⚫ dropped"}
+LEGEND = "⚪ queued · 🟡 running · 🔵 landed (committed, review pending) · 🟠 fix round · 🔴 blocked / needs decision · 🟢 accepted · ⚫ dropped"
+LOG_WINDOW, SIZE_BUDGET = 20, 40_000
+
+
+def now_hm():
+    return dt.datetime.now(dt.timezone.utc).strftime("%H:%MZ")
+
+
+def now_stamp():
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+
+
+def die(msg):
+    sys.exit(f"bees-status: {msg}")
+
+
+def cell(s):
+    return str(s or "—").replace("|", "\\|").replace("\n", " ")
+
+
+def table(cols, rows):
+    out = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+    out += ["| " + " | ".join(cell(c) for c in r) + " |" for r in rows]
+    return "\n".join(out)
+
+
+def load(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        die(f"no state at {path}; run init or set BEES_STATUS")
+
+
+def paths(st):
+    base = st["base"]
+    return base + "-status.json", base + "-status.md", base + "-status-log.md"
+
+
+# ---------- rendering ----------
+
+def unit_line(u):
+    return f"{u['id']} · {u['pts']} pts · {u['bucket']} · {u['impl']}"
+
+
+def render(st):
+    h = st["header"]
+    L = [f"# {st['title']} — status and handover",
+         f"**Date:** {h['date']} · **Scope:** {h['scope']} · **Focus:** {h['focus']} · **By:** {h['by']} · **Method:** {h.get('method') or '—'}",
+         f"**Setup:** {st.get('setup') or '—'}",
+         f"**Last updated:** {st.get('updated_at')} · {st.get('updated') or '—'}", ""]
+    dec = [d for d in st["decisions"] if d["status"] == "in force"]
+    L += ["## Decisions (in force)", table(["id", "date", "who", "rule", "status"],
+                                           [(d["id"], d["date"], d["who"], d["rule"], d["status"]) for d in dec]), ""]
+    units = [u for u in st["units"].values() if u["state"] not in ("accepted", "dropped")]
+    rows = [(u["id"], u["pts"], u["bucket"], u["impl"], u.get("reviewer"), u.get("resource"),
+             ", ".join(u.get("depends") or []), MARK[u["state"]] + (f" — {u['detail']}" if u.get("detail") else ""))
+            for u in units]
+    rows += [(u["id"], u["pts"], u["bucket"], u["impl"], u.get("reviewer"), u.get("resource"), "",
+              MARK[u["state"]] + " — " + (f"`{u['commit']}`" if u["state"] == "accepted" else u.get("detail") or "—"))
+             for u in st["units"].values() if u["state"] in ("accepted", "dropped")]
+    L += ["## Triage", LEGEND, table(["unit", "pts", "bucket", "implementor", "reviewer", "resource", "depends on", "state"], rows), ""]
+    L += ["## Now", table(["slot", "agent (model)", "holds", "unit (pts · bucket)", "ctx / pts used", "since"],
+                          [(n, s["agent"], s.get("holds"), s.get("unit"), s.get("ctx"), s.get("since")) for n, s in st["slots"].items()]),
+          "", f"**Next:** {st.get('next') or '—'}", f"**Owner decisions open:** {st.get('owner_open') or '—'}", ""]
+    L += ["## How to take over", st.get("takeover") or "—", ""]
+    L += ["## Log (newest first; last 20 rows — older in " + os.path.basename(paths(st)[2]) + ")",
+          table(["when", "unit", "pts", "by", "outcome", "tokens / ctx / min", "commits", "note"],
+                [(r["when"], r["unit"], r["pts"], r["by"], r["outcome"], r.get("cost"), r.get("commits"), r.get("note")) for r in st["log"]]), ""]
+    L += ["## Units"]
+    for u in units:
+        L += [f"### {u['id']} · {u.get('title') or u['id']} · {u['pts']} pts · {u['bucket']} · {u['impl']}",
+              f"**State:** {MARK[u['state']]}" + (f" — {u['detail']}" if u.get("detail") else "") + f" · **Acceptance:** {u.get('acceptance') or '—'}"]
+        if u["rounds"]:
+            L.append(table(["round", "done", "verdict", "fixed", "open"],
+                           [(r["n"], r.get("done"), r.get("verdict"), r.get("fixed"), r.get("open")) for r in u["rounds"]]))
+        L += [f"- [{'x' if f['fixed'] else ' '}] {f['id']} — {f['text']}" + (f" — [{f['ref']}]({f['ref'].split(':')[0]}#L{f['ref'].split(':')[-1]})" if f.get("ref") and ":" in f["ref"] else "")
+              for f in u["findings"]]
+        L.append("")
+    L += ["## Done", *[f"- {d['id']} · {d['pts']} pts · {d['impl']} · {d['what']} · {d.get('evidence') or '—'} · `{d['commit']}`" for d in st["done"]], ""]
+    queued = [u for u in units if u["state"] == "queued"]
+    L += ["## Queue", *[f"- {unit_line(u)} · resource {u.get('resource') or '—'}" for u in queued], ""]
+    L += ["## Known noise / deferred", *[f"- {n}" for n in st["noise"]], ""]
+    L += ["## Frictions (open)", *[f"- {f['id']} · {f['what']} · evidence: {f.get('evidence') or '—'} · fix planned: {f.get('fix') or '—'}"
+                                    for f in st["frictions"] if f["status"] == "open"], ""]
+    return "\n".join(L)
+
+
+def render_archive(st):
+    a = st["archive"]
+    return "\n".join([
+        f"# {st['title']} — status archive", "",
+        "## Log (newest first)", table(["when", "unit", "pts", "by", "outcome", "tokens / ctx / min", "commits", "note"],
+                                        [(r["when"], r["unit"], r["pts"], r["by"], r["outcome"], r.get("cost"), r.get("commits"), r.get("note")) for r in a["log"]]), "",
+        "## Decisions (superseded / done)", table(["id", "date", "who", "rule", "status"],
+                                                   [(d["id"], d["date"], d["who"], d["rule"], d["status"]) for d in a["decisions"]]), "",
+        "## Frictions (resolved)", *[f"- {f['id']} · {f['what']} · fix taken: {f.get('fix') or '—'}" for f in a["frictions"]], "",
+        "## Units (accepted / dropped, full detail)", *[f"- {json.dumps(u, ensure_ascii=False)}" for u in a["units"]], ""])
+
+
+def roll(st):
+    st["archive"]["log"] = st["log"][LOG_WINDOW:] + st["archive"]["log"]
+    st["log"] = st["log"][:LOG_WINDOW]
+    keep, gone = [], []
+    for d in st["decisions"]:
+        (keep if d["status"] == "in force" else gone).append(d)
+    st["decisions"], st["archive"]["decisions"] = keep, gone + st["archive"]["decisions"]
+    keep, gone = [], []
+    for f in st["frictions"]:
+        (keep if f["status"] == "open" else gone).append(f)
+    st["frictions"], st["archive"]["frictions"] = keep, gone + st["archive"]["frictions"]
+
+
+def save(st, ack):
+    st["updated_at"] = now_stamp()
+    roll(st)
+    jp, mp, ap = paths(st)
+    md = render(st)
+    with open(jp, "w") as f:
+        json.dump(st, f, ensure_ascii=False, indent=1)
+    with open(mp, "w") as f:
+        f.write(md)
+    with open(ap, "w") as f:
+        f.write(render_archive(st))
+    size = len(md.encode())
+    warn = f" · WARN doc {size // 1000} KB > budget" if size > SIZE_BUDGET else ""
+    print(f"ok {ack}{warn}")
+
+
+# ---------- commands ----------
+
+def unit_of(st, uid):
+    u = st["units"].get(uid)
+    if not u:
+        die(f"unknown unit {uid}")
+    return u
+
+
+def cmd_init(a):
+    plan = os.path.abspath(a.plan)
+    base = plan[:-3] if plan.endswith(".md") else plan
+    if os.path.exists(base + "-status.json"):
+        die(f"{base}-status.json exists")
+    st = {"base": base, "title": os.path.basename(base),
+          "header": {"date": dt.date.today().isoformat(), "scope": a.scope, "focus": a.focus, "by": a.by, "method": a.method},
+          "setup": a.setup, "updated": "session 1", "next": "", "owner_open": "", "takeover": "",
+          "decisions": [], "units": {}, "slots": {}, "log": [], "done": [], "noise": [], "frictions": [],
+          "archive": {"log": [], "decisions": [], "frictions": [], "units": []}}
+    save(st, f"init {base}-status.{{json,md}} — export BEES_STATUS={base}-status.json")
+
+
+# ---------- one-time import of a hand-written doc ----------
+
+def md_sections(text):
+    out, head, buf = {}, "_", []
+    for line in text.split("\n"):
+        if line.startswith("## "):
+            out[head] = "\n".join(buf); head, buf = line[3:].split(" (")[0].strip(), []
+        else:
+            buf.append(line)
+    out[head] = "\n".join(buf)
+    return out
+
+
+def md_table(block):
+    rows = [l for l in block.split("\n") if l.startswith("|")]
+    if len(rows) < 2:
+        return []
+    split = lambda l: [c.strip() for c in l.strip().strip("|").split(" | ")]
+    cols = split(rows[0])
+    return [dict(zip(cols, split(r))) for r in rows[2:]]
+
+
+def md_bullets(block):
+    return [l[2:].strip() for l in block.split("\n") if l.startswith("- ")]
+
+
+def parse_state(cell):
+    marker, _, detail = cell.partition(" — ")
+    key = next((k for k, v in MARK.items() if marker.startswith(v.split(" ")[0])), "queued")
+    return key, detail.strip()
+
+
+def cmd_import(a):
+    text = open(a.md).read()
+    base = a.md[:-len("-status.md")] if a.md.endswith("-status.md") else a.md[:-3]
+    os.path.exists(base + "-status.json") and die(f"{base}-status.json exists")
+    sec = md_sections(text)
+    head = {k: "" for k in ("date", "scope", "focus", "by", "method")}
+    setup = updated = ""
+    for line in sec["_"].split("\n"):
+        for k in list(head) + ["setup", "last updated"]:
+            tag = f"**{k.title() if k != 'last updated' else 'Last updated'}:** "
+            if line.startswith(tag):
+                v = line[len(tag):]
+                if k == "setup": setup = v
+                elif k == "last updated": updated = v
+                else: head[k] = v
+    title = text.split("\n", 1)[0].lstrip("# ").split(" — ")[0]
+    st = {"base": base, "title": title, "header": head, "setup": setup, "updated": updated, "next": "",
+          "owner_open": "", "takeover": "", "decisions": [], "units": {}, "slots": {}, "log": [], "done": [],
+          "noise": [], "frictions": [], "archive": {"log": [], "decisions": [], "frictions": [], "units": []}}
+    for d in md_table(sec.get("Decisions", "")):
+        st["decisions"].append({"id": d["id"], "date": d["date"], "who": d["who"], "rule": d["rule"],
+                                "status": "in force" if d["status"].startswith("in force") else d["status"]})
+    for r in md_table(sec.get("Triage", "")):
+        state, detail = parse_state(r["state"])
+        u = {"id": r["unit"], "title": r["unit"], "pts": r["pts"], "bucket": r["bucket"], "impl": r["implementor"],
+             "reviewer": r["reviewer"], "resource": r["resource"], "depends": [r["depends on"]] if r["depends on"] not in ("", "—") else [],
+             "acceptance": "", "state": state, "detail": detail, "rounds": [], "findings": []}
+        if state == "accepted":
+            sha = detail.split("`")[1] if "`" in detail else "—"
+            u["commit"] = sha
+            st["done"].append({"id": u["id"], "pts": u["pts"], "impl": u["impl"], "what": detail or "—", "evidence": None, "commit": sha})
+            st["archive"]["units"].append(u)
+        st["units"][u["id"]] = u
+    now = sec.get("Now", "")
+    for r in md_table(now):
+        st["slots"][r["slot"]] = {"agent": r["agent (model)"], "holds": r["holds"], "unit": r["unit (pts · bucket)"], "ctx": r["ctx / pts used"], "since": r["since"]}
+    for line in now.split("\n"):
+        if line.startswith("**Next:** "): st["next"] = line[10:]
+        if line.startswith("**Owner decisions open:** "): st["owner_open"] = line[26:]
+    st["takeover"] = sec.get("How to take over", "").strip()
+    for r in md_table(sec.get("Log", "")):
+        st["log"].append({"when": r["when"], "unit": r["unit"], "pts": r["pts"], "by": r["by"], "outcome": r["outcome"],
+                          "cost": r["tokens / ctx / min"], "commits": r["commits"], "note": r["note"]})
+    st["noise"] = md_bullets(sec.get("Known noise / deferred", ""))
+    for i, b in enumerate(md_bullets(sec.get("Frictions", "")), 1):
+        st["frictions"].append({"id": f"F{i}", "what": b, "evidence": None, "fix": None, "status": "open"})
+    save(st, f"imported {len(st['units'])} units, {len(st['decisions'])} decisions, {len(st['log'])} log rows, "
+             f"{len(st['noise'])} noise, {len(st['frictions'])} frictions → {base}-status.{{json,md}} (old doc overwritten; git has it)")
+
+
+def cmd_unit(a, st):
+    if a.action == "add":
+        if a.uid in st["units"]:
+            die(f"unit {a.uid} exists")
+        st["units"][a.uid] = {"id": a.uid, "title": a.title, "pts": a.pts, "bucket": a.bucket, "impl": a.impl,
+                              "reviewer": a.reviewer, "resource": a.resource, "depends": a.depends.split(",") if a.depends else [],
+                              "acceptance": a.acceptance, "state": "queued", "detail": "", "rounds": [], "findings": []}
+        return save(st, f"{a.uid} added · {a.pts} pts · {a.bucket} · {a.impl}")
+    u = unit_of(st, a.uid)
+    if a.action == "state":
+        u["state"], u["detail"] = a.arg1, " ".join(a.rest)
+        return save(st, f"{a.uid} → {MARK[a.arg1]}")
+    if a.action == "round":
+        n = int(a.arg1)
+        r = next((r for r in u["rounds"] if r["n"] == n), None) or u["rounds"].append({"n": n}) or u["rounds"][-1]
+        for k in ("done", "verdict", "fixed", "open"):
+            if getattr(a, k) is not None:
+                r[k] = getattr(a, k)
+        return save(st, f"{a.uid} round {n} recorded")
+    if a.action == "finding":
+        if a.arg1 == "add":
+            fid, text = a.rest[0], " ".join(a.rest[1:])
+            u["findings"].append({"id": fid, "text": text, "ref": a.ref, "fixed": False})
+            return save(st, f"{a.uid} {fid} open")
+        if a.arg1 == "fix":
+            f = next((f for f in u["findings"] if f["id"] == a.rest[0]), None) or die(f"no finding {a.rest[0]}")
+            f["fixed"] = True
+            return save(st, f"{a.uid} {f['id']} fixed")
+        die("finding add|fix")
+    if a.action == "accept":
+        u["state"], u["detail"], u["commit"] = "accepted", "", a.commit or "—"
+        st["done"].append({"id": u["id"], "pts": u["pts"], "impl": u["impl"], "what": " ".join([a.arg1, *a.rest]),
+                           "evidence": a.evidence, "commit": a.commit or "—"})
+        st["archive"]["units"].append(u)
+        for n, s in list(st["slots"].items()):
+            if (s.get("unit") or "").split(" ")[0] == u["id"]:
+                s["unit"] = None
+        return save(st, f"{a.uid} 🟢 accepted `{u['commit']}` · collapsed to Done")
+    if a.action == "drop":
+        u["state"], u["detail"] = "dropped", " ".join([a.arg1, *a.rest])
+        st["archive"]["units"].append(u)
+        return save(st, f"{a.uid} ⚫ dropped")
+    die(f"unknown unit action {a.action}")
+
+
+def cmd_slot(a, st):
+    if a.action == "clear":
+        st["slots"].pop(a.name, None)
+        return save(st, f"slot {a.name} cleared")
+    s = st["slots"].setdefault(a.name, {"since": now_hm()})
+    for k in ("agent", "holds", "unit", "ctx", "since"):
+        if getattr(a, k) is not None:
+            s[k] = getattr(a, k)
+    if not s.get("agent"):
+        die("slot set needs --agent")
+    return save(st, f"slot {a.name} = {s['agent']} on {s.get('unit') or '—'} ({s.get('ctx') or '?'})")
+
+
+def cmd_decision(a, st):
+    if a.action == "add":
+        if any(d["id"] == a.id for d in st["decisions"] + st["archive"]["decisions"]):
+            die(f"decision {a.id} exists")
+        st["decisions"].append({"id": a.id, "date": dt.date.today().strftime("%m-%d"), "who": a.who, "rule": " ".join(a.rest), "status": "in force"})
+        return save(st, f"{a.id} in force")
+    d = next((d for d in st["decisions"] if d["id"] == a.id), None) or die(f"no in-force decision {a.id}")
+    d["status"] = f"superseded by {a.rest[0]}" if a.action == "supersede" else "done" + (f" — {' '.join(a.rest)}" if a.rest else "")
+    return save(st, f"{a.id} {d['status']} · archived")
+
+
+def cmd_log(a, st):
+    u = st["units"].get(a.unit.split(" ")[0])
+    st["log"].insert(0, {"when": a.at or now_hm(), "unit": a.unit, "pts": a.pts or (u["pts"] if u else "—"), "by": a.by, "outcome": a.outcome,
+                         "cost": a.cost, "commits": a.commits, "note": a.note})
+    return save(st, f"log {a.unit} {a.outcome}")
+
+
+def cmd_friction(a, st):
+    if a.action == "add":
+        st["frictions"].append({"id": a.id, "what": " ".join(a.rest), "evidence": a.evidence, "fix": a.fix, "status": "open"})
+        return save(st, f"{a.id} open")
+    f = next((f for f in st["frictions"] if f["id"] == a.id), None) or die(f"no open friction {a.id}")
+    f["status"], f["fix"] = "resolved", " ".join(a.rest)
+    return save(st, f"{a.id} resolved · archived")
+
+
+def cmd_show(a, st):
+    md = render(st)
+    if a.what == "doc":
+        return print(md)
+    if a.what == "unit":
+        u = unit_of(st, a.id)
+        sec = md.split(f"### {u['id']} · ")[1].split("\n### ")[0].split("\n## ")[0]
+        return print(f"### {u['id']} · " + sec.rstrip())
+    heads = {"triage": "## Triage", "now": "## Now", "decisions": "## Decisions", "log": "## Log", "frictions": "## Frictions", "done": "## Done"}
+    if a.what == "brief":
+        for h in ("## Now", "## Triage"):
+            print(section(md, h))
+        return
+    print(section(md, heads.get(a.what) or die(f"unknown view {a.what}")))
+
+
+def section(md, head):
+    body = md.split(head, 1)[1].split("\n## ")[0]
+    return head + body.rstrip()
+
+
+def main():
+    p = argparse.ArgumentParser(add_help=False)
+    p.add_argument("-f", default=os.environ.get("BEES_STATUS"))
+    sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("init"); s.add_argument("plan"); s.add_argument("--scope", required=True); s.add_argument("--focus", required=True)
+    s.add_argument("--by", required=True); s.add_argument("--method"); s.add_argument("--setup")
+    s = sub.add_parser("unit"); s.add_argument("uid"); s.add_argument("action"); s.add_argument("arg1", nargs="?"); s.add_argument("rest", nargs="*")
+    for k in ("--pts", "--bucket", "--impl", "--reviewer", "--resource", "--depends", "--acceptance", "--title",
+              "--done", "--verdict", "--fixed", "--open", "--ref", "--commit", "--evidence"):
+        s.add_argument(k)
+    s = sub.add_parser("slot"); s.add_argument("action", choices=["set", "clear"]); s.add_argument("name")
+    for k in ("--agent", "--holds", "--unit", "--ctx", "--since"):
+        s.add_argument(k)
+    s = sub.add_parser("decision"); s.add_argument("action", choices=["add", "supersede", "done"]); s.add_argument("id"); s.add_argument("rest", nargs="*"); s.add_argument("--who", default="owner")
+    s = sub.add_parser("log"); s.add_argument("sub", choices=["add"]); s.add_argument("unit")
+    s.add_argument("--by", required=True); s.add_argument("--outcome", required=True); s.add_argument("--cost"); s.add_argument("--commits"); s.add_argument("--at"); s.add_argument("--note", default=""); s.add_argument("--pts")
+    for name in ("next", "owner-open", "takeover", "updated"):
+        sub.add_parser(name).add_argument("text", nargs="+")
+    s = sub.add_parser("noise"); s.add_argument("sub", choices=["add", "drop"]); s.add_argument("text", nargs="+")
+    s = sub.add_parser("friction"); s.add_argument("action", choices=["add", "resolve"]); s.add_argument("id"); s.add_argument("rest", nargs="*"); s.add_argument("--evidence"); s.add_argument("--fix")
+    s = sub.add_parser("show"); s.add_argument("what", nargs="?", default="brief"); s.add_argument("id", nargs="?")
+    sub.add_parser("roll")
+    sub.add_parser("import").add_argument("md")
+    sub.add_parser("help")
+    a = p.parse_args()
+    if a.cmd == "help":
+        return print(__doc__)
+    if a.cmd == "init":
+        return cmd_init(a)
+    if a.cmd == "import":
+        return cmd_import(a)
+    if not a.f:
+        found = glob.glob("docs/plans/*-status.json")
+        a.f = found[0] if len(found) == 1 else die("set BEES_STATUS or pass -f status.json")
+    st = load(a.f)
+    if a.cmd == "unit":
+        # `unit add ID` puts the id second; normalise so add and the rest share one shape.
+        if a.uid == "add":
+            a.uid, a.action = a.action, "add"
+        if a.action == "add" and not (a.pts and a.bucket and a.impl):
+            die("unit add needs --pts --bucket --impl")
+        return cmd_unit(a, st)
+    if a.cmd == "slot":
+        return cmd_slot(a, st)
+    if a.cmd == "decision":
+        return cmd_decision(a, st)
+    if a.cmd == "log":
+        return cmd_log(a, st)
+    if a.cmd == "friction":
+        return cmd_friction(a, st)
+    if a.cmd == "noise":
+        text = " ".join(a.text)
+        if a.sub == "drop":
+            hit = [n for n in st["noise"] if n.startswith(text)]
+            len(hit) == 1 or die(f"{len(hit)} noise items start with '{text}'")
+            st["noise"].remove(hit[0])
+            return save(st, "noise dropped")
+        st["noise"].append(text)
+        return save(st, "noise added")
+    if a.cmd in ("next", "owner-open", "takeover", "updated"):
+        st[a.cmd.replace("-", "_")] = " ".join(a.text)
+        return save(st, f"{a.cmd} set")
+    if a.cmd == "show":
+        return cmd_show(a, st)
+    if a.cmd == "roll":
+        return save(st, "rolled")
+
+
+if __name__ == "__main__":
+    main()

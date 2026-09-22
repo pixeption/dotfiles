@@ -24,7 +24,10 @@
 # 5. Records tokens/cost (<out-file>.usage) via `extract-opencode-usage` (this dir) — the shared
 #    extractor also used by opencode-review. It scopes to THIS session's step-finish events
 #    (a subagent's would otherwise contaminate an unscoped read) and reports `context_tokens`,
-#    the figure the bees budget rule reads (continue < 120k, none ≥ 200k).
+#    the figure the bees budget rule reads (continue < 120k, none ≥ 200k). If the server
+#    auto-compacted the session, `.usage` also carries `compacted` and the final stderr line
+#    flags it — `context_tokens` is the real post-compaction size, but history before it is now
+#    a summary, not the original detail (see extract-opencode-usage for the event shape).
 # 6. Refuses to run when the live server has no `permission` block: the server reads
 #    opencode.jsonc at STARTUP only, so a server older than the fence has none and every external
 #    path becomes an "ask" nobody answers (one round waited a whole night on that, 2026-09-20).
@@ -180,4 +183,5 @@ sid="$(session_id)"
 "$(dirname "$0")/extract-opencode-usage" "$logfile" "$sid" > "$usagefile" || true
 
 ctx="$(jq -r '.context_tokens // empty' "$usagefile" 2>/dev/null)"
-echo "opencode-implement: $model/$effort done -> $outfile (final msg); diff: git -C $workdir diff; session ${sid:-unknown} pinned to ${workdir}, context ${ctx:-?} tokens (bees: continue < 120k, none ≥ 200k); usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2
+compacted="$(jq -r 'if .compacted then "; COMPACTED (\(if .compacted.auto then "auto" else "manual" end), overflow=\(.compacted.overflow)) — context above is post-compaction, history before it is now a summary" else "" end' "$usagefile" 2>/dev/null)"
+echo "opencode-implement: $model/$effort done -> $outfile (final msg); diff: git -C $workdir diff; session ${sid:-unknown} pinned to ${workdir}, context ${ctx:-?} tokens (bees: continue < 120k, none ≥ 200k)${compacted}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2

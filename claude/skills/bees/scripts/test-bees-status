@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Drives one plan through bees-status and asserts the rendered doc, the archive roll and the
+# narrow views. Run: ./test-bees-status
+set -euo pipefail
+S="$(cd "$(dirname "$0")" && pwd)/bees-status"
+T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
+mkdir -p "$T/docs/plans"; echo "# demo" > "$T/docs/plans/demo.md"
+cd "$T"
+export BEES_STATUS="$T/docs/plans/demo-status.json"
+has() { grep -qF -- "$2" "$1" || { echo "FAIL: '$2' not in $1"; sed -n 1,80p "$1"; exit 1; }; }
+lacks() { ! grep -qF -- "$2" "$1" || { echo "FAIL: '$2' unexpectedly in $1"; exit 1; }; }
+md=docs/plans/demo-status.md; ar=docs/plans/demo-status-log.md
+
+"$S" init docs/plans/demo.md --scope "demo" --focus "f" --by "fable low" --setup "buckets default"
+"$S" unit add G1 --pts 3 --bucket low --impl "codex luna max" --reviewer bee-reviewer --resource "— (worktree)" --title "seed wiring" --acceptance "tests green"
+"$S" unit add B4 --pts 8 --bucket high --impl bee-implementor --depends G1 --resource nono4u/Game
+"$S" decision add D1 "continue < 120k, none ≥ 200k"
+"$S" decision add D2 "old rule"
+"$S" decision supersede D2 D1
+"$S" slot set 2 --agent "bee-implementor (Opus 5 med)" --holds nono4u/Game --unit "B4 (8 · high)" --ctx "110k / 8 of 26"
+"$S" unit G1 state fix "round 3, MAJ-02 open"
+"$S" unit G1 round 1 --done 06:55Z --verdict 07:05Z --fixed "CRIT-01" --open "APP-02"
+"$S" unit G1 finding add APP-02 "read side uses old shape" --ref "Runtime/UISeed.cs:214"
+"$S" unit G1 finding fix APP-02
+"$S" next "B4 → G1 validate → owner report"
+"$S" takeover "game-core clean; suite: unity test … 412 green"
+"$S" friction add F1 "codex committed on licensing hang" --evidence 0f4c12d --fix "no report no commit"
+"$S" friction resolve F1 "brief rule added"
+"$S" noise add "flaky TestX"
+for i in $(seq 1 25); do "$S" log add G1 --by "codex luna" --outcome "round $i" --cost "0.1M / 50k / 3" --commits "abc$i" --note "note $i" >/dev/null; done
+
+has $md "**Setup:** buckets default"
+has $md "| D1 |"; lacks $md "| D2 |"; has $ar "superseded by D1"
+has $md "🟠 fix round — round 3, MAJ-02 open"
+has $md "| B4 | 8 | high | bee-implementor | — | nono4u/Game | G1 | ⚪ queued |"
+has $md "| 2 | bee-implementor (Opus 5 med) | nono4u/Game | B4 (8 · high) | 110k / 8 of 26 |"
+has $md "### G1 · seed wiring · 3 pts · low · codex luna max"
+has $md "- [x] APP-02 — read side uses old shape — [Runtime/UISeed.cs:214](Runtime/UISeed.cs#L214)"
+has $md "| 1 | 06:55Z | 07:05Z | CRIT-01 | APP-02 |"
+has $md "**Next:** B4 → G1 validate → owner report"
+lacks $md "F1"; has $ar "F1 · codex committed"; has $md "- flaky TestX"
+has $md "- B4 · 8 pts · high · bee-implementor · resource nono4u/Game"
+[ "$(grep -c '| codex luna | round' $md)" = 20 ] || { echo "FAIL: log window"; exit 1; }
+has $md "note 25"; lacks $md "note 5 |"; has $ar "note 5 |"
+
+"$S" unit G1 accept "seed wiring" --commit 3b73b3a --evidence "412 green"
+has $md "- G1 · 3 pts · codex luna max · seed wiring · 412 green · \`3b73b3a\`"
+has $md "🟢 accepted — \`3b73b3a\`"; lacks $md "### G1"
+"$S" unit B4 drop "superseded by G2"; has $md "⚫ dropped — superseded by G2"; lacks $md "### B4"
+
+out="$("$S" show now)"; grep -q '^## Now' <<<"$out"; ! grep -q '## Triage' <<<"$out"
+[ "$(wc -l <<<"$out")" -lt 12 ] || { echo "FAIL: show now too long"; exit 1; }
+"$S" show brief | grep -q '## Triage'
+"$S" show decisions | grep -q '| D1 |'
+"$S" show doc | grep -q '^# demo — status and handover'
+! "$S" unit ZZ state running 2>/dev/null || { echo "FAIL: unknown unit accepted"; exit 1; }
+! "$S" unit G9 add --pts 3 2>/dev/null || { echo "FAIL: incomplete add accepted"; exit 1; }
+echo "PASS ($(wc -c < $md) bytes)"

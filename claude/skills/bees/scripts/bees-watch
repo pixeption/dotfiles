@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# One line per codex round, no tokens spent: is the wrapper log still growing, is the session
+# BUSY, is a permission ask waiting, what is the context size. Replaces tailing the .log.
+#
+#   bees-watch <out-file>...            # the out-file passed to opencode-implement / opencode-review
+#   bees-watch --dir <dir>              # every *.log under <dir> whose out-file exists
+#   bees-watch ... --stale-min 20       # mark STALE past this age (default 20)
+#
+# Exit 0 when every round is live or finished, 1 when any is STALE or has an ask waiting.
+set -uo pipefail
+url="http://127.0.0.1:4096"; stale=20; files=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dir) for l in "$2"/*.log; do f="${l%.log}"; [ -e "$f" ] || [ -e "$l" ] && files+=("$f"); done; shift 2 ;;
+    --stale-min) stale="$2"; shift 2 ;;
+    --url) url="$2"; shift 2 ;;
+    -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) files+=("${1%.log}"); shift ;;
+  esac
+done
+[ "${#files[@]}" -gt 0 ] || { echo "bees-watch: nothing to watch" >&2; exit 2; }
+
+asks="$(curl -sf "$url/permission" 2>/dev/null || echo '[]')"
+busy="$(curl -sf "$url/session/status" 2>/dev/null | jq -r 'to_entries[] | select(.value.type=="busy") | .key' 2>/dev/null || true)"
+bad=0; now=$(date +%s)
+for f in "${files[@]}"; do
+  log="$f.log"; name="$(basename "$f")"
+  [ -f "$log" ] || { echo "$name: no log"; bad=1; continue; }
+  age=$(( (now - $(stat -f %m "$log")) / 60 ))
+  sid="$(cat "$f.session" 2>/dev/null || jq -r 'select(.sessionID) | .sessionID' "$log" 2>/dev/null | head -1)"
+  ctx="$(jq -r '.context_tokens // empty' "$f.usage" 2>/dev/null)"
+  state="running"
+  if [ -s "$f" ] && [ -f "$f.usage" ]; then state="finished"; fi
+  ask="$(jq -r --arg s "$sid" '[.[] | select(.sessionID==$s)] | length' <<<"$asks" 2>/dev/null || echo 0)"
+  b="idle"; case " $busy " in *" $sid "*) b="BUSY";; esac
+  flag=""
+  if [ "$ask" != "0" ]; then flag=" · ASK WAITING"; bad=1
+  elif [ "$state" = running ] && [ "$age" -ge "$stale" ] && [ "$b" != BUSY ]; then flag=" · STALE"; bad=1
+  elif [ "$state" = running ] && [ "$age" -ge "$stale" ]; then flag=" · quiet but BUSY (long tool call)"; fi
+  echo "$name: $state · log grew ${age}m ago · $b · ctx ${ctx:-?} · session ${sid:-?}$flag"
+done
+exit $bad

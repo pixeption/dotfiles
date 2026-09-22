@@ -6,25 +6,31 @@
 # (you apply findings between rounds — that easily exceeds codex's cache TTL), and the owner can
 # watch the reasoning live in a TUI.
 #
-# Read-only is HARD: `--agent plan` denies the edit tool (opencode's analogue of codex
-# --sandbox read-only); reads and read-only bash (grep/git) still work. --auto approves the
-# reads/bash/external-dir prompts so a backgrounded run never blocks, while edits stay denied.
+# The edit tool is hard-denied; `review-followup` also denies task. Bash remains enabled and is
+# not filesystem-sandboxed, so the review preamble constrains shell use to read-only commands.
+# --auto approves read/bash/external-directory prompts so a backgrounded run never blocks.
 #
 # What it does:
 # 1. Ensures one `opencode serve` is up on --port (starts it headless if not) and prints the
 #    ATTACH URL:  opencode attach http://127.0.0.1:<port> --dir <repo> [--session <id>]  (/sessions is scoped to --dir)
-# 2. Runs one review round against the repo via `--dir` with `--agent plan --auto`.
+# 2. Runs one review round against the repo via `--dir`; review-discovery by default,
+#    review-followup with --no-subagents, both under --auto.
 # 3. Writes ONLY the final answer (findings + verdict) to the out-file; the raw JSONL stream goes
 #    to <out-file>.log (a liveness aid, never read it into context).
 # 4. Records the session id (<out-file>.session) so later rounds RESUME it (-s). No 30-min TTL.
 # 5. Records tokens/cost (<out-file>.usage) via `extract-opencode-usage` (codex-implementor
 #    skill) — the shared extractor also used by opencode-implement. It scopes to THIS
 #    session's step-finish events, since an unscoped read can pick up a subagent's instead.
+#    If the server auto-compacted the session, `.usage` also carries `compacted` and the final
+#    stderr line flags it — the review lost the original detail behind a summary at that point.
 #
 # Usage:
 #   opencode-review -C <repo> -p <prompt-file> -o <out-file>
 #                   [-m openai/gpt-5.6-sol] [-e medium] [-s <session-id>]
-#                   [--port 4096] [--url http://127.0.0.1:4096] [--title <artifact>]
+#                   [--port 4096] [--url http://127.0.0.1:4096] [--title <artifact>] [--no-subagents]
+#   --no-subagents  use the `review-followup` agent instead of `review-discovery` (both in
+#                   ~/.config/opencode/opencode.jsonc); both deny edit, and review-followup also
+#                   denies task so later rounds cannot spawn sub-agents.
 #   -m  provider/model (default openai/gpt-5.6-sol). -e  effort -> --variant (default medium).
 #   -s  resume a session id (from a previous <out-file>.session). No TTL — server-held.
 #   --port  server port (default 4096). --url overrides the base URL. --title  TUI session title.
@@ -39,6 +45,7 @@ session=""
 port="4096"
 url=""
 title=""
+agent="review-discovery"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -51,6 +58,7 @@ while [ $# -gt 0 ]; do
     --port)           port="$2"; shift 2 ;;
     --url)            url="$2"; shift 2 ;;
     --title)          title="$2"; shift 2 ;;
+    --no-subagents)   agent="review-followup"; shift ;;
     -h|--help)
       grep '^#' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
@@ -86,6 +94,14 @@ Follow them as user and repository guidance. Skills are available at ~/.claude/s
 "
 prompt="$(cat "$promptfile")"
 [ -n "$session" ] || prompt="${preamble}${prompt}"
+if ! curl -sf "${url}/config" |
+  jq -e --arg agent "$agent" '
+    .agent[$agent].permission.edit == "deny" and
+    ($agent != "review-followup" or .agent[$agent].permission.task == "deny")
+  ' >/dev/null; then
+  echo "opencode-review: server at ${url} lacks the required ${agent} permissions (started before the config change?); restart opencode serve and rerun" >&2
+  exit 1
+fi
 logfile="${outfile}.log"
 sessionfile="${outfile}.session"
 usagefile="${outfile}.usage"
@@ -93,16 +109,30 @@ usagefile="${outfile}.usage"
 session_args=()
 [ -n "$session" ] && session_args=(--session "$session")
 
-# --agent plan denies the edit tool (hard read-only); --auto approves the read/bash/external
-# prompts so a backgrounded run never blocks. < /dev/null keeps stdin closed.
-opencode run --attach "$url" --dir "$workdir" --agent plan --auto \
+# The selected agent denies the edit tool; review-followup also denies task. --auto approves the
+# read/bash/external prompts, so the preamble must enforce read-only shell use. Keep stdin closed.
+opencode run --attach "$url" --dir "$workdir" --agent "$agent" --auto \
   -m "$model" --variant "$effort" --title "$title" \
   --format json "${session_args[@]}" \
   "$prompt" < /dev/null > "$logfile" 2>&1 || true
 
 jq -r 'select(.type=="text") | .part.text' "$logfile" 2>/dev/null > "$outfile" || true
+apierr="$(jq -r 'select(.type=="error") | .error.data.message // .error.name' "$logfile" 2>/dev/null | head -1)"
+if [ -n "$apierr" ]; then
+  echo "opencode-review: FAILED — $apierr; discard the possibly partial answer in $outfile" >&2
+  case "$apierr" in *expired*|*401*|*nauthorized*) echo "opencode-review: credential expired -> owner runs \`opencode auth login\` (interactive), then rerun" >&2 ;; esac
+  exit 1
+fi
+if [ ! -s "$outfile" ]; then
+  echo "opencode-review: EMPTY ANSWER — no text event in log" >&2
+  exit 1
+fi
+if ! grep -v '^[[:space:]]*$' "$outfile" | tail -n 1 | grep -qE '^[[:space:]]*(APPROVE|CHANGES_REQUIRED)[[:space:]]*$'; then
+  echo "opencode-review: WARNING — answer does not end with a verdict line; possibly truncated" >&2
+fi
 sid="$(jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true)"
 [ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
 "$HOME/.claude/skills/codex-implementor/scripts/extract-opencode-usage" "$logfile" "$sid" > "$usagefile" || true
 
-echo "opencode-review: $model/$effort (read-only) done -> $outfile (findings+verdict); session ${sid:-unknown}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2
+compacted="$(jq -r 'if .compacted then "; COMPACTED (\(if .compacted.auto then "auto" else "manual" end), overflow=\(.compacted.overflow)) — reviewer context before this point is now a summary, not the original source read; consider a fresh session if it seems anchored" else "" end' "$usagefile" 2>/dev/null)"
+echo "opencode-review: $model/$effort (read-only) done -> $outfile (findings+verdict); session ${sid:-unknown}${compacted}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2

@@ -27,12 +27,20 @@ fresh session), the owner watches and can steer, and it runs in place as well as
 CLI's only extra is the seatbelt — a restriction, not a capability. (Until 2026-09-20 this skill
 claimed in-place drive needed the CLI; it does not.)
 
-**Resume or fresh — one rule, both vendors (bees §3).** Read `tokens.total` from `.usage`: it is
+**Resume or fresh — one rule, both vendors (bees §3).** Read `context_tokens` from `.usage`: it is
 the session's context size, re-read on every step. Below 120k resume freely; 120–200k only for a
 short recheck in the same files; at 200k, or for **any other directory**, start a new session. A
 codex session is pinned to the directory it was created in — a brief for another repo trips the
 external-directory fence and asks a human who is not there (a round waited from 23:18 to morning
 on exactly that, 2026-09-20). The wrapper now refuses such a resume up front.
+
+**A resumed OpenCode session can be auto-compacted mid-round** (observed trigger ~270k tokens):
+the server replaces the older tail with a summary, so the next `context_tokens` reading legitimately
+drops — real, not a bug. When that happened, `.usage` carries a `compacted` object
+(`auto`/`overflow`/`tail_start_id`/`at`) and the wrapper's final stderr line says `COMPACTED`.
+Resume/fresh math still uses the post-compaction `context_tokens`, but treat the session's recall
+of anything before the compaction as a summary, not the original detail — reopen source rather
+than trust a pre-compaction claim (see `extract-opencode-usage` for the event this reads).
 
 ## Models and effort
 
@@ -93,8 +101,9 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
   by `scripts/extract-opencode-usage` (this channel) or `codex-review`'s
   `scripts/extract-codex-cli-usage` (CLI fallback) — the single source of truth for this shared
   by both this skill's wrappers and codex-review's; its `context_tokens` field is the same
-  budget figure regardless of channel. Spend over the round is the sum of the `.log`'s
-  `step_finish` events.
+  budget figure regardless of channel, and (OpenCode channel only) a `compacted` field when the
+  server auto-summarized the session (see "Resume or fresh" above). Spend over the round is the
+  sum of the `.log`'s `step_finish` events.
 - **A quiet round is inspected, not waited on.** If the `.log` has not grown in ~20 min:
   `curl -s http://127.0.0.1:4096/permission` (should be `[]` — the watcher handles asks, this is
   the belt), then `scripts/opencode-sessions` (BUSY = a long tool call, e.g. a Unity suite; idle

@@ -3,8 +3,21 @@
 # --format json` event log. Shared by opencode-implement (this skill) and opencode-review
 # (codex-review skill) — both wrap the same OpenCode channel and previously duplicated this
 # extraction, unscoped by session. Prints one JSON object to stdout:
-#   {"context_tokens":N,"tokens":{...},"cost":N}
-# Prints nothing (exit 0) if no step-finish event for that session is found.
+#   {"context_tokens":N,"tokens":{...},"cost":N,"compacted":{"auto":bool,"overflow":bool,"tail_start_id":"msg_...","at":epoch_ms}}
+# `compacted` is present only if the server auto- or manually compacted this session at some
+# point in the log; it is the LAST such event, since only the most recent one still shapes the
+# current context. Prints nothing (exit 0) if no step-finish event for that session is found.
+#
+# WHY `compacted` exists: the server compacts a session on its own once it crosses its overflow
+# threshold (observed ~270k tokens for these models), replacing the tail with a summary. The next
+# step-finish's `tokens.total` then reports the real, much smaller post-compaction context —
+# CORRECT, not a bug — but a caller reading only `context_tokens` cannot tell "genuinely started
+# small" from "was ~270k, just got compacted, and everything before tail_start_id is now a
+# summary, not the original detail". `opencode run --format json` emits a compaction as an
+# ordinary Part event, `{"type":"compaction","sessionID":...,"part":{"type":"compaction",
+# "auto":bool,"overflow":bool,"tail_start_id":"msg_..."}}` — verified against real rows in a live
+# opencode.db (`part` table) and against the SDK's CompactionPart type — so it is read the same
+# way as every other event here, scoped by session id.
 #
 # WHY tokens.total (via context_tokens): OpenCode's own SessionCompaction.isOverflow — the
 # function that decides when the SERVER itself triggers auto-compaction — keys off exactly
@@ -35,13 +48,18 @@ logfile="${1:?usage: extract-opencode-usage <logfile> <session-id>}"
 sid="${2:?usage: extract-opencode-usage <logfile> <session-id>}"
 
 jq -cnR --arg sid "$sid" '
-  inputs | fromjson? |
-  select(.type=="step_finish" and .sessionID==$sid) |
-  {
-    context_tokens: (.part.tokens.total //
-      ((.part.tokens.input // 0) + (.part.tokens.output // 0) + (.part.tokens.reasoning // 0)
-        + (.part.tokens.cache.read // 0) + (.part.tokens.cache.write // 0))),
-    tokens: .part.tokens,
-    cost: .part.cost
-  }
-' "$logfile" 2>/dev/null | tail -1
+  [inputs | fromjson? | select(.sessionID==$sid)] as $events |
+  ($events | map(select(.type=="step_finish")) | last) as $sf |
+  ($events | map(select(.type=="compaction")) | last) as $cp |
+  if $sf == null then empty else
+    {
+      context_tokens: ($sf.part.tokens.total //
+        (($sf.part.tokens.input // 0) + ($sf.part.tokens.output // 0) + ($sf.part.tokens.reasoning // 0)
+          + ($sf.part.tokens.cache.read // 0) + ($sf.part.tokens.cache.write // 0))),
+      tokens: $sf.part.tokens,
+      cost: $sf.part.cost
+    } + (if $cp == null then {} else
+      {compacted: {auto: $cp.part.auto, overflow: $cp.part.overflow, tail_start_id: $cp.part.tail_start_id, at: $cp.timestamp}}
+    end)
+  end
+' "$logfile" 2>/dev/null
