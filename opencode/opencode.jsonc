@@ -1,0 +1,44 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Follow-up rounds of codex-review (`opencode-review --no-subagents`): denies the edit and
+  // task tools so a resumed round performs the delta review directly. Bash remains available;
+  // the review prompt, not an OS sandbox, constrains it to read-only commands.
+  "agent": {
+    "review-discovery": {
+      "mode": "primary",
+      "description": "Read-only reviewer for discovery rounds; sub-agents allowed.",
+      "permission": { "edit": "deny" }
+    },
+    "review-followup": {
+      "mode": "primary",
+      "description": "Read-only reviewer for follow-up rounds; no edits, no sub-agents.",
+      "permission": { "edit": "deny", "task": "deny" }
+    }
+  },
+  // Fence for headless `opencode run --auto` (the codex-implementor / codex-review wrappers).
+  // --auto approves every "ask"; only "deny" rules hold. Last matching rule wins, so "*" goes first.
+  "permission": {
+    "external_directory": {
+      "*": "deny",
+      "/Users/vbnn2/code/**": "allow",
+      "~/.claude/**": "allow",
+      "~/.unity/**": "allow",
+      "~/Library/Logs/Unity/**": "allow",
+      "/tmp/**": "allow",
+      "/private/tmp/**": "allow",
+      "/var/folders/**": "allow",
+      "/private/var/folders/**": "allow"
+    },
+    "bash": {
+      "*": "allow",
+      "git reset --hard*": "deny",
+      "git checkout -- *": "deny",
+      "git stash*": "deny",
+      "git clean*": "deny",
+      "git push --force*": "deny",
+      "git push -f*": "deny",
+      "rm -rf /*": "deny",
+      "rm -rf ~*": "deny"
+    }
+  }
+}
