@@ -326,6 +326,9 @@ def handback(transcript):
 
 def cmd_start(plan, units, role):
     _, out = round_out(role, units, plan.work)
+    stem = f"{role}-{'+'.join(units)}"
+    existing = open_bee_round(plan.work, stem)
+    existing and die(f"{existing} is already open (started, not yet captured); capture it before starting another round")
     atomic_write(out + ".bee", utc(dt.datetime.now().timestamp()) + "\n")
     print(f"ok {out}")
 

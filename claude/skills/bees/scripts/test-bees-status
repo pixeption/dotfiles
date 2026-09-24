@@ -235,6 +235,10 @@ for name in ("impl-F2-r1.txt", "impl-F2-r1.txt.usage"):
 check("Next: A1" in run("--plan", P2, "show").stdout, "a queued unit is Next")
 r = run("--plan", P2, "start", "-u", "A1", "--role", "impl")
 check(r.returncode == 0 and r.stdout == f"ok {os.path.join(W2, 'impl-A1-r1.txt')}\n", f"start opens a bee round: {r.stdout}{r.stderr}")
+before_dup = listing(W2)
+r = run("--plan", P2, "start", "-u", "A1", "--role", "impl")
+check(r.returncode != 0 and "already open" in r.stderr and listing(W2) == before_dup,
+      f"start twice before capture is rejected, not opened as r2: {r.stdout}{r.stderr}")
 board = run("--plan", P2, "show").stdout
 check("| A1 | 1 | 1 | luna | 🟡 | impl r1 |" in board and "bee impl r1 running since " in board and "Next: —" in board,
       f"a started bee shows running and is never Next: {board}")
