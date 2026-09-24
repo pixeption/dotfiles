@@ -17,7 +17,7 @@ renders the Status column back into the plan; it is idempotent, so it can fire f
                                           capture or note to (.work/.sessions/<session_id>); --all (by hand):
                                           every plan with a .work/
 """
-import argparse, contextlib, datetime as dt, fcntl, functools, glob, json, os, re, subprocess, sys, tempfile, textwrap
+import argparse, contextlib, datetime as dt, fcntl, functools, glob, json, os, re, subprocess, sys, tempfile
 
 
 def die(msg):
@@ -295,7 +295,9 @@ def parse_bees(role, text, units, known):
 
 def handback(transcript):
     """The bee's report from its JSONL transcript (the notification's output_file): its last
-    SubagentHandback message, else its last assistant text, dedented."""
+    SubagentHandback message, else its last assistant text — both from the final user turn (a
+    real continuation resets any earlier hand-back; a tool_result feeding a prior tool call does
+    not)."""
     handed, said = None, None
     with open(transcript, encoding="utf-8") as f:
         for line in f:
@@ -303,7 +305,15 @@ def handback(transcript):
                 entry = json.loads(line)
             except ValueError:
                 continue
-            if not isinstance(entry, dict) or entry.get("type") != "assistant":
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("type") == "user":
+                content = (entry.get("message") or {}).get("content")
+                blocks = content if isinstance(content, list) else []
+                if isinstance(content, str) or any(isinstance(c, dict) and c.get("type") == "text" for c in blocks):
+                    handed = None
+                continue
+            if entry.get("type") != "assistant":
                 continue
             for c in (entry.get("message") or {}).get("content") or []:
                 if isinstance(c, dict) and c.get("type") == "tool_use" and c.get("name") == "SubagentHandback":
@@ -311,7 +321,7 @@ def handback(transcript):
                 elif isinstance(c, dict) and c.get("type") == "text" and c.get("text", "").strip():
                     said = c["text"]
     report = handed or said
-    return textwrap.dedent(report).strip("\n") + "\n" if report else ""
+    return report.strip("\n") + "\n" if report else ""
 
 
 def cmd_start(plan, units, role):

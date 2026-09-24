@@ -199,13 +199,26 @@ for args, stdin, why in [(["capture-bee", "-u", "A1", "--role", "impl", "--ctx",
 TR = os.path.join(T, "agent.jsonl")
 said = lambda *content: json.dumps({"type": "assistant", "message": {"role": "assistant", "content": list(content)}})
 handed = lambda msg: {"type": "tool_use", "name": "SubagentHandback", "input": {"message": msg}}
+tool_result_user = json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "content": "delivered"}]}})
+continuation_user = json.dumps({"type": "user", "message": {"content": [{"type": "text", "text": "please also do X"}]}})
 write(TR, "\n".join(["not json", said({"type": "text", "text": "working"}), said(handed("round 1")),
-                     said(handed("    Outcome: Done\n      detail\n    BEES: results=A1:done:-\n")),
-                     json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "content": "delivered"}]}}),
+                     said(handed("\nOutcome: Done\n  detail\nBEES: results=A1:done:-\n\n")),
+                     tool_result_user,
                      said({"type": "text", "text": "summary for the owner"})]) + "\n")
-check(bs.handback(TR) == "Outcome: Done\n  detail\nBEES: results=A1:done:-\n", f"--from takes the last hand-back, dedented: {bs.handback(TR)!r}")
+check(bs.handback(TR) == "Outcome: Done\n  detail\nBEES: results=A1:done:-\n",
+      f"a tool_result does not reset the hand-back, and the report is stripped, not dedented: {bs.handback(TR)!r}")
 write(TR + "2", said({"type": "text", "text": "Outcome: Done"}) + "\n" + said({"type": "text", "text": "BEES: results=A1:done:-"}) + "\n")
 check(bs.handback(TR + "2") == "BEES: results=A1:done:-\n", "without a hand-back, the last assistant text")
+TR4 = os.path.join(T, "agent4.jsonl")
+write(TR4, "\n".join([said(handed("BEES: results=A1:done:-\n")), continuation_user,
+                      said({"type": "text", "text": "still working"})]) + "\n")
+check(bs.handback(TR4) == "still working\n",
+      f"a real user continuation resets an earlier hand-back to that turn's assistant text: {bs.handback(TR4)!r}")
+TR5 = os.path.join(T, "agent5.jsonl")
+write(TR5, "\n".join([said(handed("BEES: results=A1:done:-\n")), continuation_user,
+                      said({"type": "text", "text": "still working"}), said(handed("BEES: results=A1:done:-\n"))]) + "\n")
+check(bs.handback(TR5) == "BEES: results=A1:done:-\n",
+      f"a hand-back in the final turn wins over that turn's plain text: {bs.handback(TR5)!r}")
 write(TR + "3", said({"type": "text", "text": "  "}) + "\n")
 r = run("--plan", P, "capture-bee", "-u", "A1", "--role", "impl", "--ctx", "1000", "--from", TR + "3")
 check(r.returncode != 0 and "no report in" in r.stderr and listing(W) == [], f"--from without a report writes nothing: {r.stderr}")
