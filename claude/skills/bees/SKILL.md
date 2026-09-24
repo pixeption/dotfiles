@@ -62,13 +62,21 @@ Do not start a unit until the answers are in. They hold for the whole session; a
 is an owner decision with an id. A session started by a handoff (§10) inherits the answers from
 that note (`show --takeover` lists it) and does not re-ask.
 
-**Before the first codex unit**, confirm the OpenCode server carries the fence: the server reads
-`~/.config/opencode/opencode.jsonc` **at startup only**. A server older than the file has no
-fence and every external directory is an "ask" nobody answers.
+**Before the first codex unit**, run the preflight the OpenCode wrappers run before every round.
+The server reads `~/.config/opencode/opencode.jsonc` and its model catalogue **at startup only**:
+a server older than the fence makes every external directory an "ask" nobody answers, one older
+than an allowed directory denies it (`~/pixeption/**` was missing on 2026-09-24, so no codex unit
+could reach the sibling repos), and a stale catalogue fails a round's first step on a model id
+that exists.
 
 ```sh
-curl -s http://127.0.0.1:4096/config | jq .permission   # null → pkill -f "opencode serve"; the wrapper restarts it
+~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-6-sol -C <repo the unit edits> --plan <plan.md>
 ```
+
+Exit 0 = the server is up, carries the fence, lists the model, and every repo in the plan's
+`Repo` column outside `-C` (plus the plan's own repo) is inside the fence. A failure restarts an
+idle server and checks again; a busy one is never restarted. What still fails names the path to
+allow in `opencode.jsonc` — an owner edit; route those units to Claude until then.
 
 ## 1. Size the plan first
 
@@ -186,15 +194,18 @@ exists. Also name the other skill files nothing under the project loads for it
 sibling `CLAUDE.md`s). Take Claude instead of codex only when the unit needs judgment a batch run
 cannot settle (a screenshot read, a live Play-mode check) — **or codex is near its usage limit**.
 Before every codex unit (implementation or review) run `~/.claude/skills/bees/scripts/codex-usage`:
-it prints the 5-hour and weekly windows from the newest snapshot codex wrote and exits 1 when the
-5-hour window is ≥ 80% or the weekly ≥ 90% (thresholds are flags). Exit 1 → the unit goes to the
-Claude column of its bucket, same score, and its review goes to `bee-reviewer` since codex is
-unavailable for that too; a note records the reading. The snapshot is from the last codex
-turn; a 5-hour window whose reset has passed reads as 0%. **A STALE reading is not a reading**: it
-said "ok" once while the real window was at 100% and three reviews came back truncated or empty
-(429). When it is STALE, read `x-codex-primary-used-percent` from the newest wrapper `.log`
-instead, or spend one cheap codex turn to refresh it. Note the reading on the unit
-(`note <unit> "decision: codex 5h window 84% → bee-mechanical"`) when it changed the routing. OpenCode reports `cost: 0` for every round — the plan is metered by the
+it reads the usage windows from the newest snapshot codex wrote, names each by its length, and
+ends in a `ROUTE:` line. The plan has only a **weekly** window (no 5-hour limit since 2026-09-24);
+a 5-hour window is still read if a plan reports one. Exit 1 when the weekly window is ≥ 90% (a
+5-hour one ≥ 80%; thresholds are flags) → the unit goes to the Claude column of its bucket, same
+score, and its review goes to `bee-reviewer` since codex is unavailable for that too; a note
+records the reading. The snapshot is from the last codex turn; a window whose reset has passed
+reads as 0%. **A STALE reading is not a reading**: it said "ok" once while the real window was at
+100% and three reviews came back truncated or empty (429). So a snapshot older than two hours
+prints `ROUTE: unknown` and exits 2, as does no snapshot: spend one cheap codex turn
+(`codex exec --skip-git-repo-check --sandbox read-only "reply ok" < /dev/null` — OpenCode rounds
+write no snapshot) and re-run. Note the reading on the unit
+(`note <unit> "decision: codex weekly window 92% → bee-mechanical"`) when it changed the routing. OpenCode reports `cost: 0` for every round — the plan is metered by the
 usage windows, and the token figures are for the budget rule only.
 
 Everything that can be done blind in a worktree and validated afterward goes to codex. Model and
@@ -272,14 +283,18 @@ Rules of continuation:
   parse the XML, ignore stdout and exit code (unity-cli skill).
 - **Watching a codex round.** Never tail or Read the wrapper's `.log`. Run
   `~/.claude/skills/bees/scripts/bees-watch <out-file>...` (or `--dir docs/plans/<plan>.work`): one line
-  per round — running/finished, minutes since the log last grew, BUSY/idle on the server, context
-  tokens, session id — and a flag, exit 1, when something needs you:
+  per round — running/finished, minutes since the log last grew, BUSY/idle, context tokens,
+  session id — and a flag, exit 1, when something needs you. BUSY is the server's status for the
+  round's directory (`/session/status` is scoped per directory) or a live wrapper mid-step:
   - `ASK WAITING` — a permission ask nobody headless can answer. Answer it through the attach TUI
     if the pattern is inside the fence's allowlist; otherwise kill the run and re-brief. Then fix
     the cause: the server predates the fence (§0), or the session was resumed for a directory it
     is not pinned to (rule 4).
   - `STALE` — no log growth in 20 minutes and not BUSY: the run died. `quiet but BUSY` is a long
     tool call (a Unity suite can legitimately be silent for 20 minutes) and is left alone.
+  - `failed (…)` — the wrapper finished but the out-file is empty or carries its `Blocked:` line
+    (an `error` event, a rejected permission ask, no final message; the wrapper also exited 1).
+    `DEAD` — the wrapper's PID (`.pid`) is gone and it never wrote `.usage`.
   Then check the editor's state, if the unit held a project. A stuck round is reported to the
   owner in one line with what `bees-watch` printed; it is never left for the next session.
 - On any termination notice (`failed`, cut-off, no report), verify what the agent may have left —
@@ -341,7 +356,9 @@ the command that produced it; take timestamps from `date +%H:%M`, never from mem
 rows carried future times). Never send transcripts or source dumps. A codex brief additionally
 names the sibling-repo `CLAUDE.md` files the unit touches (nothing under the worktree points
 there) and is run with `-C` set to the repo the unit edits — a session is pinned to that
-directory for its whole life. A **worktree** codex brief states it cannot run Unity and must
+directory for its whole life. Every repo it names must be inside the OpenCode fence; the wrapper's
+preflight checks the plan's `Repo` column (§0), so list a sibling the unit only reads there too or
+run the preflight by hand. A **worktree** codex brief states it cannot run Unity and must
 report what it could not verify; an **in-place** codex brief instead names the `unity-cli` skill
 (§3) and requires it to verify in the live editor like any other agent.
 
@@ -448,15 +465,24 @@ plan's own `Status` column.
 
 | fact | derived from |
 |---|---|
-| units, points, route, phase, dependencies | the plan's `## Checklist` — `ID`, `Item`, `Repo`, `Pts`, `Route`, `Phase`, `Depends`, `Status`; one row per unit, `Repo` relative to the plan's repo |
+| units, points, route, phase, dependencies | the plan's `## Checklist` — `ID`, `Item`, `Repo`, `Pts`, `Route`, `Phase`, `Depends`, `Status`; one row per unit, `Repo` relative to the plan's repo, comma-separated when the unit lands in several |
 | rounds, outcome, context, session, pinned directory | out-files in `docs/plans/<plan>.work/` (gitignored) and their `.usage`/`.session`/`.cwd` |
-| landed | `Bees-Unit: <plan-slug>/<unit>` trailers in the row's `Repo` (§7) |
+| landed | `Bees-Unit: <plan-slug>/<unit>` trailers on `HEAD` in **every** repo of the row's `Repo` (§7) |
 | decisions, acceptance, gaps, concerns, handoff facts | `docs/plans/<plan>.notes.md`, one line each |
+
+A plan reviewed with another checklist shape (`| ID | Deliverable | Depends on | Status |`) is
+converted, not retyped: `bees-status --plan <plan.md> init [--repo <rel>]` rewrites the table to
+these columns, keeping IDs, links, items, dependencies and any extra column; it fills `?` for
+`Pts`/`Route` (yours to set), `1` for `Phase`, `--repo` (default `.`) for `Repo`, and names the
+units that still need a `### <ID> · ` heading (the ✅ marker lands there).
 
 **Rounds.** Every codex wrapper takes `-u <unit>` (repeatable) and `-o docs/plans/<plan>.work/`,
 which names the file `impl-<unit>[+<unit>…]-r<N>.txt` or `review-…`; anything else fails before a
 file is written. A Claude bee has no wrapper: after its Agent result, save the report — a copy,
-not a transcription — with the harness notification's context figure, never the agent's own:
+not a transcription — with the harness notification's context figure, never the agent's own.
+Capture after the **final** `completed` task-notification: a bee can hand its report back, or send
+an interim notification while its background work is pending, before that one arrives, and the
+earlier figure is low (257,888 vs the final 294,032 on one bee, 2026-09-24):
 
 ```sh
 bees-status --plan <plan.md> capture-bee -u G1 [-u G2] --role impl|review --ctx 118000 <<'REPORT'
@@ -479,21 +505,27 @@ bees-status --plan <plan.md> note B4 "handoff: editor closed; unity test … 412
 **Reading.** `BEES_PLAN=<plan.md>` saves the flag.
 
 ```sh
-bees-status --plan <plan.md> show              # board: status, rounds, context per role, open review ids, diagnostics, Next
+bees-status --plan <plan.md> show              # board: status, rounds, context per role, open review ids, diagnostics, Next (every ready unit)
 bees-status --plan <plan.md> show --log        # notes, rounds and trailer commits in time order
 bees-status --plan <plan.md> show --takeover   # repo HEADs, sessions + pinned dirs, unfinished units, tagged notes, phase + handoff line
 ```
 
 The `Status` column is written by the tool, never by hand: ☐ queued · 🟡 attempted (a round
-exists without a completed result, `paused`, or `done, trailer missing`) · 🔴 blocked /
+exists without a completed result, `paused`, `done, trailer missing`, `done, unmerged on <branch>` —
+the trailered commit is on another ref such as a worktree branch, merge it — or `landed in part`,
+a trailer in only some of the row's repos) · 🔴 blocked /
 needs-decision · 🔵 landed (a trailer; `(review open)` while the newest valid review after it
 names open ids for the unit) · ✅ accepted (an `accept:` note; the heading gets
 `**✅ Done <date>**`). A report without its `BEES:` line shows as `malformed result` with its
 path on the board — you decide whether the work or only the report is repeated.
 
-**Refresh is automatic.** Each wrapper's exit, a bee's `SubagentStop` and every `Stop` (this
-skill's hooks) run `show --write` for every plan that has a `.work/` dir, serialised per plan by
-a lock on `.work/.lock`. Run `show` yourself only to read the board. Commit the plan and its
+**Refresh is automatic.** Each wrapper's exit runs `show --write` for its plan; a bee's
+`SubagentStop` and every `Stop` (this skill's hooks) run it for each plan with a `.work/` dir whose
+plan file, notes or rounds changed since that session began — never for another session's plan
+(a `Stop` once rewrote a finished plan's rows after its repo's history was reset without
+trailers). Writes are serialised per plan by a lock on `.work/.lock`. An `accept:` note is final
+whatever git says later, so note it for every finished unit, and a squash or reset of a unit's
+commits carries their `Bees-Unit:` trailers (§7). Run `show` yourself only to read the board. Commit the plan and its
 notes file at every pause, decision or acceptance; nothing else needs committing.
 
 ## 10. The orchestrator's own context: hand off at 200k
