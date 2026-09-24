@@ -12,8 +12,9 @@ renders the Status column back into the plan; it is idempotent, so it can fire f
                                                             concern: blocked-on: handoff:
   bees-status --plan <plan.md> capture-bee -u <unit>... --role impl|review --ctx <tokens> < report
   bees-status round-out --role impl|review -u <unit>... -o <plan>.work/[<out-file>]   (wrappers)
-  bees-status refresh [--root <dir>]      hooks: refresh the plans this Claude session wrote a round, capture
-                                          or note to (.work/.sessions/<session_id>); every plan from a terminal
+  bees-status refresh [--root <dir>] [--all]   hooks: refresh the plans this Claude session wrote a round,
+                                          capture or note to (.work/.sessions/<session_id>); --all (by hand):
+                                          every plan with a .work/
 """
 import argparse, contextlib, datetime as dt, fcntl, functools, glob, json, os, re, subprocess, sys, tempfile
 
@@ -591,7 +592,7 @@ def hook_session_id(payload):
 
 def cmd_refresh(root, sid):
     """Hook entry: refresh the plans under root/docs/plans whose .work/ carries this session's
-    marker (every plan with a .work/ when run by hand, sid None), so a session never rewrites a plan
+    marker (every plan with a .work/ for `--all`, sid None), so a session never rewrites a plan
     only another session is working on. Never fails the hook."""
     for work in sorted(glob.glob(os.path.join(root, "docs", "plans", "*.work"))):
         path = work[:-len(".work")] + ".md"
@@ -656,6 +657,7 @@ def main(argv):
     s.add_argument("args", nargs="+")
     s = sub.add_parser("refresh")
     s.add_argument("--root", default=os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    s.add_argument("--all", action="store_true")
     s = sub.add_parser("init")
     s.add_argument("--repo", default=".")
     s = sub.add_parser("show")
@@ -667,7 +669,9 @@ def main(argv):
     if a.cmd == "round-out":
         return print(round_out(a.role, a.unit, a.o)[1])
     if a.cmd == "refresh":
-        return cmd_refresh(a.root, None if sys.stdin.isatty() else hook_session_id(sys.stdin.read()))
+        if not a.all and sys.stdin.isatty():
+            die("refresh reads a hook payload on stdin; refresh every plan by hand with --all")
+        return cmd_refresh(a.root, None if a.all else hook_session_id(sys.stdin.read()))
     a.plan or die("--plan <plan.md> (or BEES_PLAN) is required")
     if a.cmd == "init":
         return cmd_init(os.path.abspath(a.plan), a.repo)

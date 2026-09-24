@@ -582,6 +582,16 @@ hook({"hook_event_name": "Stop", "session_id": "../sess-b"})
 check(cell(Q_, "S2") == "☐", "a session id that is not a plain name is ignored")
 hook({"hook_event_name": "Stop", "session_id": "sess-b"})
 check(cell(Q_, "S2") == "🔴 blocked", "the concurrent session's own hook refreshes its plan")
+Z_ = os.path.join(PLANS, "docs/plans/2026-01-15-manual.md")
+write(Z_, plan_md([("S3", 1, "")]))
+write(os.path.join(Z_[:-3] + ".work", "impl-S3-r1.txt"), "BEES: results=S3:blocked:-\n")
+write(os.path.join(Z_[:-3] + ".work", "impl-S3-r1.txt.usage"), "{}")
+by_hand = lambda *extra: subprocess.run([TOOL, "refresh", *extra], input="", capture_output=True, text=True,
+                                        env={**os.environ, "CLAUDE_PROJECT_DIR": PLANS})
+r = by_hand()
+check(r.returncode == 0 and cell(Z_, "S3") == "☐", f"refresh without a hook payload stays scoped to no plans: {r.stderr}")
+r = by_hand("--all")
+check(r.returncode == 0 and cell(Z_, "S3") == "🔴 blocked", f"refresh --all refreshes every plan by hand: {r.stderr}")
 
 
 # ---------- GAP-03: init converts an existing checklist ----------

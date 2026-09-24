@@ -529,7 +529,8 @@ review (its wrapper's `Blocked:` out-file, ending `BEES: results=<unit>:blocked:
 a round, a capture or a note to (`.work/.sessions/<session id>`, from `CLAUDE_CODE_SESSION_ID`,
 which a bee's shell shares) — never for a plan only another session is working on
 (a `Stop` once rewrote a finished plan's rows after its repo's history was reset without
-trailers). Writes are serialised per plan by a lock on `.work/.lock`. An `accept:` note is final
+trailers). By hand, `bees-status refresh --all` rewrites every plan with a `.work/`; a plain
+`refresh` without a hook payload refreshes nothing. Writes are serialised per plan by a lock on `.work/.lock`. An `accept:` note is final
 whatever git says later, so note it for every finished unit, and a squash or reset of a unit's
 commits carries their `Bees-Unit:` trailers (§7). Run `show` yourself only to read the board. Commit the plan and its
 notes file at every pause, decision or acceptance; nothing else needs committing.
