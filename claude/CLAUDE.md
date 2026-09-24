@@ -3,6 +3,13 @@
 These apply across all repos, not just one project — consolidated from project-scoped feedback
 memory that turned out to be general working-style preferences, not project-specific.
 
+## Memory
+
+Don't write to the auto-memory system (user / project / agent memory files). Memory is local to
+one machine and one project, so it doesn't sync and silently diverges. If something seems worth
+remembering, **ask me first** — and prefer fixing the root cause instead: update this file, a
+repo's CLAUDE.md, a skill, or the code/tooling itself so the lesson lives in committed source.
+
 ## Comments
 
 Don't add comments unless the code is genuinely hard to understand or needs real explanation —

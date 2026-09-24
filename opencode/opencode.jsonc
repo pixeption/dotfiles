@@ -26,6 +26,8 @@
         "external_directory": {
             "*": "deny",
             "~/code/**": "allow",
+            "~/.config/claude/**": "allow",
+            "~/pixeption/**": "allow",
             "~/.claude/**": "allow",
             "~/.unity/**": "allow",
             "~/.codex/**": "allow",

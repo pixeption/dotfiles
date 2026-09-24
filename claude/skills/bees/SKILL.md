@@ -136,7 +136,7 @@ Choosing "full" for a small plan is the error, not the safe default.
    its `.work/`, `Bees-Unit:` trailers and one-line notes are the whole record; `bees-status show`
    renders it and the hooks write the plan's `Status` column (§9). You type only notes —
    decisions and acceptances. A new session starts from `show --takeover` with fresh agents.
-9. **The orchestrator hands off at 200k, at a safe point** (§10). Compaction is the fallback,
+9. **The orchestrator hands off at 150k, at a safe point** (§10). Compaction is the fallback,
    never the plan.
 10. **Delegate execution — including reading.** Inspect directly only when cheaper than a spawn:
     one diff, a few definitions, reconciling two contradictory reports. Anything that means more
@@ -547,13 +547,13 @@ whatever git says later, so note it for every finished unit, and a squash or res
 commits carries their `Bees-Unit:` trailers (§7). Run `show` yourself only to read the board. Commit the plan and its
 notes file at every pause, decision or acceptance; nothing else needs committing.
 
-## 10. The orchestrator's own context: hand off at 200k
+## 10. The orchestrator's own context: hand off at 150k
 
 The orchestrator is a session like any agent and pays its context every turn. Its cache is warm
-for 1 hour, so idle gaps are not the risk; **size** is. The limit is **200k**, checked at every
+for 1 hour, so idle gaps are not the risk; **size** is. The limit is **150k**, checked at every
 pause, decision or acceptance (§6 step 10) from the harness's figure, not a guess.
 
-At or past 200k, at the **next safe point**:
+At or past 150k, at the **next safe point**:
 
 1. Start nothing new. Let running units reach a report; a reviewer mid-recheck finishes.
 2. Bring the slot table to empty, or to a state the successor can pick up without this
