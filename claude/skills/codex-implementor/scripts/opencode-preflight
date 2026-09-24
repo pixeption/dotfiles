@@ -1,0 +1,143 @@
+#!/usr/bin/env python3
+"""Check the live OpenCode server before a round is allocated; restart it when that fixes it and
+no session is busy. Shared by opencode-implement and opencode-review, and bees §0's setup check.
+
+The server reads ~/.config/opencode/opencode.jsonc and fetches its model catalogue at STARTUP
+only, so a long-running server can lack the fence, lack a newly allowed directory, or name no
+model the wrapper asks for (a stale catalogue: `ProviderModelNotFoundError`, 2026-09-24).
+
+  opencode-preflight -m <provider/model> -C <dir> [--plan <plan.md>] [--url http://127.0.0.1:4096]
+                     [--port 4096] [--serverlog <file>] [--no-restart]
+
+Checks, against the live server:
+  fence  /config has a permission.external_directory block
+  paths  the plan's repo and every checklist Repo outside -C match an `allow` in that block
+         (the most specific matching pattern wins; -C itself is the session's own directory)
+  model  -m is listed by /config/providers
+A server that is down is started. A failed check restarts it when no `opencode run --attach` /
+`opencode attach` process uses it and no session is busy, then checks again; a busy server is
+never restarted. Exit 0 ok · 1 not fixed (stderr says why) · 2 usage.
+"""
+import argparse, importlib.machinery, importlib.util, json, os, re, subprocess, sys, time, urllib.request
+
+
+def say(msg):
+    print(f"opencode-preflight: {msg}", file=sys.stderr)
+
+
+def fail(msg):
+    say(msg)
+    sys.exit(1)
+
+
+def get(url, path):
+    try:
+        with urllib.request.urlopen(url + path, timeout=5) as r:
+            return json.load(r)
+    except Exception:
+        return None
+
+
+def glob_re(pattern):
+    home = os.path.expanduser("~")
+    pattern = home + pattern[1:] if pattern.startswith("~") else pattern
+    return re.compile(".*".join(re.escape(part) for part in re.split(r"\*+", pattern)) + "$")
+
+
+def allowed(fence, path):
+    """OpenCode's wildcard rule: `*` matches anything; the most specific (longest) matching pattern wins."""
+    probes = {os.path.join(os.path.abspath(path), "x"), os.path.join(os.path.realpath(path), "x")}
+    for probe in probes:
+        hits = sorted((p for p in fence if glob_re(p).match(probe)), key=len)
+        if hits and fence[hits[-1]] == "allow":
+            return True
+    return False
+
+
+def plan_repos(plan):
+    loader = importlib.machinery.SourceFileLoader(
+        "bees_status", os.path.expanduser("~/.claude/skills/bees/scripts/bees-status"))
+    bs = importlib.util.module_from_spec(importlib.util.spec_from_loader("bees_status", loader))
+    loader.exec_module(bs)
+    p = bs.Plan(plan)
+    return {p.root} | {path for u in p.units.values() for path in u["repo_paths"]}
+
+
+def problems(url, model, workdir, repos):
+    config = get(url, "/config")
+    if config is None:
+        return ["no server"]
+    out = []
+    fence = (config.get("permission") or {}).get("external_directory")
+    if not isinstance(fence, dict):
+        out.append("the server has no permission fence (external_directory) — every outside path would be an ask nobody answers")
+    else:
+        inside = lambda path: os.path.realpath(path) == workdir or os.path.realpath(path).startswith(workdir + os.sep)
+        outside = sorted(r for r in repos if not inside(r) and not allowed(fence, r))
+        if outside:
+            out.append(f"outside the live fence: {', '.join(outside)} — allow them in ~/.config/opencode/opencode.jsonc")
+    provider, _, name = model.partition("/")
+    catalogue = get(url, "/config/providers") or {}
+    listed = next((p.get("models", {}) for p in catalogue.get("providers", []) if p.get("id") == provider), {})
+    if name not in listed:
+        out.append(f"model {model} is not in /config/providers (a stale catalogue, or a wrong id)")
+    return out
+
+
+def busy(url):
+    status = get(url, "/session/status") or {}
+    clients = subprocess.run(["pgrep", "-f", f"opencode (run --attach|attach) {re.escape(url)}"], capture_output=True, text=True)
+    return any(v.get("type") == "busy" for v in status.values()) or clients.stdout.strip() != ""
+
+
+def wait(url, up, seconds):
+    for _ in range(seconds):
+        if (get(url, "/config") is not None) == up:
+            return True
+        time.sleep(1)
+    return (get(url, "/config") is not None) == up
+
+
+def start(url, port, serverlog):
+    say(f"starting opencode serve on {url}")
+    log = open(serverlog, "a") if serverlog else subprocess.DEVNULL
+    subprocess.Popen(["opencode", "serve", "--port", port, "--hostname", "127.0.0.1"], stdin=subprocess.DEVNULL,
+                     stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    wait(url, True, 30) or fail(f"server did not come up on {url}")
+
+
+def main():
+    a = argparse.ArgumentParser(prog="opencode-preflight")
+    a.add_argument("-m", "--model", required=True)
+    a.add_argument("-C", "--dir", required=True)
+    a.add_argument("--plan")
+    a.add_argument("--url")
+    a.add_argument("--port", default="4096")
+    a.add_argument("--serverlog")
+    a.add_argument("--no-restart", action="store_true")
+    a = a.parse_args()
+    url = a.url or f"http://127.0.0.1:{a.port}"
+    workdir = os.path.realpath(a.dir)
+    repos = plan_repos(a.plan) if a.plan else set()
+    if get(url, "/config") is None:
+        start(url, a.port, a.serverlog)
+    found = problems(url, a.model, workdir, repos)
+    if not found:
+        return 0
+    if a.no_restart or busy(url):
+        for p in found:
+            say(p)
+        say("not restarting: " + ("--no-restart" if a.no_restart else "a session is busy or a client is attached — let it finish, then re-run"))
+        return 1
+    say(f"{'; '.join(found)} — restarting the idle server")
+    subprocess.run(["pkill", "-f", f"opencode serve --port {a.port}( |$)"])
+    wait(url, False, 10) or fail(f"server at {url} did not stop (not started as 'opencode serve --port {a.port}'?) — restart it by hand")
+    start(url, a.port, a.serverlog)
+    found = problems(url, a.model, workdir, repos)
+    for p in found:
+        say(f"after restart: {p}")
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

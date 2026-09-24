@@ -19,7 +19,7 @@ suite count or a real run, never on its claim. Verified against `opencode 1.18.3
 | where it runs | `-C <any directory>`: a worktree **or the real checkout** | same, plus `--sandbox` tiers |
 | session | server-held; resume with `-s` **in the same `-C` only** (pinned to its directory); cache warm **30 min**, one cold turn after | prompt cache **30 min**; the wrapper refuses a resume older than that |
 | live view | owner attaches a TUI to the very session (`opencode-sessions --attach`) | read-only tail of the JSONL `.log` |
-| isolation | none built in; the fence is the `permission` block in `~/.config/opencode/opencode.jsonc`, loaded at server **startup** | OS seatbelt (`workspace-write` / `danger-full-access`) |
+| isolation | none built in; the fence is the `permission` block in `~/.config/opencode/opencode.jsonc`, loaded (with the model catalogue) at server **startup** | OS seatbelt (`workspace-write` / `danger-full-access`) |
 | use when | every unit | server won't start, or the unit must run under an OS sandbox |
 
 **Prefer the default.** The session survives idle gaps (a cold resume costs one full re-read, not a
@@ -52,7 +52,8 @@ than trust a pre-compaction claim (see `extract-opencode-usage` for the event th
 **Default to luna; use sol only when capability changes the outcome.** Effort → codex `-e` / opencode
 `--variant`: `minimal|low|medium|high|max` (codex also `xhigh|ultra`). Under the ChatGPT oauth
 credential `.usage` `cost` reads 0 — spend is against the subscription; report tokens. Check
-`~/.claude/skills/bees/scripts/codex-usage` before a unit; a STALE reading is not a reading.
+`~/.claude/skills/bees/scripts/codex-usage` before a unit; a STALE reading prints `ROUTE: unknown`
+and exits 2 — it is not a reading.
 
 ## Worktree or in place — pick by what the unit must verify
 
@@ -69,14 +70,20 @@ Edits land on the real branch; the fence and the brief carry the git discipline.
 
 ## Run it — OpenCode
 
-`scripts/opencode-implement` ensures one `opencode serve` is up **with the fence loaded** (starts
-it headless if absent; restarts an idle server that predates `opencode.jsonc`, refuses when one is
-busy), refuses a `-s` resume whose session is pinned to another directory, runs one round via
-`--dir` with `--auto`, watches it, and records the final message, session id and usage. The
-watcher polls the server's pending-permission list every 15 s (local HTTP, no tokens): an ask for
-this session means the unit reached outside the fence, so it rejects it, stops the run and appends
-`Blocked: permission … <patterns>` to the out-file. Widen the fence or re-brief; never answer it by
-hand in the TUI and carry on.
+`scripts/opencode-implement` refuses a `-s` resume whose session is pinned to another directory,
+then runs **`scripts/opencode-preflight`** before any round file is written: one `opencode serve`
+is up (started headless if absent), it carries the fence, the plan's repos outside `-C` are inside
+the fence's allows, and `-m` is in `/config/providers`. The server reads its config and model
+catalogue at startup only, so a failed check restarts it when idle (no busy session, no `opencode
+run --attach`/`attach` client) and is refused when busy — a stale catalogue once failed a round's
+first step with `ProviderModelNotFoundError` for an id that existed (2026-09-24). The wrapper then
+runs one round via `--dir` with `--auto`, watches it, and records the final message, session id,
+usage and its own PID (`.pid`). The watcher polls the server's pending-permission list every 15 s
+(local HTTP, no tokens): an ask for this session means the unit reached outside the fence, so it
+rejects it and stops the run. **A round that did not finish** — that ask, an `error` event in the
+log, or no final message — gets `Blocked: <reason>` plus `BEES: results=<unit>:blocked:-` in its
+out-file and the wrapper exits 1. Widen the fence or re-brief; never answer an ask by hand in the
+TUI and carry on.
 
 ```bash
 # in place (editor-drive) — the common Unity case
@@ -95,7 +102,8 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
   `$T` (briefs, worktrees) is your scratchpad, never `/tmp`. Every round serves plan units: `-u <unit>`
   (repeatable) and `-o docs/plans/<plan>.work/` (`$W`), named `impl-<unit>[+<unit>…]-r<N>.txt` by the
   wrapper; without them it fails before writing. Its exit refreshes the plan's `Status` column (bees §9).
-- Read **`<out-file>`** (final message) and the change (`git -C <dir> diff`, or the commits it
+- Read **`<out-file>`** — only the last message's text, the report ending in the `BEES:` line
+  (`scripts/extract-opencode-final`; earlier steps' narration stays in the `.log`) — and the change (`git -C <dir> diff`, or the commits it
   reports). The `.log` is a liveness aid only — never read it into context. `.usage` is written
   by `scripts/extract-opencode-usage` (this channel) or `codex-review`'s
   `scripts/extract-codex-cli-usage` (CLI fallback) — the single source of truth for this shared
@@ -103,10 +111,11 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
   budget figure regardless of channel, and (OpenCode channel only) a `compacted` field when the
   server auto-summarized the session (see "Resume or fresh" above). Spend over the round is the
   sum of the `.log`'s `step_finish` events.
-- **A quiet round is inspected, not waited on.** If the `.log` has not grown in ~20 min:
-  `curl -s http://127.0.0.1:4096/permission` (should be `[]` — the watcher handles asks, this is
-  the belt), then `scripts/opencode-sessions` (BUSY = a long tool call, e.g. a Unity suite; idle
-  with no final message = the run died → `pkill -f "opencode run"`, resume the session).
+- **A quiet round is inspected, not waited on.** Run `~/.claude/skills/bees/scripts/bees-watch
+  <out-file>` (BUSY = a long tool call, e.g. a Unity suite; `DEAD` = the wrapper exited without
+  `.usage`; `STALE` = no log growth and not BUSY → `pkill -f "opencode run"`, resume the session).
+  `/session/status` is scoped per directory — pass `?directory=<the round's .cwd>` when querying
+  it by hand; without it a busy session in another directory reads as idle.
 - **Watching**: one server serves every repo; the TUI's `/sessions` shows only one directory —
   the server's start directory unless `--dir` is given, whatever folder you attach from — and
   never shows child sessions. Use `scripts/opencode-sessions` (cross-repo list, BUSY flag) or
@@ -115,13 +124,14 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
 - Leave `opencode serve` running across rounds and units; the wrapper reuses a live one.
 
 **The fence** (`~/.config/opencode/opencode.jsonc`): `--auto` approves every "ask"; only `deny`
-holds. `external_directory` is deny-by-default with `~/code/**`, `~/.claude/**`,
+holds. `external_directory` is deny-by-default with `~/code/**`, `~/pixeption/**`, `~/.claude/**`,
 `~/.unity/**`, `~/Library/Logs/Unity/**` and the temp dirs allowed; bash denies `git reset --hard`,
 `git checkout -- <path>`, `git stash`, `git clean`, force push, `rm -rf` on root/home. If a unit
 reports a denied path it legitimately needed, the owner widens the fence; the unit never works
 around it. **The server reads this file once, at startup**: after editing it, `pkill -f "opencode
-serve"` when no session is busy — the wrapper does this itself when it finds a fenceless idle
-server, and checks with `curl -s :4096/config | jq .permission`.
+serve"` when no session is busy — `opencode-preflight` does this itself when the live server lacks
+the fence, a plan repo or the model and nothing is busy. Check by hand with
+`scripts/opencode-preflight --no-restart -m <model> -C <dir> --plan <plan.md>` (exit 0 = ready).
 
 ## Run it — codex CLI fallback
 

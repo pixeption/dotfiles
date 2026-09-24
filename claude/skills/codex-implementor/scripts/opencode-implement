@@ -15,8 +15,10 @@
 #    slot). OpenCode has no OS sandbox; --auto approves everything not denied, and the fence is
 #    the `permission` block in ~/.config/opencode/opencode.jsonc (external_directory deny-by-default,
 #    forbidden git commands denied).
-# 3. Writes ONLY the final assistant message to the out-file; the raw JSONL event stream goes to
-#    <out-file>.log (a liveness aid, never read it into context).
+# 3. Writes ONLY the final assistant message (the last message's text, via `extract-opencode-final`)
+#    to the out-file; the raw JSONL event stream, narration included, goes to <out-file>.log (a
+#    liveness aid, never read it into context). <out-file>.pid holds this wrapper's PID
+#    (bees-watch reads a dead PID without .usage as DEAD).
 # 4. Records the session id (<out-file>.session) so a follow-up round RESUMES it (-s). The server
 #    keeps the session; its prompt cache is warm for 30 min, and it is PINNED to the directory it
 #    was created in — a resume with a different -C is refused here (it would hit the
@@ -28,13 +30,16 @@
 #    auto-compacted the session, `.usage` also carries `compacted` and the final stderr line
 #    flags it — `context_tokens` is the real post-compaction size, but history before it is now
 #    a summary, not the original detail (see extract-opencode-usage for the event shape).
-# 6. Refuses to run when the live server has no `permission` block: the server reads
-#    opencode.jsonc at STARTUP only, so a server older than the fence has none and every external
-#    path becomes an "ask" nobody answers (one round waited a whole night on that, 2026-09-20).
-#    If no session is busy it restarts the server itself.
+# 6. Runs `opencode-preflight` before any round file is written: the live server must carry the
+#    fence, allow the plan's repos outside -C, and list -m in /config/providers. The server reads
+#    opencode.jsonc and its model catalogue at STARTUP only — a server older than the fence makes
+#    every external path an "ask" nobody answers (a round waited a whole night, 2026-09-20), and a
+#    stale catalogue fails the round's first step (2026-09-24). An idle server is restarted.
 # 7. Watches the run: a pending permission ask for this session means the fence did not cover it.
-#    The watcher rejects it, stops the run and writes `Blocked: permission <patterns>` to the
-#    out-file so the orchestrator's notification carries the reason. Local HTTP only, no tokens.
+#    The watcher rejects it and stops the run. Local HTTP only, no tokens.
+# 8. A round that did not finish — a permission ask, an `error` event in the log, or no final
+#    message — gets `Blocked: <reason>` and `BEES: results=<unit>:blocked:-` for each unit in its
+#    out-file, and the wrapper exits 1, so neither the board nor the notification reads it as done.
 #
 # A NEW session (no -s) gets a preamble prepended: read ~/.claude/CLAUDE.md and every CLAUDE.md in
 # the worktree, and the skills folders — so opencode loads the same guidance a Claude/codex session
@@ -110,36 +115,14 @@ outfile="$("$HOME/.claude/skills/bees/scripts/bees-status" round-out --role impl
 plan="${outfile%.work/*}.md"
 [ -n "$title" ] || title="$(basename "$outfile")"
 
-server_up() { curl -sf "${url}/config" >/dev/null 2>&1; }
-server_has_fence() { [ "$(curl -sf "${url}/config" | jq -r '.permission.external_directory // empty')" != "" ]; }
-server_busy() { [ "$(curl -sf "${url}/session/status" | jq 'length')" != "0" ]; }
-
-start_server() {
-  echo "opencode-implement: starting opencode serve on ${url}" >&2
-  serverlog="${outfile%/*}/opencode-serve-${port}.log"
-  nohup opencode serve --port "$port" --hostname 127.0.0.1 >"$serverlog" 2>&1 &
-  disown || true
-  for _ in $(seq 1 30); do server_up && break; sleep 1; done
-  server_up || { echo "opencode-implement: server did not come up on ${url}" >&2; exit 1; }
-}
-
-# Ensure one server is up on the port; start it headless if not. It survives this process so the
-# owner can keep an `opencode attach` TUI open across rounds. A server that predates the fence
-# (config is read at startup only) is restarted when idle, refused when busy.
-server_up || start_server
-if ! server_has_fence; then
-  if server_busy; then
-    echo "opencode-implement: server at ${url} has NO permission fence (started before opencode.jsonc was written) and a session is busy — let it finish, then: pkill -f 'opencode serve'" >&2
-    exit 1
-  fi
-  echo "opencode-implement: server at ${url} has no permission fence — restarting it" >&2
-  pkill -f "opencode serve --port ${port}" || true
-  for _ in $(seq 1 10); do server_up || break; sleep 1; done
-  start_server
-  server_has_fence || { echo "opencode-implement: restarted server still has no fence — check ~/.config/opencode/opencode.jsonc" >&2; exit 1; }
-fi
+# One server on the port, started headless if down; it survives this process so the owner can keep
+# an `opencode attach` TUI open across rounds. Fence, repos and model are checked before any file
+# of the round is written.
+"$(dirname "$0")/opencode-preflight" --url "$url" --port "$port" -m "$model" -C "$workdir" --plan "$plan" \
+  --serverlog "${outfile%/*}/opencode-serve-${port}.log" || exit 1
 
 trap '"$HOME/.claude/skills/bees/scripts/bees-status" --plan "$plan" show --write >/dev/null 2>&1 || true' EXIT
+echo $$ > "${outfile}.pid"
 echo "opencode-implement: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
 
 claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
@@ -173,8 +156,9 @@ runpid=$!
 # does not cover. Nobody headless can answer it, so reject it, stop the run and say why.
 session_id() { [ -n "$session" ] && echo "$session" || jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true; }
 blocked=""
+tick=0
 while kill -0 "$runpid" 2>/dev/null; do
-  sleep 15
+  sleep 1; tick=$((tick + 1)); [ $((tick % 15)) = 0 ] || continue
   sid="$(session_id)"; [ -n "$sid" ] || continue
   ask="$(curl -sf "${url}/permission" | jq -c --arg s "$sid" '.[] | select(.sessionID==$s)' | head -1 || true)"
   [ -n "$ask" ] || continue
@@ -185,15 +169,23 @@ while kill -0 "$runpid" 2>/dev/null; do
 done
 wait "$runpid" 2>/dev/null || true
 
-# Final assistant message = the text parts (the answer, not the reasoning), one per line.
-jq -r 'select(.type=="text") | .part.text' "$logfile" 2>/dev/null > "$outfile" || true
-[ -n "$blocked" ] && { printf '\n%s\n' "$blocked" >> "$outfile"; echo "opencode-implement: $blocked" >&2; }
 # Session id: present on every event.
 sid="$(session_id)"
 [ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
+"$(dirname "$0")/extract-opencode-final" "$logfile" "$sid" > "$outfile" 2>/dev/null || true
+apierr="$(jq -rR 'fromjson? | select(.type=="error") | .error | "\(.name // "error")\(if .data.ref then " (\(.data.ref))" else "" end): \(.data.message // "")"' "$logfile" 2>/dev/null | head -1)"
+[ -z "$blocked" ] && [ -n "$apierr" ] && blocked="Blocked: opencode ${apierr} (server log: ~/.local/share/opencode/log/ or ${outfile%/*}/opencode-serve-${port}.log)"
+[ -z "$blocked" ] && [ ! -s "$outfile" ] && blocked="Blocked: the round ended without a final message (see ${logfile})"
+if [ -n "$blocked" ]; then
+  results="$(for ((i = 1; i < ${#units[@]}; i += 2)); do printf '%s:blocked:-;' "${units[$i]}"; done)"
+  partial="$(grep -v '^BEES:' "$outfile" || true)"
+  printf '%s\n\n%s%sBEES: results=%s\n' "$blocked" "$partial" "${partial:+$'\n\n'}" "${results%;}" > "$outfile"
+  echo "opencode-implement: $blocked" >&2
+fi
 # Usage/cost from the final step_finish OF THIS SESSION (scoped — see extract-opencode-usage).
 "$(dirname "$0")/extract-opencode-usage" "$logfile" "$sid" > "$usagefile" || true
 
 ctx="$(jq -r '.context_tokens // empty' "$usagefile" 2>/dev/null)"
 compacted="$(jq -r 'if .compacted then "; COMPACTED (\(if .compacted.auto then "auto" else "manual" end), overflow=\(.compacted.overflow)) — context above is post-compaction, history before it is now a summary" else "" end' "$usagefile" 2>/dev/null)"
-echo "opencode-implement: $model/$effort done -> $outfile (final msg); diff: git -C $workdir diff; session ${sid:-unknown} pinned to ${workdir}, context ${ctx:-?} tokens (bees: continue < 120k, none ≥ 200k)${compacted}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2
+echo "opencode-implement: $model/$effort ${blocked:+FAILED }done -> $outfile (final msg); diff: git -C $workdir diff; session ${sid:-unknown} pinned to ${workdir}, context ${ctx:-?} tokens (bees: continue < 120k, none ≥ 200k)${compacted}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2
+[ -z "$blocked" ] || exit 1

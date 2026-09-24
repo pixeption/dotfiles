@@ -130,6 +130,7 @@ usagefile="${outfile}.usage"
 
 trap '"$HOME/.claude/skills/bees/scripts/bees-status" --plan "$plan" show --write >/dev/null 2>&1 || true' EXIT
 (cd "$workdir" && pwd -P) > "${outfile}.cwd"
+echo $$ > "${outfile}.pid"
 # < /dev/null is the whole point — never remove it.
 if [ -n "$session" ]; then
   # `codex exec resume` has no -C; the session's cwd is what it was, so run from the workdir.

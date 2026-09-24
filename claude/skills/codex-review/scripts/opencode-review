@@ -15,14 +15,18 @@
 #    ATTACH URL:  opencode attach http://127.0.0.1:<port> --dir <repo> [--session <id>]  (/sessions is scoped to --dir)
 # 2. Runs one review round against the repo via `--dir`; review-discovery by default,
 #    review-followup with --no-subagents, both under --auto.
-# 3. Writes ONLY the final answer (findings + verdict) to the out-file; the raw JSONL stream goes
-#    to <out-file>.log (a liveness aid, never read it into context).
+# 3. Writes ONLY the final answer (findings + verdict: the last message's text, via
+#    codex-implementor's `extract-opencode-final`) to the out-file; the raw JSONL stream, narration
+#    included, goes to <out-file>.log (a liveness aid, never read it into context). A failed round
+#    (an `error` event, or no answer) gets a `Blocked: <reason>` out-file and exit 1.
 # 4. Records the session id (<out-file>.session) so later rounds RESUME it (-s). No 30-min TTL.
 # 5. Records tokens/cost (<out-file>.usage) via `extract-opencode-usage` (codex-implementor
 #    skill) — the shared extractor also used by opencode-implement. It scopes to THIS
 #    session's step-finish events, since an unscoped read can pick up a subagent's instead.
 #    If the server auto-compacted the session, `.usage` also carries `compacted` and the final
 #    stderr line flags it — the review lost the original detail behind a summary at that point.
+# 6. Runs codex-implementor's `opencode-preflight` before any round file is written (fence, the
+#    plan's repos inside it, -m in /config/providers; an idle server is restarted to fix them).
 #
 # Usage:
 #   opencode-review -C <repo> -p <prompt-file> -u <unit>... -o <plan>.work/<out-file>
@@ -93,14 +97,9 @@ outfile="$("$HOME/.claude/skills/bees/scripts/bees-status" round-out --role revi
 plan="${outfile%.work/*}.md"
 [ -n "$title" ] || title="review $(basename "$outfile")"
 
-if ! curl -sf "${url}/config" >/dev/null 2>&1; then
-  echo "opencode-review: no server at ${url} — starting one" >&2
-  serverlog="${outfile%/*}/opencode-serve-${port}.log"
-  nohup opencode serve --port "$port" --hostname 127.0.0.1 >"$serverlog" 2>&1 &
-  disown || true
-  for _ in $(seq 1 30); do curl -sf "${url}/config" >/dev/null 2>&1 && break; sleep 1; done
-  curl -sf "${url}/config" >/dev/null 2>&1 || { echo "opencode-review: server did not come up on ${url}" >&2; exit 1; }
-fi
+implementor="$HOME/.claude/skills/codex-implementor/scripts"
+"$implementor/opencode-preflight" --url "$url" --port "$port" -m "$model" -C "$workdir" --plan "$plan" \
+  --serverlog "${outfile%/*}/opencode-serve-${port}.log" || exit 1
 trap '"$HOME/.claude/skills/bees/scripts/bees-status" --plan "$plan" show --write >/dev/null 2>&1 || true' EXIT
 echo "opencode-review: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
 
@@ -128,6 +127,7 @@ usagefile="${outfile}.usage"
 
 
 (cd "$workdir" && pwd -P) > "${outfile}.cwd"
+echo $$ > "${outfile}.pid"
 session_args=()
 [ -n "$session" ] && session_args=(--session "$session")
 
@@ -138,23 +138,23 @@ opencode run --attach "$url" --dir "$workdir" --agent "$agent" --auto \
   --format json "${session_args[@]}" \
   "$prompt" < /dev/null > "$logfile" 2>&1 || true
 
-jq -r 'select(.type=="text") | .part.text' "$logfile" 2>/dev/null > "$outfile" || true
-apierr="$(jq -r 'select(.type=="error") | .error.data.message // .error.name' "$logfile" 2>/dev/null | head -1)"
-if [ -n "$apierr" ]; then
-  echo "opencode-review: FAILED — $apierr; discard the possibly partial answer in $outfile" >&2
+sid="$(jq -rR 'fromjson? | select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true)"
+[ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
+"$implementor/extract-opencode-final" "$logfile" "$sid" > "$outfile" 2>/dev/null || true
+"$implementor/extract-opencode-usage" "$logfile" "$sid" > "$usagefile" || true
+apierr="$(jq -rR 'fromjson? | select(.type=="error") | .error | "\(.name // "error")\(if .data.ref then " (\(.data.ref))" else "" end): \(.data.message // "")"' "$logfile" 2>/dev/null | head -1)"
+failed=""
+[ -n "$apierr" ] && failed="Blocked: opencode ${apierr} — discard any partial answer"
+[ -z "$failed" ] && [ ! -s "$outfile" ] && failed="Blocked: the review ended without an answer (see ${logfile})"
+if [ -n "$failed" ]; then
+  printf '%s\n\n%s' "$failed" "$(cat "$outfile")" > "$outfile"
+  echo "opencode-review: FAILED — $failed" >&2
   case "$apierr" in *expired*|*401*|*nauthorized*) echo "opencode-review: credential expired -> owner runs \`opencode auth login\` (interactive), then rerun" >&2 ;; esac
-  exit 1
-fi
-if [ ! -s "$outfile" ]; then
-  echo "opencode-review: EMPTY ANSWER — no text event in log" >&2
   exit 1
 fi
 if ! grep -v '^[[:space:]]*$' "$outfile" | tail -n 1 | grep -qE '^[[:space:]]*(APPROVE|CHANGES_REQUIRED)[[:space:]]*$'; then
   echo "opencode-review: WARNING — answer does not end with a verdict line; possibly truncated" >&2
 fi
-sid="$(jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true)"
-[ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
-"$HOME/.claude/skills/codex-implementor/scripts/extract-opencode-usage" "$logfile" "$sid" > "$usagefile" || true
 
 compacted="$(jq -r 'if .compacted then "; COMPACTED (\(if .compacted.auto then "auto" else "manual" end), overflow=\(.compacted.overflow)) — reviewer context before this point is now a summary, not the original source read; consider a fresh session if it seems anchored" else "" end' "$usagefile" 2>/dev/null)"
 echo "opencode-review: $model/$effort (read-only) done -> $outfile (findings+verdict); session ${sid:-unknown}${compacted}; usage $usagefile; log $logfile; attach: opencode attach ${url} --dir ${workdir} --session ${sid:-<id>}" >&2

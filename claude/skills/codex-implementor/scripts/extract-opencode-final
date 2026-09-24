@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Print the FINAL assistant message of one session from an `opencode run --format json` log: the
+# text parts of the last message that has any text. Every step of a run is its own message, so the
+# running narration of earlier steps ("I'll read the guidance…") stays in the .log and only the
+# report reaches the out-file. Non-JSON lines are skipped (the log also carries stderr); prints
+# nothing when the session wrote no text. Shared by opencode-implement and opencode-review.
+#
+# Usage: extract-opencode-final <logfile> [<session-id>]
+set -euo pipefail
+logfile="${1:?usage: extract-opencode-final <logfile> [<session-id>]}"
+jq -rnR --arg sid "${2:-}" '
+  [inputs | fromjson? | select(.type == "text" and ($sid == "" or .sessionID == $sid))] as $texts |
+  if $texts == [] then empty else
+    ($texts | last | .part.messageID) as $last |
+    $texts | map(select(.part.messageID == $last) | .part.text) | join("\n")
+  end
+' "$logfile"

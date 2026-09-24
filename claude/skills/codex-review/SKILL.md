@@ -27,9 +27,12 @@ findings — routinely past the CLI's 30-minute cache cliff. OpenCode's session 
 
 ## Run it — OpenCode
 
-`scripts/opencode-review` ensures the server is up, runs one round via `--dir` with
-`--agent review-discovery --auto` by default or `--agent review-followup --auto` under
-`--no-subagents`, and records the final answer, session id and usage.
+`scripts/opencode-review` runs codex-implementor's `opencode-preflight` before any round file is
+written (the server is up, carries the fence, allows the plan's repos outside `-C`, and lists `-m`
+in `/config/providers`; an idle server is restarted to fix a stale config or model catalogue, a
+busy one never), runs one round via `--dir` with `--agent review-discovery --auto` by default or
+`--agent review-followup --auto` under `--no-subagents`, and records the final answer, session id
+and usage.
 
 ```bash
 # round 1 — write the prompt to a file first (see "Prompt shape")
@@ -50,7 +53,9 @@ findings — routinely past the CLI's 30-minute cache cliff. OpenCode's session 
   and `-o docs/plans/<plan>.work/` (`$W` above), which the wrapper turns into
   `review-<unit>[+<unit>…]-r<N>.txt`; without them it fails before writing. The out-files outlive
   the session, and the wrapper's exit refreshes the plan's `Status` column (bees skill §9).
-- The out-file holds **only the final answer** (findings, suggestions, verdict). The `.log` is a
+- The out-file holds **only the final answer** — the last message's text (findings, suggestions,
+  verdict); earlier steps' narration stays in the `.log`. A failed round (an `error` event, or no
+  answer) gets an out-file starting `Blocked: <reason>` and exit 1. The `.log` is a
   liveness aid only — never read it into context. Under the ChatGPT oauth credential `.usage`
   `cost` reads 0; report tokens.
 - **Auto-compaction (OpenCode channel only).** The server compacts a session on its own past the
@@ -60,10 +65,11 @@ findings — routinely past the CLI's 30-minute cache cliff. OpenCode's session 
   reviewer says about source it read before that point as a summary, not a verified re-read, and
   reopen the file before trusting an exact citation from it. See `extract-opencode-usage`
   (codex-implementor skill) for the underlying event.
-- **Usage limit**: check `~/.claude/skills/bees/scripts/codex-usage` first. A STALE reading is not
-  a reading — it said "ok" once while the real 5-hour window was at 100% and three reviews came
-  back truncated or empty (429). When STALE, read `x-codex-primary-used-percent` from the newest
-  wrapper `.log`, or spend one cheap codex turn. Out of window → the review goes to `bee-reviewer`.
+- **Usage limit**: check `~/.claude/skills/bees/scripts/codex-usage` first (exit 0 = `ROUTE: codex
+  ok`). A STALE reading is not a reading — it once said "ok" while the real window was at 100% and
+  three reviews came back truncated or empty (429) — so the tool prints `ROUTE: unknown` and exits
+  2 for it: spend one cheap codex turn to refresh the snapshot and re-run. Out of window (exit 1)
+  → the review goes to `bee-reviewer`.
 - **Watching**: one server serves every repo, but the TUI's `/sessions` shows a single directory
   (the server's start directory unless `--dir` is passed — your shell's cwd does not matter) and
   never shows child sessions. `~/.claude/skills/codex-implementor/scripts/opencode-sessions`
