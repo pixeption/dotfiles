@@ -219,6 +219,19 @@ check(r.returncode == 0 and "malformed" in r.stdout and read(os.path.join(W2, "i
       f"capture-bee --from saves the hand-back verbatim: {r.stdout}")
 for name in ("impl-F2-r1.txt", "impl-F2-r1.txt.usage"):
     os.remove(os.path.join(W2, name))
+check("Next: A1" in run("--plan", P2, "show").stdout, "a queued unit is Next")
+r = run("--plan", P2, "start", "-u", "A1", "--role", "impl")
+check(r.returncode == 0 and r.stdout == f"ok {os.path.join(W2, 'impl-A1-r1.txt')}\n", f"start opens a bee round: {r.stdout}{r.stderr}")
+board = run("--plan", P2, "show").stdout
+check("| A1 | 1 | 1 | luna | 🟡 | impl r1 |" in board and "bee impl r1 running since " in board and "Next: —" in board,
+      f"a started bee shows running and is never Next: {board}")
+takeover = run("--plan", P2, "show", "--takeover").stdout
+check("- A1 · impl r1 running · session — (Claude bee)" in takeover and "- A1 🟡" in takeover, f"--takeover lists the running bee: {takeover}")
+r = run("--plan", P2, "capture-bee", "-u", "A1", "--role", "impl", "--ctx", "9", stdin="BEES: results=A1:done:-\n")
+check(r.stdout == f"ok {os.path.join(W2, 'impl-A1-r1.txt')}\n" and "running" not in run("--plan", P2, "show").stdout,
+      f"capture-bee fills the started round: {r.stdout}")
+for name in ("impl-A1-r1.txt", "impl-A1-r1.txt.usage", "impl-A1-r1.txt.bee"):
+    os.remove(os.path.join(W2, name))
 check(run("capture-bee", "-u", "A1", "--role", "impl", "--ctx", "1", stdin="x", env={"BEES_PLAN": ""}).returncode != 0, "no plan → error")
 
 write(os.path.join(W, "impl-A2-r1.txt.log"), "{}")

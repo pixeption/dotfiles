@@ -11,6 +11,7 @@ renders the Status column back into the plan; it is idempotent, so it can fire f
   bees-status --plan <plan.md> note [unit] "text"         first token: accept: decision: gap:
                                                             concern: blocked-on: handoff:
   bees-status --plan <plan.md> capture-bee -u <unit>... --role impl|review --ctx <tokens> [--from <output_file>] [< report]
+  bees-status --plan <plan.md> start -u <unit>... --role impl|review   a Claude bee's round, running until captured
   bees-status round-out --role impl|review -u <unit>... -o <plan>.work/[<out-file>]   (wrappers)
   bees-status refresh [--root <dir>] [--all]   hooks: refresh the plans this Claude session wrote a round,
                                           capture or note to (.work/.sessions/<session_id>); --all (by hand):
@@ -208,13 +209,13 @@ def read_rounds(plan):
     for name in round_names(plan.work):
         m = ROUND_NAME.fullmatch(name)
         out = os.path.join(plan.work, name)
-        clock = next((out + s for s in (".usage", "", ".log") if os.path.exists(out + s)), None)
+        clock = next((out + s for s in (".usage", "", ".log", ".bee") if os.path.exists(out + s)), None)
         if not m or not clock:
             continue
         finished = clock.endswith(".usage")
         r = {"path": out, "name": name, "role": m[1], "units": m[2].split("+"), "n": int(m[3]),
              "finished": finished, "time": os.stat(clock).st_mtime_ns / 1_000_000_000, "ctx": usage_ctx(out),
-             "session": sidecar(out, ".session"), "cwd": sidecar(out, ".cwd")}
+             "session": sidecar(out, ".session"), "cwd": sidecar(out, ".cwd"), "bee": os.path.exists(out + ".bee")}
         r.update(parse_report(r, plan) if finished else {"valid": False, "entries": {}, "why": "unfinished"})
         rounds.append(r)
     return rounds
@@ -313,12 +314,26 @@ def handback(transcript):
     return textwrap.dedent(report).strip("\n") + "\n" if report else ""
 
 
+def cmd_start(plan, units, role):
+    _, out = round_out(role, units, plan.work)
+    atomic_write(out + ".bee", utc(dt.datetime.now().timestamp()) + "\n")
+    print(f"ok {out}")
+
+
+def open_bee_round(work, stem):
+    """The newest round `start` opened for this role and these units that has no report yet."""
+    opened = [m for m in map(ROUND_NAME.fullmatch, round_names(work)) if m and f"{m[1]}-{m[2]}" == stem
+              and os.path.exists(os.path.join(work, m[0] + ".bee")) and not os.path.exists(os.path.join(work, m[0] + ".usage"))]
+    return os.path.join(work, max(opened, key=lambda m: int(m[3]))[0]) if opened else None
+
+
 def cmd_capture_bee(plan, units, role, ctx, transcript=None):
     role in ROLES or die(f"--role must be impl or review, not {role!r}")
     re.fullmatch(r"[1-9][0-9]*", ctx or "") or die(f"--ctx must be a positive base-10 integer, not {ctx!r}")
     report = handback(transcript) if transcript else sys.stdin.read()
     report.strip() or die(f"no report in {transcript}" if transcript else "empty report on stdin")
     _, out = round_out(role, units, plan.work)
+    out = open_bee_round(plan.work, f"{role}-{'+'.join(units)}") or out
     atomic_write(out, report)
     atomic_write(out + ".usage", json.dumps({"context_tokens": int(ctx), "source": "harness"}) + "\n")
     why = parse_bees(role, report, units, plan.units)[1]
@@ -446,6 +461,7 @@ def newest_per_role(rounds):
 
 def diagnostics(v):
     out = [f"open {','.join(v['open'])}"] if v["open"] else []
+    out += [f"bee {r['role']} r{r['n']} running since {utc(r['time'])}" for r in v["rounds"] if r.get("bee") and not r["finished"]]
     for r in newest_per_role(v["rounds"]):
         if r["why"] == REVIEW_BLOCKED:
             out.append(f"{REVIEW_BLOCKED}: {r['path']}")
@@ -520,7 +536,8 @@ def session_line(uid, r):
     where = r["cwd"] or "no .cwd"
     if r["cwd"] and not os.path.isdir(r["cwd"]):
         where += " (non-resumable: directory missing)"
-    return f"- {uid} · {r['role']} r{r['n']} · session {r['session'] or '— (Claude bee)'} · ctx {kilo(r['ctx'])} · {where}"
+    return (f"- {uid} · {r['role']} r{r['n']}{'' if r['finished'] else ' running'} · session {r['session'] or '— (Claude bee)'}"
+            f" · ctx {kilo(r['ctx'])} · {where}")
 
 
 def phase_key(phase):
@@ -673,6 +690,8 @@ def main(argv):
     s = sub.add_parser("capture-bee")
     s.add_argument("-u", "--unit", action="append", default=[]); s.add_argument("--role", required=True); s.add_argument("--ctx", required=True)
     s.add_argument("--from", dest="transcript")
+    s = sub.add_parser("start")
+    s.add_argument("-u", "--unit", action="append", default=[]); s.add_argument("--role", required=True)
     s = sub.add_parser("round-out")
     s.add_argument("-u", "--unit", action="append", default=[]); s.add_argument("--role", required=True); s.add_argument("-o", required=True)
     s = sub.add_parser("note")
@@ -700,6 +719,8 @@ def main(argv):
     plan = Plan(a.plan)
     if a.cmd == "capture-bee":
         return cmd_capture_bee(plan, a.unit, a.role, a.ctx, a.transcript)
+    if a.cmd == "start":
+        return cmd_start(plan, a.unit, a.role)
     if a.cmd == "note":
         return cmd_note(plan, a.args)
     if a.cmd == "show":

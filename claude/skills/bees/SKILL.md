@@ -496,6 +496,11 @@ notification's `output_file` (the bee's transcript) and saves its last `Subagent
 bees-status --plan <plan.md> capture-bee -u G1 [-u G2] --role impl|review --ctx 118000 --from <output_file>
 ```
 
+Right before spawning the bee, `bees-status --plan <plan.md> start -u G1 [-u G2] --role impl|review`
+opens that round, so `show` reads it as running and never offers it as `Next`, and `--takeover`
+lists it; `capture-bee` fills the same round. A bee that ends without a report still gets a
+capture (a one-line `BEES: results=G1:blocked:-`), or its round stays running.
+
 `.work/` is never copied or synced: its mtimes are the round times the status is ordered by.
 
 **Notes are the only thing you type.** One line, optional unit, first token picks the kind —
