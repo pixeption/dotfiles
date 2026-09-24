@@ -84,7 +84,7 @@ plan = bs.Plan(P)
 check(list(plan.units) == ["A1", "A2", "B1"], "units in checklist order")
 check(plan.slug == "demo", "slug drops date and .md")
 check(plan.units["B1"]["depends"] == ["A1", "A2"] and plan.units["A1"]["depends"] == [], "depends parsed")
-check(plan.units["A1"]["repo_path"] == os.path.normpath(CODE), "repo resolved against the plan's repo")
+check(plan.units["A1"]["repo_paths"] == [os.path.normpath(CODE)], "repo resolved against the plan's repo")
 check(bs.gh_slug("### VIEW-11 · `show --log` and `show --takeover`") == "view-11--show---log-and-show---takeover", "slug keeps --")
 check(bs.gh_slug("### A1 · item a1 **✅ Done 2026-01-02**") == "a1--item-a1--done-2026-01-02", "slug drops emoji and bold")
 
@@ -168,7 +168,7 @@ def listing(d):
 
 P2 = os.path.join(PLANS, "docs/plans/2026-01-02-other.md")
 write(P2, plan_md([("A1", 1, ""), ("F2", 1, "")], repo_rel="`../code`"))
-check(bs.Plan(P2).units["F2"]["repo_path"] == os.path.normpath(CODE), "a Repo cell in backticks resolves")
+check(bs.Plan(P2).units["F2"]["repo_paths"] == [os.path.normpath(CODE)], "a Repo cell in backticks resolves")
 W, W2 = P[:-3] + ".work", P2[:-3] + ".work"
 check(bs.round_out("impl", ["A1", "A2"], W)[1] == os.path.join(W, "impl-A1+A2-r1.txt"), "round-out allocates r1 in the .work dir")
 write(os.path.join(W, "impl-A1+A2-r1.txt.log"), "{}")
@@ -505,9 +505,280 @@ for w in ("codex-implementor/scripts/opencode-implement", "codex-review/scripts/
     check(not os.path.exists(idle[:-3] + ".work") and cell(idle, "V1") == "☐", "and created no .work/ dir")
 
 
+# ---------- GAP-05: Next lists every ready unit ----------
+
+NX = os.path.join(PLANS, "docs/plans/2026-01-09-next.md")
+write(NX, plan_md([("N1", 1, ""), ("N2", 1, "N1"), ("N3", 2, "")]))
+check("Next: N1, N3" in run("--plan", NX, "show").stdout, "Next names every queued unit whose dependencies are accepted")
+run("--plan", NX, "note", "N1", "accept: synthetic")
+check("Next: N2, N3" in run("--plan", NX, "show").stdout, "an accept readies its dependants")
+
+
+# ---------- GAP-04: one unit, several repos ----------
+
+CODE2 = repo(os.path.join(T, "code2"))
+MR = os.path.join(PLANS, "docs/plans/2026-01-10-multi.md")
+write(MR, plan_md([("M1", 1, ""), ("M2", 1, "")], repo_rel="`../code`, `../code2`"))
+check(bs.Plan(MR).units["M1"]["repo_paths"] == [os.path.normpath(CODE), os.path.normpath(CODE2)], "a comma-separated Repo names every repo")
+write(os.path.join(PLANS, "docs/plans/bad.md"), plan_md([("M1", 1, "")], repo_rel="../code, ../nowhere"))
+dies(lambda: bs.Plan(os.path.join(PLANS, "docs/plans/bad.md")), "unknown repo ../nowhere")
+mh1 = commit(CODE, "feat: m1 part one\n\nBees-Unit: multi/M1", 6000)
+mview = lambda: bs.compute_view(bs.Plan(MR))["units"]
+check(bs.status_cell(mview()["M1"]) == "🟡 landed in part", "a trailer in one of two repos is not landed")
+out_m = os.path.join(MR[:-3] + ".work", "impl-M1-r1.txt")
+write(out_m, f"BEES: results=M1:done:{mh1[:8]}\n")
+write(out_m + ".usage", "{}")
+at(6100, out_m + ".usage")
+check(bs.status_cell(mview()["M1"]) == "🟡 done, trailer missing", "a done round is not landed until every repo has its trailer")
+mh2 = commit(CODE2, "feat: m1 part two\n\nBees-Unit: multi/M1", 6200)
+check(bs.status_cell(mview()["M1"]) == "🔵", "a trailer in every repo lands the unit")
+check(any(f"M1 · {mh2[:8]}" in l and l.endswith("· ../code2") for l in run("--plan", MR, "show", "--log").stdout.splitlines()),
+      "the log names the repo each commit landed in")
+check("- ../code · main @ " in run("--plan", MR, "show", "--takeover").stdout and "- ../code2 · main @ " in run("--plan", MR, "show", "--takeover").stdout,
+      "takeover lists every repo")
+
+
+# ---------- GAP-11: a trailer on another branch is unmerged, not missing ----------
+
+sh("git", "-C", CODE2, "checkout", "-q", "-b", "codex/M2")
+mw = commit(CODE2, "feat: m2 in a worktree branch\n\nBees-Unit: multi/M2", 6300)
+sh("git", "-C", CODE2, "checkout", "-q", "main")
+mh3 = commit(CODE, "feat: m2 part one\n\nBees-Unit: multi/M2", 6300)
+out_m2 = os.path.join(MR[:-3] + ".work", "impl-M2-r1.txt")
+write(out_m2, f"BEES: results=M2:done:{mh3[:8]},{mw[:8]}\n")
+write(out_m2 + ".usage", "{}")
+at(6400, out_m2 + ".usage")
+check(bs.status_cell(mview()["M2"]) == "🟡 done, unmerged on codex/M2", f"a trailered commit off HEAD names its branch: {bs.status_cell(mview()['M2'])}")
+sh("git", "-C", CODE2, "merge", "-q", "--ff-only", "codex/M2")
+check(bs.status_cell(mview()["M2"]) == "🔵", "and lands once merged")
+write(out_m2, "BEES: results=M2:done:" + "e" * 8 + "\n")
+at(6400, out_m2 + ".usage")
+check(bs.status_cell(mview()["M2"]) == "🟡 done, trailer missing", "an unknown hash is still a missing trailer")
+
+
+# ---------- GAP-12: a hook refreshes only the plans active in its session ----------
+
+A_ = os.path.join(PLANS, "docs/plans/2026-01-11-active.md")
+Q_ = os.path.join(PLANS, "docs/plans/2026-01-12-quiet.md")
+for path_, uid in ((A_, "S1"), (Q_, "S2")):
+    write(path_, plan_md([(uid, 1, "")]))
+    rw_ = os.path.join(path_[:-3] + ".work", f"impl-{uid}-r1.txt")
+    write(rw_, f"BEES: results={uid}:blocked:-\n")
+    write(rw_ + ".usage", "{}")
+    write(os.path.join(path_[:-3] + ".work", "opencode-serve-4096.log"), "server keeps writing")
+    for f_ in (path_, rw_, rw_ + ".usage"):
+        at(1000, f_)
+transcript = os.path.join(T, "transcript.jsonl")
+write(transcript, "{}\n")
+at(time.time() + 5, os.path.join(A_[:-3] + ".work", "impl-S1-r1.txt.usage"))
+hook = lambda payload: subprocess.run([TOOL, "refresh"], input=payload, capture_output=True, text=True,
+                                      env={**os.environ, "CLAUDE_PROJECT_DIR": PLANS})
+r = hook(json.dumps({"hook_event_name": "Stop", "transcript_path": transcript}))
+check(r.returncode == 0 and cell(A_, "S1") == "🔴 blocked", f"a plan with a round from this session is refreshed: {r.stderr}")
+check(cell(Q_, "S2") == "☐", "a plan untouched since the session began is left alone, however stale its Status")
+hook(json.dumps({"hook_event_name": "Stop", "transcript_path": os.path.join(T, "missing.jsonl")}))
+check(cell(Q_, "S2") == "🔴 blocked", "an unreadable payload refreshes every plan")
+
+
+# ---------- GAP-03: init converts an existing checklist ----------
+
+IN = os.path.join(PLANS, "docs/plans/2026-01-13-prose.md")
+write(IN, "\n".join(["# prose", "", "## Checklist", "", "| ID | Deliverable | Depends on | Status | Notes |", "|---|---|---|---|---|",
+                     "| [K1](#k1--first) | first thing | — | ☐ | keep me |", "| [K2](#k2--second) | second `a|b` thing | [K1](#k1--first) | ☐ | |",
+                     "| K3 | third | K1, K2 | ☐ | |", "", "## Detail", "", "### K1 · first", "", "### K2 · second", ""]))
+r = run("--plan", IN, "init", "--repo", "../code")
+check(r.returncode == 0 and "3 units" in r.stdout and "no '### <ID> · ' heading for K3" in r.stdout, f"init reports: {r.stdout}{r.stderr}")
+got = bs.Plan(IN)
+check(list(got.units) == ["K1", "K2", "K3"] and got.units["K1"]["href"] == "k1--first", "init keeps ids and links")
+check(got.units["K3"]["depends"] == ["K1", "K2"] and got.units["K2"]["depends"] == ["K1"] and got.units["K1"]["depends"] == [],
+      "init normalises dependencies")
+check("| [K1](#k1--first) | first thing | ../code | ? | ? | 1 | - | ☐ | keep me |" in read(IN), "init fills placeholders and keeps extra columns")
+check("second `a|b` thing" in read(IN) and "## Detail" in read(IN), "init leaves code spans and the rest of the plan alone")
+check("already has the bees columns" in run("--plan", IN, "init").stdout, "a second init changes nothing")
+
+
+# ---------- GAP-02: codex-usage names windows by length and refuses a stale snapshot ----------
+
+USAGE = os.path.join(HERE, "codex-usage")
+
+
+def usage_with(rate_limits, age_min=5):
+    home = os.path.join(T, f"codex-home-{passed}")
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(time.time() - age_min * 60))
+    write(os.path.join(home, "sessions/2026/01/01/rollout-x.jsonl"),
+          json.dumps({"timestamp": stamp, "payload": {"type": "token_count", "rate_limits": rate_limits}}) + "\n")
+    return subprocess.run([USAGE], capture_output=True, text=True, env={**os.environ, "CODEX_HOME": home})
+
+
+later = int(time.time()) + 3 * 86400
+weekly_only = {"primary": {"used_percent": 37.0, "window_minutes": 10080, "resets_at": later}, "secondary": None, "plan_type": "pro"}
+r = usage_with(weekly_only)
+check(r.returncode == 0 and r.stdout.startswith("weekly: 37% used") and "5h" not in r.stdout and "ROUTE: codex ok" in r.stdout,
+      f"a weekly-only plan routes on the weekly window: {r.stdout}")
+r = usage_with({**weekly_only, "primary": {**weekly_only["primary"], "used_percent": 93.0}})
+check(r.returncode == 1 and "ROUTE: Claude" in r.stdout, "a weekly window over 90% routes to Claude")
+both = {"primary": {"used_percent": 85.0, "window_minutes": 300, "resets_at": int(time.time()) + 3600},
+        "secondary": {"used_percent": 10.0, "window_minutes": 10080, "resets_at": later}, "plan_type": "plus"}
+r = usage_with(both)
+check(r.returncode == 1 and r.stdout.startswith("5h: 85% used") and "weekly: 10% used" in r.stdout, f"a 5-hour window still counts: {r.stdout}")
+r = usage_with(weekly_only, age_min=600)
+check(r.returncode == 2 and "(STALE)" in r.stdout and "ROUTE: unknown" in r.stdout and "codex ok" not in r.stdout,
+      f"a stale snapshot never routes: {r.stdout}")
+
+
+# ---------- GAP-01/06/07/08/10: preflight, failed rounds, the final message, bees-watch ----------
+
+import socket
+SCRIPTS = os.path.expanduser("~/.claude/skills/codex-implementor/scripts")
+PREFLIGHT = os.path.join(SCRIPTS, "opencode-preflight")
+WATCH = os.path.join(HERE, "bees-watch")
+FAKE = os.path.join(T, "fake-opencode-server.py")
+write(FAKE, """import http.server, json, sys, urllib.parse
+fixture, port = sys.argv[1], int(sys.argv[-1])
+class H(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        path = urllib.parse.urlparse(self.path).path
+        body = json.load(open(fixture)).get(path)
+        self.send_response(200 if body is not None else 404); self.end_headers()
+        self.wfile.write(json.dumps(body).encode())
+    def log_message(self, *a): pass
+http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
+""")
+fake_bin = os.path.join(T, "fake-bin")
+write(os.path.join(fake_bin, "opencode"), f"""#!/usr/bin/env bash
+case "$1" in
+  serve) [ -f "$FAKE_FIXTURE.after" ] && cp "$FAKE_FIXTURE.after" "$FAKE_FIXTURE"
+         exec python3 {FAKE} "$FAKE_FIXTURE" opencode serve --port "$3" ;;
+  run) cat "$FAKE_RUN_LOG" ;;
+esac
+""")
+os.chmod(os.path.join(fake_bin, "opencode"), 0o755)
+with socket.socket() as s_:
+    s_.bind(("127.0.0.1", 0))
+    PORT = s_.getsockname()[1]
+URL = f"http://127.0.0.1:{PORT}"
+FIX = os.path.join(T, "fixture.json")
+good = {"/config": {"permission": {"external_directory": {"*": "deny", T + "/**": "allow"}},
+                    "agent": {"review-discovery": {"permission": {"edit": "deny"}}}},
+        "/config/providers": {"providers": [{"id": "openai", "models": {"gpt-6-luna": {}, "gpt-6-sol": {}}}]},
+        "/session/status": {}, "/permission": []}
+stale_catalogue = {**good, "/config/providers": {"providers": [{"id": "openai", "models": {"gpt-5.6-luna": {}}}]}}
+fenv = {**os.environ, "PATH": fake_bin + os.pathsep + os.environ["PATH"], "FAKE_FIXTURE": FIX}
+
+
+def serve(fixture):
+    write(FIX, json.dumps(fixture))
+    proc = subprocess.Popen([os.path.join(fake_bin, "opencode"), "serve", "--port", str(PORT)], env=fenv)
+    for _ in range(50):
+        try:
+            with socket.create_connection(("127.0.0.1", PORT), timeout=0.2):
+                return proc
+        except OSError:
+            time.sleep(0.1)
+    sys.exit("FAIL: fake server did not start")
+
+
+def preflight(*extra, plan=RF):
+    return subprocess.run([PREFLIGHT, "--url", URL, "--port", str(PORT), "-C", CODE, "--plan", plan, *extra],
+                          capture_output=True, text=True, env=fenv)
+
+
+server = serve(good)
+atexit.register(lambda: subprocess.run(["pkill", "-f", f"opencode serve --port {PORT}( |$)"]))
+check(preflight("-m", "openai/gpt-6-luna").returncode == 0, "preflight passes a fenced server listing the model")
+r = preflight("-m", "openai/gpt-6-luna", "--no-restart", plan=MR)
+check(r.returncode == 0, f"repos under the fence pass: {r.stderr}")
+write(FIX, json.dumps({**good, "/config": {"permission": {"external_directory": {"*": "deny", CODE + "/**": "allow"}}}}))
+r = preflight("-m", "openai/gpt-6-luna", "--no-restart")
+check(r.returncode == 1 and f"outside the live fence: {PLANS}" in r.stderr, f"the plan's repo outside the fence is named: {r.stderr}")
+write(FIX, json.dumps({**good, "/config": {}}))
+check("no permission fence" in preflight("-m", "openai/gpt-6-luna", "--no-restart").stderr, "a fenceless server is refused")
+write(FIX, json.dumps({**stale_catalogue, "/session/status": {"ses_other": {"type": "busy"}}}))
+r = preflight("-m", "openai/gpt-6-luna")
+check(r.returncode == 1 and "not in /config/providers" in r.stderr and "a session is busy" in r.stderr and server.poll() is None,
+      f"a busy server with a stale catalogue is refused, never restarted: {r.stderr}")
+write(FIX, json.dumps(stale_catalogue))
+write(FIX + ".after", json.dumps(good))
+r = preflight("-m", "openai/gpt-6-luna")
+check(r.returncode == 0 and "restarting the idle server" in r.stderr, f"an idle server with a stale catalogue is restarted: {r.stderr}")
+server.wait(timeout=5)
+check(server.returncode is not None, "and the old server is gone")
+os.remove(FIX + ".after")
+
+OI = os.path.join(SCRIPTS, "opencode-implement")
+OR = os.path.expanduser("~/.claude/skills/codex-review/scripts/opencode-review")
+events = lambda *evs: "\n".join(json.dumps({"sessionID": "ses_fake", **e}) for e in evs) + "\n"
+step = lambda n: [{"type": "step_start"}, {"type": "text", "part": {"messageID": f"msg_{n}", "text": f"narration {n}"}},
+                  {"type": "step_finish", "part": {"tokens": {"total": 1000 * n}}}]
+final = [{"type": "step_start"}, {"type": "text", "part": {"messageID": "msg_9", "text": "Outcome: Done"}},
+         {"type": "text", "part": {"messageID": "msg_9", "text": "BEES: results=V1:done:-"}},
+         {"type": "step_finish", "part": {"tokens": {"total": 9000}}}]
+run_log = os.path.join(T, "run.log")
+
+
+def wrapper(tool, log, unit="V1"):
+    write(run_log, log)
+    return subprocess.run([tool, "--url", URL, "--port", str(PORT), "-C", CODE, "-p", prompt, "-u", unit, "-o", RF[:-3] + ".work"],
+                          capture_output=True, text=True, env={**fenv, "FAKE_RUN_LOG": run_log})
+
+
+r = wrapper(OI, events(*step(1), *step(2), *final))
+out_ok = r.stderr.split(" done -> ")[1].split(" ")[0]
+check(r.returncode == 0 and read(out_ok) == "Outcome: Done\nBEES: results=V1:done:-\n", f"the out-file is the final message only: {read(out_ok)!r}")
+check(json.loads(read(out_ok + ".usage"))["context_tokens"] == 9000 and os.path.exists(out_ok + ".pid"), "usage and pid are recorded")
+err = {"type": "error", "error": {"name": "UnknownError", "data": {"message": "Unexpected server error.", "ref": "err_f9b1"}}}
+r = wrapper(OI, events(err))
+out_err = r.stderr.split(" done -> ")[1].split(" ")[0]
+body = read(out_err)
+check(r.returncode == 1 and body.startswith("Blocked: opencode UnknownError (err_f9b1): Unexpected server error.")
+      and body.rstrip().endswith("BEES: results=V1:blocked:-"), f"an error event blocks the round and exits 1: {body!r}")
+check(bs.parse_bees("impl", body, ["V1"], bs.Plan(RF).units)[1] is None, "the blocked out-file is a valid result")
+r = wrapper(OI, events({"type": "step_start"}, {"type": "step_finish", "part": {"tokens": {"total": 5}}}))
+out_empty = r.stderr.split(" done -> ")[1].split(" ")[0]
+check(r.returncode == 1 and read(out_empty).startswith("Blocked: the round ended without a final message"), "no final message blocks the round")
+w = subprocess.run([WATCH, "--url", URL, out_ok, out_err], capture_output=True, text=True)
+check(w.returncode == 1 and f"{os.path.basename(out_ok)}: finished" in w.stdout and f"{os.path.basename(out_err)}: failed (Blocked: opencode UnknownError" in w.stdout,
+      f"bees-watch: finished vs failed: {w.stdout}")
+r = wrapper(OR, events(err))
+out_rev = os.path.join(RF[:-3] + ".work", sorted(n for n in os.listdir(RF[:-3] + ".work") if n.startswith("review-V1-") and n.endswith(".txt"))[-1])
+check(r.returncode == 1 and read(out_rev).startswith("Blocked: opencode UnknownError") and os.path.exists(out_rev + ".usage"),
+      f"opencode-review: a failed round is marked and finished: {r.stderr}")
+review_final = [{"type": "text", "part": {"messageID": "msg_1", "text": "reading files"}},
+                {"type": "text", "part": {"messageID": "msg_2", "text": "BEES: reviews=V1:-\nAPPROVE"}}]
+r = wrapper(OR, events(*review_final))
+check(r.returncode == 0 and read(r.stderr.split(" done -> ")[1].split(" ")[0]) == "BEES: reviews=V1:-\nAPPROVE\n", "opencode-review keeps only the verdict message")
+write(FIX, json.dumps(stale_catalogue))
+rounds_in = lambda: [n for n in listing(RF[:-3] + ".work") if ".txt" in n]
+before = rounds_in()
+r = wrapper(OI, events(*final))
+check(r.returncode == 1 and "after restart: model openai/gpt-6-luna is not in /config/providers" in r.stderr and rounds_in() == before,
+      "a model the server does not list fails before any round file is written")
+write(FIX, json.dumps(good))
+
+WD = os.path.join(T, "watch")
+live = os.path.join(WD, "impl-W1-r1.txt")
+write(live + ".log", events({"type": "step_start"}, {"type": "tool_use"}))
+write(live + ".cwd", CODE)
+write(live + ".pid", str(os.getpid()))
+at(time.time() - 3600, live + ".log")
+dead = os.path.join(WD, "impl-W2-r1.txt")
+write(dead + ".log", events({"type": "step_start"}))
+write(dead + ".pid", "999999")
+busy = os.path.join(WD, "impl-W3-r1.txt")
+write(busy + ".log", events({"type": "step_finish"}).replace("ses_fake", "ses_busy"))
+write(busy + ".cwd", CODE)
+at(time.time() - 3600, busy + ".log")
+write(FIX, json.dumps({**good, "/session/status": {"ses_busy": {"type": "busy"}}}))
+w = subprocess.run([WATCH, "--url", URL, live, dead, busy], capture_output=True, text=True).stdout
+check("impl-W1-r1.txt: running · log grew 60m ago · BUSY (mid-step)" in w and "quiet but BUSY" in w.splitlines()[0],
+      f"a live wrapper mid-step is BUSY, not STALE: {w}")
+check("impl-W2-r1.txt: DEAD (wrapper exited without .usage)" in w, "a wrapper that died without .usage is DEAD")
+check("impl-W3-r1.txt: running · log grew 60m ago · BUSY ·" in w, f"the server's status for the round's directory is read: {w}")
+
+
 # ---------- VIEW-08: the store is gone ----------
 
-for args in (["init", P, "--scope", "s"], ["unit", "add", "G1"], ["log", "add", "G1"], ["slot", "set", "1"], ["import", P]):
+for args in (["unit", "add", "G1"], ["log", "add", "G1"], ["slot", "set", "1"], ["import", P]):
     check(run(*args, env={"BEES_PLAN": ""}).returncode != 0, f"legacy command {args[0]} is gone")
 r = run("show", env={"BEES_PLAN": ""})
 check(r.returncode != 0 and "--plan" in r.stderr, "show without a plan names --plan")

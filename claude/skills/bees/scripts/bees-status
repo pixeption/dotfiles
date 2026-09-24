@@ -3,15 +3,17 @@
 
 The plan's `## Checklist` is the unit list; rounds are the out-files in docs/plans/<plan>.work/
 and their .usage/.session/.cwd sidecars; landed is a `Bees-Unit: <plan-slug>/<unit>` git trailer
-in the row's Repo; decisions and acceptances are one-line notes in <plan>.notes.md. `show --write`
+in every repo of the row's Repo; decisions and acceptances are one-line notes in <plan>.notes.md. `show --write`
 renders the Status column back into the plan; it is idempotent, so it can fire from anywhere.
 
   bees-status --plan <plan.md> show [--write] [--log | --takeover]   (or set BEES_PLAN)
+  bees-status --plan <plan.md> init [--repo <rel>]          convert an existing checklist to the bees columns
   bees-status --plan <plan.md> note [unit] "text"         first token: accept: decision: gap:
                                                             concern: blocked-on: handoff:
   bees-status --plan <plan.md> capture-bee -u <unit>... --role impl|review --ctx <tokens> < report
   bees-status round-out --role impl|review -u <unit>... -o <plan>.work/[<out-file>]   (wrappers)
-  bees-status refresh [--root <dir>]      hooks: refresh every plan with a docs/plans/*.work/ dir
+  bees-status refresh [--root <dir>]      hooks: refresh the plans with a docs/plans/*.work/ dir that
+                                          changed during the hook's session (every one without a payload)
 """
 import argparse, contextlib, datetime as dt, fcntl, functools, glob, json, os, re, subprocess, sys, tempfile
 
@@ -89,6 +91,25 @@ def atomic_write(path, text):
     os.replace(tmp, path)
 
 
+def checklist(path, lines):
+    """→ (header cells, line numbers of the body rows) of the table under '## Checklist'."""
+    start = next((i for i, l in enumerate(lines) if l.strip() == "## Checklist"), None)
+    start is not None or die(f"{path}: no '## Checklist' section")
+    rows = []
+    for n in range(start + 1, len(lines)):
+        line = lines[n]
+        if line.startswith("|"):
+            rows.append(n)
+        elif rows or line.startswith("## "):
+            break
+    len(rows) >= 2 or die(f"{path}: '## Checklist' has no table")
+    return cells(lines[rows[0]]), rows[2:]
+
+
+def repo_list(cell_text):
+    return [r.strip().strip("`") for r in cell_text.split(",") if r.strip().strip("`")]
+
+
 class Plan:
     def __init__(self, path):
         self.path = os.path.abspath(path)
@@ -100,21 +121,8 @@ class Plan:
         self.lines = read_text(self.path).split("\n")
         self.units = self.parse_units()
 
-    def checklist(self):
-        start = next((i for i, l in enumerate(self.lines) if l.strip() == "## Checklist"), None)
-        start is not None or die(f"{self.path}: no '## Checklist' section")
-        rows = []
-        for n in range(start + 1, len(self.lines)):
-            line = self.lines[n]
-            if line.startswith("|"):
-                rows.append(n)
-            elif rows or line.startswith("## "):
-                break
-        len(rows) >= 2 or die(f"{self.path}: '## Checklist' has no table")
-        return cells(self.lines[rows[0]]), rows[2:]
-
     def parse_units(self):
-        header, rows = self.checklist()
+        header, rows = checklist(self.path, self.lines)
         missing = [c for c in COLUMNS if c not in header]
         missing and die(f"{self.path}: checklist lacks column(s) {', '.join(missing)}")
         self.col = {c: header.index(c) for c in COLUMNS}
@@ -127,15 +135,18 @@ class Plan:
             uid = link[1] if link else get("ID")
             uid not in units or die(f"{self.path}: duplicate unit id {uid}")
             dep = get("Depends")
-            units[uid] = {"id": uid, "line": n, "href": link and link[2], "repo": get("Repo").strip("`"), "pts": get("Pts"),
+            units[uid] = {"id": uid, "line": n, "href": link and link[2], "repos": repo_list(get("Repo")), "pts": get("Pts"),
                           "route": get("Route"), "phase": get("Phase"), "status": get("Status"),
                           "depends": [] if dep in ("", "-", "—") else [d.strip() for d in dep.split(",")]}
         for u in units.values():
             unknown = [d for d in u["depends"] if d not in units]
             unknown and die(f"{self.path}: {u['id']} depends on unknown {', '.join(unknown)}")
-            path = os.path.normpath(os.path.join(self.root, u["repo"]))
-            git_root(path) == os.path.realpath(path) or die(f"{self.path}: {u['id']} names unknown repo {u['repo']}")
-            u["repo_path"] = path
+            u["repos"] or die(f"{self.path}: {u['id']} has an empty Repo")
+            u["repo_paths"] = []
+            for repo in u["repos"]:
+                path = os.path.normpath(os.path.join(self.root, repo))
+                git_root(path) == os.path.realpath(path) or die(f"{self.path}: {u['id']} names unknown repo {repo}")
+                u["repo_paths"].append(path)
         return units
 
 
@@ -207,19 +218,27 @@ def read_rounds(plan):
     return rounds
 
 
-def trailer_commits(repo):
-    """Every commit reachable from HEAD with its committer epoch and exact Bees-Unit trailer values."""
-    out = git(repo, "log", "--format=%H%x1f%ct%x1f%(trailers:key=Bees-Unit,valueonly)%x1f%s%x1e") or ""
+def trailer_commits(repo, off_head=False):
+    """Every commit reachable from HEAD (or, off_head, from any other ref but not HEAD) with its
+    committer epoch, exact Bees-Unit trailer values and the ref it was reached from."""
+    scope = ["--all", "--not", "HEAD", "--source"] if off_head else []
+    out = git(repo, "log", *scope, "--format=%H%x1f%ct%x1f%(trailers:key=Bees-Unit,valueonly)%x1f%s%x1f%S%x1e") or ""
     commits = []
     for rec in filter(None, (r.strip("\n") for r in out.split("\x1e"))):
-        h, ct, trailers, subject = rec.split("\x1f")
-        commits.append({"hash": h, "time": int(ct), "units": set(trailers.split()), "subject": subject})
+        h, ct, trailers, subject, ref = rec.split("\x1f")
+        commits.append({"hash": h, "time": int(ct), "units": set(trailers.split()), "subject": subject,
+                        "ref": re.sub(r"^refs/(heads|remotes)/", "", ref)})
     return commits
 
 
 def landings(plan, uid, commits):
     key = f"{plan.slug}/{uid}"
     return [(c["hash"], c["time"]) for c in commits if key in c["units"]]
+
+
+def unmerged(plan, uid, commits):
+    key = f"{plan.slug}/{uid}"
+    return [(c["hash"], c["ref"]) for c in commits if key in c["units"]]
 
 
 STATES = ("done", "blocked", "paused", "needs-decision")
@@ -309,25 +328,34 @@ def cmd_note(plan, args):
     print(f"ok {line}")
 
 
-def unit_status(uid, rounds, landings, notes):
-    """The precedence table of VIEW-01, newest artifact first: → mark, qualifier, accept date, open review ids."""
+def unit_status(uid, rounds, landings, notes, every_repo=True, off_head=()):
+    """The precedence table of VIEW-01, newest artifact first: → mark, qualifier, accept date, open review ids.
+    landings: trailered commits on HEAD in the row's repos; every_repo: each repo has one (a unit
+    lands only then); off_head: (hash, ref) trailered commits on other refs, e.g. a worktree branch."""
     accepted = [n["time"][:10] for n in notes if n["unit"] == uid and n["kind"] == "accept:"]
     if accepted:
         return {"mark": "✅", "qual": "", "date": accepted[0], "open": []}
     mine = [r for r in rounds if uid in r["units"]]
     last = newest(r for r in mine if r["role"] == "impl" and r["valid"])
-    landed = max((t for _, t in landings), default=None)
+    landed = max((t for _, t in landings), default=None) if every_repo else None
     verdict = lambda mark, qual="", open_=(): {"mark": mark, "qual": qual, "date": None, "open": list(open_)}
+    trailed = lambda x, commits: HASH.fullmatch(x) and any(h.startswith(x) for h, _ in commits)
     if last and (landed is None or last["time"] >= landed):
         state, hashes = last["entries"][uid]
         if state != "done":
             return verdict("🟡", "paused") if state == "paused" else verdict("🔴", state)
-        if not hashes or not all(HASH.fullmatch(x) and any(h.startswith(x) for h, _ in landings) for x in hashes):
+        missing = [x for x in hashes if not trailed(x, landings)]
+        if hashes and missing and all(trailed(x, off_head) for x in missing):
+            refs = sorted({ref for h, ref in off_head if any(h.startswith(x) for x in missing)})
+            return verdict("🟡", f"done, unmerged on {', '.join(refs)}")
+        if not hashes or missing or landed is None:
             return verdict("🟡", "done, trailer missing")
     if landed is not None:
         review = newest(r for r in mine if r["role"] == "review" and r["valid"] and r["time"] >= landed)
         ids = review["entries"][uid] if review else []
         return verdict("🔵", "(review open)" if ids else "", ids)
+    if landings:
+        return verdict("🟡", "landed in part")
     return verdict("🟡" if mine else "☐")
 
 
@@ -366,10 +394,14 @@ def patch_plan(path, verdicts):
 
 def compute_view(plan):
     rounds, notes = read_rounds(plan), read_notes(plan)
-    commits = {path: trailer_commits(path) for path in {u["repo_path"] for u in plan.units.values()}}
+    paths = {path for u in plan.units.values() for path in u["repo_paths"]}
+    commits = {path: trailer_commits(path) for path in paths}
+    off_head = {path: trailer_commits(path, off_head=True) for path in paths}
     view = {}
     for uid, u in plan.units.items():
-        v = unit_status(uid, rounds, landings(plan, uid, commits[u["repo_path"]]), notes)
+        per_repo = [landings(plan, uid, commits[p]) for p in u["repo_paths"]]
+        v = unit_status(uid, rounds, [x for found in per_repo for x in found], notes, every_repo=all(per_repo),
+                        off_head=[x for p in u["repo_paths"] for x in unmerged(plan, uid, off_head[p])])
         v["rounds"] = sorted((r for r in rounds if uid in r["units"]), key=lambda r: r["time"])
         view[uid] = v
     return {"plan": plan, "units": view, "rounds": rounds, "notes": notes, "commits": commits}
@@ -393,10 +425,12 @@ def diagnostics(v):
     return " · ".join(out)
 
 
-def next_unit(view):
+def next_units(view):
+    """Every queued unit whose dependencies are all accepted, in checklist order."""
     done = {uid for uid, v in view["units"].items() if v["mark"] == "✅"}
-    return next((uid for uid, v in view["units"].items()
-                 if v["mark"] == "☐" and all(d in done for d in view["plan"].units[uid]["depends"])), "—")
+    ready = [uid for uid, v in view["units"].items()
+             if v["mark"] == "☐" and all(d in done for d in view["plan"].units[uid]["depends"])]
+    return ", ".join(ready) or "—"
 
 
 def render_board(view):
@@ -411,7 +445,7 @@ def render_board(view):
         rows.append((uid, u["phase"], u["pts"], u["route"], status_cell(v), rounds, ctx, diagnostics(v)))
     return "\n".join([f"{plan.slug} · {counts} · {plan.path}",
                       table(["ID", "Ph", "Pts", "Route", "Status", "Rounds", "Ctx", "Detail"], rows),
-                      f"Next: {next_unit(view)}"])
+                      f"Next: {next_units(view)}"])
 
 
 def utc(epoch):
@@ -427,7 +461,7 @@ def round_summary(r):
 
 
 def repo_names(plan):
-    return {u["repo_path"]: u["repo"] for u in plan.units.values()}
+    return {path: name for u in plan.units.values() for name, path in zip(u["repos"], u["repo_paths"])}
 
 
 def render_log(view):
@@ -477,7 +511,7 @@ def handoff_task(view):
 def render_takeover(view):
     plan, units = view["plan"], view["units"]
     task, first = handoff_task(view)
-    L = [f"# Takeover · {plan.slug}", f"Plan: {plan.path} · Next: {next_unit(view)}"]
+    L = [f"# Takeover · {plan.slug}", f"Plan: {plan.path} · Next: {next_units(view)}"]
     L += [f"Phase: {task} — first unfinished unit {first}",
           f"Handoff: ~/.claude/skills/bees/scripts/bees-status --plan {plan.path} show --takeover | ~/.claude/skills/handoff/scripts/spawn-handoff.sh"
           f' --cwd {plan.root} --task "{task}" --model <exact current model id>'] if task else ["Phase: every unit is accepted"]
@@ -518,14 +552,75 @@ def cmd_board(plan, write, mode):
         print(f"ok Status {'written' if changed else 'unchanged'} · {plan.path}")
 
 
-def cmd_refresh(root):
-    """Hook entry: refresh every plan whose docs/plans/<plan>.work/ exists under root. Never fails the hook."""
+def hook_session_start(payload):
+    """→ epoch the hook's session began (its transcript's birth time), or None when unknown."""
+    try:
+        return os.stat(json.loads(payload or "{}")["transcript_path"]).st_birthtime
+    except (ValueError, TypeError, KeyError, OSError, AttributeError):
+        return None
+
+
+def last_activity(path):
+    """Newest mtime of the plan, its notes and its rounds — the server log and .lock are not activity."""
+    base = path[:-3]
+    files = [path, base + ".notes.md"] + [os.path.join(base + ".work", n) for n in
+                                          (os.listdir(base + ".work") if os.path.isdir(base + ".work") else []) if ".txt" in n]
+    return max((os.path.getmtime(f) for f in files if os.path.exists(f)), default=0)
+
+
+def cmd_refresh(root, since):
+    """Hook entry: refresh the plans with a docs/plans/<plan>.work/ under root that changed since the
+    hook's session began (all of them when that is unknown), so a session never rewrites another
+    session's plan. Never fails the hook."""
     for work in sorted(glob.glob(os.path.join(root, "docs", "plans", "*.work"))):
         path = work[:-len(".work")] + ".md"
         try:
-            os.path.isfile(path) and write_view(Plan(path))
+            os.path.isfile(path) and (since is None or last_activity(path) >= since) and write_view(Plan(path))
         except (SystemExit, Exception) as e:
             print(f"bees-status refresh: {path}: {e}", file=sys.stderr)
+
+
+# ---------- init: convert an existing checklist to the bees columns ----------
+
+ALIASES = {"ID": ("ID", "Id"), "Item": ("Item", "Deliverable", "Title", "Task", "Change", "Description"),
+           "Repo": ("Repo", "Repos"), "Pts": ("Pts", "Points", "Score"), "Route": ("Route",), "Phase": ("Phase",),
+           "Depends": ("Depends", "Depends on", "Dependencies", "Deps", "After"), "Status": ("Status",)}
+
+
+def depends_cell(text):
+    ids = [ID_LINK.sub(r"\1", d).strip().strip("`") for d in text.split(",")]
+    ids = [d for d in ids if d and d.lower() not in ("-", "—", "none", "n/a")]
+    return ",".join(ids) or "-"
+
+
+def cmd_init(path, repo):
+    """Rewrite the checklist table with the bees columns first; kept columns follow, placeholders are '?'."""
+    os.path.isfile(path) or die(f"no plan .md at {path}")
+    lines = read_text(path).split("\n")
+    header, rows = checklist(path, lines)
+    src = {c: next((header.index(a) for a in names if a in header), None) for c, names in ALIASES.items()}
+    src["ID"] is not None or die(f"{path}: the checklist has no ID column")
+    if all(c in header for c in COLUMNS):
+        return print(f"ok {path} already has the bees columns")
+    fill = {"Repo": repo, "Pts": "?", "Route": "?", "Phase": "1", "Depends": "-", "Status": "☐", "Item": "?"}
+    extra = [i for i in range(len(header)) if i not in src.values()]
+    out_header = list(COLUMNS) + [header[i] for i in extra]
+    first = min(rows) - 2
+    table_rows = []
+    for n in rows:
+        c = cells(lines[n])
+        len(c) == len(header) or die(f"{path}:{n + 1}: {len(c)} cells, header has {len(header)}")
+        get = lambda col: c[src[col]] if src[col] is not None else fill[col]
+        row = [depends_cell(get("Depends")) if col == "Depends" else get(col) for col in COLUMNS]
+        table_rows.append(row + [c[i] for i in extra])
+    row_line = lambda r: "| " + " | ".join(r) + " |"
+    lines[first:max(rows) + 1] = [row_line(out_header), "|" + "---|" * len(out_header), *map(row_line, table_rows)]
+    atomic_write(path, "\n".join(lines))
+    ids = [ID_LINK.sub(r"\1", r[0]) for r in table_rows]
+    headless = [u for u in ids if not any(l.startswith(f"### {u} · ") for l in lines)]
+    print(f"ok {path}: {len(ids)} units · filled {', '.join(c for c in COLUMNS if src[c] is None) or 'nothing'}"
+          " · set every '?' (Pts, Route) and check Repo, Phase, Depends by hand"
+          + (f" · no '### <ID> · ' heading for {', '.join(headless)} (✅ markers need one)" if headless else ""))
 
 
 def main(argv):
@@ -540,6 +635,8 @@ def main(argv):
     s.add_argument("args", nargs="+")
     s = sub.add_parser("refresh")
     s.add_argument("--root", default=os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    s = sub.add_parser("init")
+    s.add_argument("--repo", default=".")
     s = sub.add_parser("show")
     s.add_argument("--write", action="store_true")
     mode = s.add_mutually_exclusive_group()
@@ -549,8 +646,11 @@ def main(argv):
     if a.cmd == "round-out":
         return print(round_out(a.role, a.unit, a.o)[1])
     if a.cmd == "refresh":
-        return cmd_refresh(a.root)
-    plan = Plan(a.plan or die("--plan <plan.md> (or BEES_PLAN) is required"))
+        return cmd_refresh(a.root, None if sys.stdin.isatty() else hook_session_start(sys.stdin.read()))
+    a.plan or die("--plan <plan.md> (or BEES_PLAN) is required")
+    if a.cmd == "init":
+        return cmd_init(os.path.abspath(a.plan), a.repo)
+    plan = Plan(a.plan)
     if a.cmd == "capture-bee":
         return cmd_capture_bee(plan, a.unit, a.role, a.ctx)
     if a.cmd == "note":
