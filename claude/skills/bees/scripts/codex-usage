@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
-"""Print codex's 5h and weekly usage from the newest rate_limits snapshot codex wrote.
+"""Print codex's usage windows from the newest rate_limits snapshot codex wrote, and the route.
 
-Codex records `rate_limits` on every token_count event in ~/.codex/sessions/**/*.jsonl
-(primary = 300 min window, secondary = 10080 min). This reads the newest one; it is a
-snapshot from the last codex turn, not a live query. Exit 0 = ok to route to codex,
-exit 1 = over a threshold (route to Claude), exit 2 = no snapshot found.
+Codex records `rate_limits` on every token_count event in $CODEX_HOME/sessions/**/*.jsonl
+(default ~/.codex). A window is named by its length, never by its slot: a plan with a 5-hour
+limit reports it as `primary` (300 min) and the weekly as `secondary` (10080 min); a plan with
+only a weekly limit reports the weekly as `primary` and no secondary. This reads the newest
+snapshot; it is from the last codex turn, not a live query.
+
+Exit 0 = ROUTE: codex ok · 1 = over a threshold or limit reached (route to Claude) ·
+2 = no usable reading (no snapshot, or a STALE one — refresh with one cheap codex turn).
 
   codex-usage [--five-hour 80] [--weekly 90] [--max-age-min 120]
 """
-import argparse, glob, json, os, sys, time
+import argparse, calendar, glob, json, os, sys, time
+
+WEEK_MIN = 7 * 24 * 60
 
 p = argparse.ArgumentParser()
-p.add_argument("--five-hour", type=float, default=80, help="max used%% of the 5h window")
+p.add_argument("--five-hour", type=float, default=80, help="max used%% of a window shorter than a week")
 p.add_argument("--weekly", type=float, default=90, help="max used%% of the weekly window")
-p.add_argument("--max-age-min", type=float, default=120, help="warn if the snapshot is older")
+p.add_argument("--max-age-min", type=float, default=120, help="older snapshots are STALE: no route")
 a = p.parse_args()
 
-files = sorted(glob.glob(os.path.expanduser("~/.codex/sessions/**/*.jsonl"), recursive=True),
+home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
+files = sorted(glob.glob(os.path.join(home, "sessions", "**", "*.jsonl"), recursive=True),
                key=os.path.getmtime, reverse=True)
 snap = None
 for f in files[:20]:
@@ -25,35 +32,47 @@ for f in files[:20]:
             if '"rate_limits"' not in line:
                 continue
             try:
-                rl = json.loads(line)["payload"]["rate_limits"]
-                ts = json.loads(line)["timestamp"]
-            except (KeyError, ValueError):
+                event = json.loads(line)
+                rl, ts = event["payload"]["rate_limits"], event["timestamp"]
+            except (KeyError, TypeError, ValueError):
                 continue
-            if rl.get("primary"):
+            if rl and rl.get("primary"):
                 snap = (ts, rl)
     if snap:
         break
 if not snap:
-    print("codex-usage: no rate_limits snapshot found under ~/.codex/sessions", file=sys.stderr)
+    print(f"codex-usage: no rate_limits snapshot found under {home}/sessions", file=sys.stderr)
+    print("ROUTE: unknown (no snapshot — run one cheap codex turn)")
     sys.exit(2)
 
 ts, rl = snap
-def window(w, name):
-    if not w:
-        return f"{name}: n/a", 0.0
-    if w["resets_at"] <= time.time():
-        return f"{name}: window reset since snapshot (0%)", 0.0
-    reset = time.strftime("%Y-%m-%d %H:%M", time.localtime(w["resets_at"]))
-    return f"{name}: {w['used_percent']:.0f}% used, resets {reset}", w["used_percent"]
+windows = [w for w in (rl.get("primary"), rl.get("secondary")) if w]
 
-five, five_pct = window(rl.get("primary"), "5h")
-week, week_pct = window(rl.get("secondary"), "weekly")
-age_min = (time.time() - time.mktime(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S")) + time.timezone) / 60
-stale = " (STALE — run a codex turn to refresh)" if age_min > a.max_age_min else ""
-print(f"{five} · {week} · plan {rl.get('plan_type')} · snapshot {age_min:.0f} min old{stale}")
+
+def label(w):
+    minutes = w.get("window_minutes") or 0
+    return "weekly" if minutes >= WEEK_MIN else f"{round(minutes / 60)}h"
+
+
+def reading(w):
+    """→ (text, used% now): a window whose reset has passed reads as 0%."""
+    if w["resets_at"] <= time.time():
+        return f"{label(w)}: window reset since snapshot (0%)", 0.0
+    reset = time.strftime("%Y-%m-%d %H:%M", time.localtime(w["resets_at"]))
+    return f"{label(w)}: {w['used_percent']:.0f}% used, resets {reset}", w["used_percent"]
+
+
+age_min = (time.time() - calendar.timegm(time.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S"))) / 60
+stale = age_min > a.max_age_min
+print(" · ".join(reading(w)[0] for w in windows) + f" · plan {rl.get('plan_type')} · snapshot {age_min:.0f} min old"
+      + (" (STALE)" if stale else ""))
+if stale:
+    print("ROUTE: unknown (STALE snapshot is not a reading — run one cheap codex turn, then re-run)")
+    sys.exit(2)
 if rl.get("rate_limit_reached_type"):
     print(f"codex reports limit reached: {rl['rate_limit_reached_type']}")
+    print("ROUTE: Claude (codex limit reached)")
     sys.exit(1)
-over = five_pct >= a.five_hour or week_pct >= a.weekly
+over = any(reading(w)[1] >= (a.weekly if label(w) == "weekly" else a.five_hour) for w in windows)
 print("ROUTE: Claude (codex over threshold)" if over else "ROUTE: codex ok")
 sys.exit(1 if over else 0)
