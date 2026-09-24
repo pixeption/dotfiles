@@ -34,9 +34,13 @@ asks_waiting() { curl -sfG "$url/permission" --data-urlencode "directory=$1" 2>/
   jq -r --arg s "$2" '[.[] | select(.sessionID==$s)] | length' 2>/dev/null || echo 0; }
 history() {
   [ -n "$dir" ] || return 1
-  local name="${1##*/}" stem n u units
+  local name="${1##*/}" stem n u units f2 base m
   stem="${name%-r*.txt}"; n="${name##*-r}"; n="${n%.txt}"
-  ls "$dir/$stem-r$((n + 1)).txt"* >/dev/null 2>&1 && return 0
+  for f2 in "$dir/$stem-r"*.txt; do
+    [ -e "$f2" ] || continue
+    base="${f2##*/}"; m="${base##*-r}"; m="${m%.txt}"
+    [[ "$m" =~ ^[0-9]+$ ]] && [ "$m" -gt "$n" ] && return 0
+  done
   units="${stem#*-}"
   for u in ${units//+/ }; do grep -qF "[$u] accept:" "${dir%.work}.notes.md" 2>/dev/null || return 1; done
 }

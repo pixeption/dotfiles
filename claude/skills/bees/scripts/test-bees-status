@@ -929,7 +929,8 @@ check(w.returncode == 1 and "impl-W5-r1.txt: running" in w.stdout and w.stdout.s
 write(FIX, json.dumps(good))
 
 WDIR = os.path.join(T, "watchplan", "2026-01-01-w.work")
-for name, body in [("impl-S1-r1.txt", ""), ("impl-S1-r2.txt", "ok"), ("impl-S2+S3-r1.txt", ""), ("impl-S4-r1.txt", "")]:
+for name, body in [("impl-S1-r1.txt", ""), ("impl-S1-r2.txt", "ok"), ("impl-S2+S3-r1.txt", ""), ("impl-S4-r1.txt", ""),
+                    ("impl-S6-r1.txt", ""), ("impl-S6-r3.txt", "ok")]:
     write(os.path.join(WDIR, name + ".log"), events({"type": "step_finish"}))
     write(os.path.join(WDIR, name), body)
     write(os.path.join(WDIR, name + ".usage"), "{}")
@@ -938,15 +939,18 @@ watch_dir = lambda *extra: subprocess.run([WATCH, "--url", URL, "--dir", WDIR, *
 w = watch_dir()
 lines = w.stdout.splitlines()
 check(w.returncode == 1 and len(lines) == 2 and lines[0].startswith("impl-S4-r1.txt: failed (empty out-file)")
-      and lines[1] == "(3 finished or superseded round(s) hidden; --all lists them)",
-      f"--dir flags only the newest failed round of an unaccepted unit and hides the rest: {w.stdout}")
+      and lines[1] == "(5 finished or superseded round(s) hidden; --all lists them)",
+      f"--dir flags only the newest failed round of an unaccepted unit and hides the rest, including a "
+      f"round only a later non-adjacent round supersedes (S6-r1, superseded by r3, not r2): {w.stdout}")
 os.remove(os.path.join(WDIR, "impl-S4-r1.txt.log"))
 w = watch_dir()
-check(w.returncode == 0 and w.stdout.strip() == "(3 finished or superseded round(s) hidden; --all lists them)",
+check(w.returncode == 0 and w.stdout.strip() == "(5 finished or superseded round(s) hidden; --all lists them)",
       f"superseded and accepted failures are history: {w.stdout}")
 w = watch_dir("--all")
-check(w.returncode == 0 and "impl-S1-r1.txt: failed (empty out-file)" in w.stdout and w.stdout.count("· history") == 2
-      and "impl-S1-r2.txt: finished" in w.stdout, f"--all lists every round, history marked: {w.stdout}")
+check(w.returncode == 0 and "impl-S1-r1.txt: failed (empty out-file)" in w.stdout and w.stdout.count("· history") == 3
+      and "impl-S1-r2.txt: finished" in w.stdout and "impl-S6-r3.txt: finished" in w.stdout
+      and any(l.startswith("impl-S6-r1.txt: failed (empty out-file)") and l.endswith("· history") for l in w.stdout.splitlines()),
+      f"--all lists every round, history marked, and a round is history when any later round beats it, not only r+1: {w.stdout}")
 
 
 # ---------- VIEW-08: the store is gone ----------
