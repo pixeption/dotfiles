@@ -1,7 +1,7 @@
 ---
 name: bee-implementor
-description: Bees implementor for high-bucket units (score 8–13) that must drive an editor or hold a resource — investigates, implements, tests, reports in the bees return format. Opus 5 at medium effort.
-model: claude-opus-5
+description: Bees implementor for mid- and high-bucket units (score 5–13) that must drive an editor or hold a resource — investigates, implements, tests, reports in the bees return format. Opus 5.5 at medium effort.
+model: claude-opus-5-5
 effort: medium
 memory: project
 ---

@@ -1,7 +1,7 @@
 ---
 name: bee-reviewer
-description: Bees reviewer for units implemented by codex — fresh, read-only, holds no resource, never edits. Reviews a quiescent diff against the acceptance criteria and returns findings with stable ids and severities. Opus 5 at medium effort.
-model: claude-opus-5
+description: Bees reviewer for units implemented by codex — fresh, read-only, holds no resource, never edits. Reviews a quiescent diff against the acceptance criteria and returns findings with stable ids and severities. Opus 5.5 at medium effort.
+model: claude-opus-5-5
 effort: medium
 memory: project
 ---

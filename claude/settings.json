@@ -7,7 +7,6 @@
   "permissions": {
     "defaultMode": "auto"
   },
-  "model": "sonnet",
   "statusLine": {
     "type": "command",
     "command": "~/.claude/statusline.sh",
@@ -75,5 +74,6 @@
       "**Org-specific CLIs**: unity, dotnet, tools/gen-backlog.sh, tools/check-docs.sh, Game/tools/gamebuild — routine under this repo's own working directory",
       "routine actions under /Users/vbnn2/code/nono4u are treated as local/trusted for edits and reads"
     ]
-  }
+  },
+  "model": "opus[1m]"
 }

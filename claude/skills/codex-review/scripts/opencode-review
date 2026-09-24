@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Safe runner for a READ-ONLY OpenCode review session (second opinion, never edits), with a
 # persistent, HUMAN-ATTACHABLE server and session reuse. Same codex-family MODELS as codex-review
-# (openai/gpt-5.6-sol default) but a different harness: the session lives on a long-running
+# (openai/gpt-6-sol default) but a different harness: the session lives on a long-running
 # `opencode serve`, so the review loop continues round after round with NO 30-min resume cliff
 # (you apply findings between rounds — that easily exceeds codex's cache TTL), and the owner can
 # watch the reasoning live in a TUI.
@@ -26,7 +26,7 @@
 #
 # Usage:
 #   opencode-review -C <repo> -p <prompt-file> -u <unit>... -o <plan>.work/<out-file>
-#                   [-m openai/gpt-5.6-sol] [-e medium] [-s <session-id>]
+#                   [-m openai/gpt-6-sol] [-e medium] [-s <session-id>]
 #                   [--port 4096] [--url http://127.0.0.1:4096] [--title <artifact>] [--no-subagents]
 #   -u  a unit of the plan this round serves (repeatable, at least one). -o must be a file inside
 #       docs/plans/<plan>.work/ named review-<unit>[+<unit>…]-r<N>.txt, or the .work dir itself
@@ -35,12 +35,12 @@
 #   --no-subagents  use the `review-followup` agent instead of `review-discovery` (both in
 #                   ~/.config/opencode/opencode.jsonc); both deny edit, and review-followup also
 #                   denies task so later rounds cannot spawn sub-agents.
-#   -m  provider/model (default openai/gpt-5.6-sol). -e  effort -> --variant (default medium).
+#   -m  provider/model (default openai/gpt-6-sol). -e  effort -> --variant (default medium).
 #   -s  resume a session id (from a previous <out-file>.session). No TTL — server-held.
 #   --port  server port (default 4096). --url overrides the base URL. --title  TUI session title.
 set -euo pipefail
 
-model="openai/gpt-5.6-sol"
+model="openai/gpt-6-sol"
 effort="medium"
 workdir=""
 promptfile=""

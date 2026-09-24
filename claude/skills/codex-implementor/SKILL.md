@@ -1,6 +1,6 @@
 ---
 name: codex-implementor
-description: Delegate a bounded, well-specified implementation unit to a codex-family model (openai/gpt-5.6-luna default, sol for hard units) with the same powers a Claude sub-agent has — including driving a live Unity editor and running suites IN PLACE in the real checkout — as a multi-round conversation you review and accept. DEFAULT channel is OpenCode (`opencode-implement`) — persistent, attachable, session pinned to one directory, worktree or in place. FALLBACK is the `codex` CLI (`codex-implement`) only when the OpenCode server won't start or an OS sandbox is required. Use whenever the user asks to "have codex implement/build/write" something, delegate a unit to codex, or run a model bake-off. For a read-only second opinion use codex-review instead.
+description: Delegate a bounded, well-specified implementation unit to a codex-family model (openai/gpt-6-luna default, sol for hard units) with the same powers a Claude sub-agent has — including driving a live Unity editor and running suites IN PLACE in the real checkout — as a multi-round conversation you review and accept. DEFAULT channel is OpenCode (`opencode-implement`) — persistent, attachable, session pinned to one directory, worktree or in place. FALLBACK is the `codex` CLI (`codex-implement`) only when the OpenCode server won't start or an OS sandbox is required. Use whenever the user asks to "have codex implement/build/write" something, or delegate a unit to codex. For a read-only second opinion use codex-review instead.
 ---
 
 # Codex implementor
@@ -44,15 +44,12 @@ than trust a pre-compaction claim (see `extract-opencode-usage` for the event th
 
 ## Models and effort
 
-| model | id (opencode / codex) | $/M in·out | default effort |
-|---|---|---|---|
-| luna **(default)** | `openai/gpt-5.6-luna` / `gpt-5.6-luna` | 0.20 / 1.20 | **max** |
-| terra | `openai/gpt-5.6-terra` / `gpt-5.6-terra` | 2 / 12 | high |
-| sol | `openai/gpt-5.6-sol` / `gpt-5.6-sol` | 5 / 30 | medium |
+| model | id (opencode / codex) | default effort |
+|---|---|---|
+| luna **(default)** | `openai/gpt-6-luna` / `gpt-6-luna` | **max** |
+| sol | `openai/gpt-6-sol` / `gpt-6-sol` | medium |
 
-On a bounded task all tiers usually produce the same correct diff (KIT-BTN bake-off 2026-09-17:
-sol-low = terra-high = luna-max; luna-max 7.3× cheaper). **Pick by price when all tiers get it
-right; pay for sol only when capability changes the outcome.** Effort → codex `-e` / opencode
+**Default to luna; use sol only when capability changes the outcome.** Effort → codex `-e` / opencode
 `--variant`: `minimal|low|medium|high|max` (codex also `xhigh|ultra`). Under the ChatGPT oauth
 credential `.usage` `cost` reads 0 — spend is against the subscription; report tokens. Check
 `~/.claude/skills/bees/scripts/codex-usage` before a unit; a STALE reading is not a reading.
@@ -91,7 +88,7 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
 # follow-up round, same session, same -C, context < 200k (warm inside 30 min)
 ... -p "$T/r2.md" -u <unit> -o docs/plans/<plan>.work/ -s "$(cat "$W/impl-<unit>-r1.txt.session")"
 # harder unit
-... -m openai/gpt-5.6-sol -e high
+... -m openai/gpt-6-sol -e high
 ```
 
 - Run via the **Bash tool with `run_in_background: true`**; you are notified on completion.
@@ -133,7 +130,7 @@ final message, records session id and usage, and **refuses a resume older than 3
 
 ```bash
 ~/.claude/skills/codex-implementor/scripts/codex-implement \
-  -C <dir> -p "$T/brief.md" -u <unit> -o docs/plans/<plan>.work/ [-m gpt-5.6-sol -e high] [-t fast|standard]
+  -C <dir> -p "$T/brief.md" -u <unit> -o docs/plans/<plan>.work/ [-m gpt-6-sol -e high] [-t fast|standard]
 # in place with the editor: -s danger-full-access ; follow-up within 30 min: -r "$(cat "$W/impl-<unit>-r1.txt.session")"
 ```
 
@@ -194,9 +191,3 @@ until compiled on the real project; an in-place report is checked, not trusted. 
 the next round's prompt in the same session (`-s`). Bees pairs a codex implementor with a
 `bee-reviewer` (cross-vendor). When it is right: worktree → apply its commits/diff and
 `git worktree remove`; in place → its commits are already on the branch.
-
-## Bake-offs
-
-One explicit worktree per arm (`git worktree add -b <arm> <path> HEAD`), same brief, one wrapper
-run per arm, then diff the arms and cost them from the `.log` totals. Channels differ only in
-interaction, never in output quality — compare models, not channels.

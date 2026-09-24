@@ -1,7 +1,7 @@
 ---
 name: codex-review
 description: >-
-  Run a second-opinion code/design review with a codex-family model (default gpt-5.6-sol) — grounded against the actual repo source, as a multi-round conversation you steer. DEFAULT channel is OpenCode (`opencode-review`): a persistent, human-attachable session whose edit tool is hard-denied but whose Bash read-only discipline is instruction-enforced with no 30-min resume cliff (findings-application between rounds routinely exceeds it). FALLBACK is the `codex` CLI (`codex-review`, `codex exec --sandbox read-only`). Use whenever the user asks to "run codex", get a "codex review" / "codex sol review", have codex review a plan/design/PR/diff, or a second AI opinion before building. Covers both channels, session reuse across rounds, the review prompt shape, the verdict that ends the loop, and how to read the findings back.
+  Run a second-opinion code/design review with a codex-family model (default gpt-6-sol) — grounded against the actual repo source, as a multi-round conversation you steer. DEFAULT channel is OpenCode (`opencode-review`): a persistent, human-attachable session whose edit tool is hard-denied but whose Bash read-only discipline is instruction-enforced with no 30-min resume cliff (findings-application between rounds routinely exceeds it). FALLBACK is the `codex` CLI (`codex-review`, `codex exec --sandbox read-only`). Use whenever the user asks to "run codex", get a "codex review" / "codex sol review", have codex review a plan/design/PR/diff, or a second AI opinion before building. Covers both channels, session reuse across rounds, the review prompt shape, the verdict that ends the loop, and how to read the findings back.
 ---
 
 # Codex review
@@ -9,7 +9,7 @@ description: >-
 A review loop with a **codex-family model** as a second opinion on a plan, a design or a diff.
 **You are the lead; the reviewer is a helper.** It raises findings; you decide, apply them
 yourself, and bring the result back. Verified against `opencode 1.18.31`, `codex-cli 0.155.0`,
-default model `gpt-5.6-sol`.
+default model `gpt-6-sol`.
 
 Two channels to the **same models**; the method (prompt shape, rounds, verdict, reading findings
 back) is identical. Only the harness differs.
@@ -34,7 +34,7 @@ findings — routinely past the CLI's 30-minute cache cliff. OpenCode's session 
 ```bash
 # round 1 — write the prompt to a file first (see "Prompt shape")
 ~/.claude/skills/codex-review/scripts/opencode-review \
-  -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o docs/plans/<plan>.work/   # → review-<unit>-r1.txt; default openai/gpt-5.6-sol / medium
+  -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o docs/plans/<plan>.work/   # → review-<unit>-r1.txt; default openai/gpt-6-sol / medium
 # follow-up — same session, any time; --no-subagents = the `review-followup` agent, which denies
 # the task tool as well as edits (the wrapper refuses if the running server has not loaded it)
 ~/.claude/skills/codex-review/scripts/opencode-review \

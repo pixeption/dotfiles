@@ -30,7 +30,7 @@
 #
 # Usage:
 #   codex-implement -C <workdir> -p <prompt-file> -u <unit>... -o <plan>.work/<out-file> \
-#                   [-m gpt-5.6-luna|gpt-5.6-terra|gpt-5.6-sol] [-e low|medium|high|xhigh|max|ultra] \
+#                   [-m gpt-6-luna|gpt-6-sol] [-e low|medium|high|xhigh|max|ultra] \
 #                   [-t fast|standard] [-s workspace-write|read-only|danger-full-access] [-r <session-id>]
 #
 #   -u  a unit of the plan this round serves (repeatable, at least one). -o must be a file inside
@@ -40,14 +40,12 @@
 #   -C  the directory codex runs in and may write to (create a git worktree first:
 #         git worktree add -b <arm> <path> HEAD   — DO NOT rely on any auto-worktree basing on the
 #         branch tip; base it explicitly on HEAD).
-#   -m  model (default gpt-5.6-luna). PRICING ($/M tok, cached=90% off input): luna $0.20/$1.20
-#       (budget), terra $2/$12, sol $5/$30 (premium flagship). Measured on a bounded task all three
-#       produced the same correct diff, and luna-max cost ~7x LESS than sol-low. Reserve sol/terra
-#       for tasks hard enough that capability changes the outcome.
+#   -m  model (default gpt-6-luna). Reserve gpt-6-sol for tasks hard enough that capability
+#       changes the outcome.
 #   -e  reasoning effort (default max).
 #   -t  service tier: fast (codex "priority" tier, 1.5x speed, more usage) or standard. Default:
 #       fast for luna, standard for every other model — luna is cheap enough that the speed-up is
-#       worth it; sol/terra run at their normal rate.
+#       worth it; sol runs at its normal rate.
 #   -r  resumes a session id (sandbox/model carried over). REFUSED when the session's last activity
 #       is older than 30 minutes: codex's prompt cache TTL is 30m, so resuming after that re-pays
 #       the whole context at full price — start a new session instead (omit -r).
@@ -61,7 +59,7 @@
 # out-file (final message) and `git -C <workdir> diff` (the actual change).
 set -euo pipefail
 
-model="gpt-5.6-luna"
+model="gpt-6-luna"
 effort="max"
 tier=""
 sandbox="workspace-write"
@@ -95,7 +93,7 @@ done
 command -v codex >/dev/null 2>&1 || { echo "codex-implement: 'codex' not on PATH" >&2; exit 127; }
 command -v jq >/dev/null 2>&1 || { echo "codex-implement: 'jq' not on PATH" >&2; exit 127; }
 
-[ -n "$tier" ] || { [ "$model" = "gpt-5.6-luna" ] && tier="fast" || tier="standard"; }
+[ -n "$tier" ] || { [ "$model" = "gpt-6-luna" ] && tier="fast" || tier="standard"; }
 case "$tier" in
   fast)     tier_args=(-c service_tier=priority) ;;
   standard) tier_args=() ;;

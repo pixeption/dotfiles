@@ -1,7 +1,7 @@
 ---
 name: bees
 description: >-
-  Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work (1 2 3 5 8 13), route each unit to a cost bucket (codex luna / Sonnet ≤ 3, codex sol / Sonnet at 5, codex sol / Opus 5 for 8–13), pair it with the cross-vendor reviewer, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
+  Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work (1 2 3 5 8 13), route each unit to a cost bucket (codex luna / Sonnet ≤ 3, codex sol / Opus 5.5 at 5, codex sol high / Opus 5.5 for 8–13), pair it with the cross-vendor reviewer, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
 hooks:
   SubagentStop:
     - matcher: "bee-implementor|bee-mechanical|bee-reviewer"
@@ -17,8 +17,7 @@ hooks:
 # Bees — orchestrated development
 
 You are the **orchestrator**: a technical lead running at most two engineers. You decide; they
-execute and bring evidence. Measured over seven rollouts (~150 agents, ~2.8G tokens, one codex
-bake-off):
+execute and bring evidence. Measured over seven rollouts (~150 agents, ~2.8G tokens):
 
 - **Context is the cost.** >95% of spend is prompt-cache reads; an agent pays its whole context
   every turn. The cost of a unit is *context × turns*, not item count. This holds for Claude and
@@ -28,9 +27,8 @@ bake-off):
   sub-agent (`Agent` tool) for **5 minutes**; a codex session (OpenCode or CLI) for **30 minutes**.
   A turn after the clock has run out re-writes the whole context at 1.25× base price instead of
   reading it at 0.1× — one miss on a 116k reviewer cost as much as 12 of its normal turns.
-- **Capability is bought per unit, not per plan.** On a bounded brief, codex luna-max produced the
-  same correct diff as sol-low at 7× less. Most units are bounded. Pay for Opus or sol only when
-  the unit is large enough that the model changes the outcome.
+- **Capability is bought per unit, not per plan.** Most units are bounded and luna handles
+  them. Pay for Opus or sol only when the unit is large enough that the model changes the outcome.
 - **A spawn is not free, and neither is a resume.** A fresh agent re-reads the code the last one
   understood (~40–60k of onboarding). A resumed agent re-reads its whole session on every step.
   Below ~120k the resume wins; past ~200k the spawn wins on any round longer than a recheck (§3).
@@ -56,8 +54,8 @@ your first status line (and, in full mode, as one `decision: setup — …` note
 
 | question | default |
 |---|---|
-| Implementor routing | **buckets** (§3): score 1–3 → low bucket, 5 → mid (codex sol, but Sonnet on the Claude side), 8–13 → high bucket, codex preferred inside each bucket unless the unit must drive an editor. Codex runs **via OpenCode by default** (`opencode-implement` — server-held session, attachable, pinned to one directory); the `codex` CLI is the fallback (§3, `codex-implementor` skill). |
-| Review pairing | **cross-vendor** (§8): a Claude implementor is reviewed by codex sol medium; a codex implementor is reviewed by `bee-reviewer` (Opus 5 medium). |
+| Implementor routing | **buckets** (§3): score 1–3 → low bucket, 5 → mid (codex sol, Opus 5.5 on the Claude side), 8–13 → high bucket, codex preferred inside each bucket unless the unit must drive an editor. Codex runs **via OpenCode by default** (`opencode-implement` — server-held session, attachable, pinned to one directory); the `codex` CLI is the fallback (§3, `codex-implementor` skill). |
+| Review pairing | **cross-vendor** (§8): a Claude implementor is reviewed by codex sol medium; a codex implementor is reviewed by `bee-reviewer` (Opus 5.5 medium). |
 | Review cadence | **per unit** or **at the end of the plan** (one diff review of the whole plan). |
 
 Do not start a unit until the answers are in. They hold for the whole session; a later change
@@ -164,9 +162,9 @@ the **high** bucket regardless of its points.
 
 | bucket | scores | codex (preferred) | Claude (when the unit must drive an editor / hold a resource) |
 |---|---|---|---|
-| low | 1 2 3 | `codex-implementor` (OpenCode default: `openai/gpt-5.6-luna`, max) | `bee-mechanical` (Sonnet, high) — fallback |
-| mid | 5 | `codex-implementor` (OpenCode default: `openai/gpt-5.6-sol`, medium) | `bee-mechanical` (Sonnet, high) — fallback |
-| high | 8 13 | `codex-implementor` (OpenCode default: `openai/gpt-5.6-sol`, medium) | `bee-implementor` (Opus 5, medium) |
+| low | 1 2 3 | `codex-implementor` (OpenCode default: `openai/gpt-6-luna`, max) | `bee-mechanical` (Sonnet, high) — fallback |
+| mid | 5 | `codex-implementor` (OpenCode default: `openai/gpt-6-sol`, medium) | `bee-implementor` (Opus 5.5, medium) |
+| high | 8 13 | `codex-implementor` (`openai/gpt-6-sol`, **high** — pass `-e high`) | `bee-implementor` (Opus 5.5, medium) |
 
 Codex runs through **`opencode-implement`** by default (server-held session, `opencode attach` for
 the owner to watch live), for worktree and in-place units alike; the **`codex-implement` CLI is
@@ -406,7 +404,7 @@ something the model can't crack.
 **Orchestrator escalates a capped-out blocker to a higher bucket.** When an agent returns
 `Blocked` after its two attempts, that is a signal the unit was under-bucketed, not that the agent
 failed. Re-route it **up one bucket / a stronger model** — codex luna → codex sol, or a low-bucket
-Claude → `bee-implementor` (Opus 5) — with a fresh agent whose brief carries the blocked agent's
+Claude → `bee-implementor` (Opus 5.5) — with a fresh agent whose brief carries the blocked agent's
 `Discovered` and `Tried` so the stronger model starts where the weaker one stopped, not from
 scratch. If the top bucket is already blocked twice, it becomes an **owner decision** (options with
 cost), never a third silent attempt.
@@ -417,8 +415,8 @@ The reviewer is the **other vendor** from the implementor, so no model checks it
 
 | implementor | reviewer | slot |
 |---|---|---|
-| Claude (`bee-mechanical`, `bee-implementor`) | codex gpt-5.6-sol, medium, via `codex-review` (OpenCode `opencode-review` by default, CLI fallback; `-e medium`) | none (background) |
-| codex (luna or sol) | `bee-reviewer` (Opus 5, medium) | one Claude slot |
+| Claude (`bee-mechanical`, `bee-implementor`) | codex gpt-6-sol, medium, via `codex-review` (OpenCode `opencode-review` by default, CLI fallback; `-e medium`) | none (background) |
+| codex (luna or sol) | `bee-reviewer` (Opus 5.5, medium) | one Claude slot |
 
 Cadence is what the owner chose in setup: per unit, or one diff review of the whole plan at the
 end (then the reviewer is chosen by the vendor that implemented **most points**). A reviewer is

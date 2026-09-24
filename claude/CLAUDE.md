@@ -56,7 +56,7 @@ For code audits, implementation plans, design reviews, or any markdown deliverab
 enumerated items:
 
 - Header block right under the title: `**Date:**`, `**Scope:**`, `**Focus:**`, `**By:**` (agent +
-  reasoning effort, e.g. `**By:** claude-opus-4-8 · reasoning: high`; name the subagent too if one
+  reasoning effort, e.g. `**By:** claude-opus-5-5 · reasoning: high`; name the subagent too if one
   was used), and `**Method:**` when real verification was done (compile check, call-site tracing,
   an actual build/test run, etc.).
 - A triage/summary table immediately followed by a checklist table, **both at the top** of the

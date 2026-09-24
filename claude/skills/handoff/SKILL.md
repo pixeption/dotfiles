@@ -26,7 +26,7 @@ working immediately — no process-wait, no `ListAgents`, no `SendMessage` round
    ```bash
    ~/.claude/skills/handoff/scripts/spawn-handoff.sh \
      --cwd "$(pwd)" --task "fix pipeline-ui frictions" \
-     --model 'claude-opus-5[1m]' /path/to/message.txt
+     --model 'claude-opus-5-5[1m]' /path/to/message.txt
    # or: printf '%s' "$msg" | .../spawn-handoff.sh --cwd "$(pwd)" --task "…"
    ```
    `--task` is slugified into a mentionable name plus an `-HHMMSS` suffix for uniqueness
@@ -36,7 +36,7 @@ working immediately — no process-wait, no `ListAgents`, no `SendMessage` round
    **The new session inherits your model and effort.** Effort comes free — the script defaults
    `--effort` to `$CLAUDE_EFFORT`, which Claude Code exports into your own shell. The model is not in
    the environment, so **always pass `--model` with the exact model id of the session you are handing
-   off from** (your system prompt states it, e.g. `claude-opus-5[1m]`); quote it, since ids can carry
+   off from** (your system prompt states it, e.g. `claude-opus-5-5[1m]`); quote it, since ids can carry
    `[...]`. Without it the new session falls back to the CLI default, which is how a handoff silently
    lands on the wrong model. Override either flag only when the user asks for a different model or
    effort for the new session. The script
@@ -74,7 +74,7 @@ script fails a precondition (kitty RC off, no `claude` binary), fall back to the
    ```bash
    cwd="$(pwd)"
    wid=$(kitty @ launch --type=tab --cwd="$cwd" --title="$name" \
-     -- claude --name "$name" --model 'claude-opus-5[1m]' --effort "$CLAUDE_EFFORT" \
+     -- claude --name "$name" --model 'claude-opus-5-5[1m]' --effort "$CLAUDE_EFFORT" \
      --settings '{"crossSessionInbound":"accept"}')
    echo "spawned window=$wid name=$name"
    ```

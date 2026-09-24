@@ -1,6 +1,6 @@
 ---
 name: bee-mechanical
-description: Bees agent for low-bucket units (score 1–5) that must drive an editor or hold a resource — renames, table fills, doc edits, migrations, screenshot/parity checks, validating a codex diff against the real project. Sonnet at high effort.
+description: Bees agent for low-bucket units (score 1–3) that must drive an editor or hold a resource — renames, table fills, doc edits, migrations, screenshot/parity checks, validating a codex diff against the real project. Sonnet at high effort.
 model: sonnet
 effort: high
 memory: project
