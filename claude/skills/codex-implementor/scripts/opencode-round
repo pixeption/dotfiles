@@ -41,7 +41,8 @@ session_id() { jq -Rr 'fromjson? | select(.sessionID) | .sessionID' "$logfile" 2
 pending_ask() {
   for d in "${dirs[@]}"; do
     curl -sfG "${url}/permission" --data-urlencode "directory=$d" 2>/dev/null |
-      jq -c --arg s "$1" --arg d "$d" '.[] | select(.sessionID == $s) | . + {directory: $d}' 2>/dev/null || return 1
+      jq -c --arg s "$1" --arg d "$d" 'if type == "array" then .[] | select(.sessionID == $s) | . + {directory: $d}
+        else error("not a list") end' 2>/dev/null || return 1
   done
 }
 post_ok() { [ "$(curl -sf -X POST "$@" 2>/dev/null)" = true ]; }

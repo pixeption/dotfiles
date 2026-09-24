@@ -826,13 +826,15 @@ for tool in (OI, OR):
     os.path.exists(posts) and os.remove(posts)
     r = wrapper(tool, events({"type": "step_start"}), FAKE_RUN_HANG="1", OPENCODE_ROUND_POLL="1")
     role = "impl" if tool == OI else "review"
-    body = read(newest_out(role)) if r.stdout != "timeout" else r.stderr
+    body = read(newest_out(role)) if r.returncode != "timeout" else r.stderr
     check(r.returncode == 1 and body.startswith('Blocked: permission external_directory ["/elsewhere/*"]')
           and body.rstrip().endswith("BEES: results=V1:blocked:-"), f"{os.path.basename(tool)} rejects an ask waiting in its directory: {body!r}")
     check(os.path.exists(posts) and f"/permission/per_1/reply?directory={CODE}" in read(posts), f"{os.path.basename(tool)} posts the reject to the ask's directory")
 unreadable = {k: v for k, v in good.items() if k != "/permission"}
 for why, fixture, want in [
         ("a /permission query that fails", unreadable, "Blocked: Could not read /permission for session ses_fake; session aborted."),
+        ("a /permission answer that is not a list", {**good, f"/permission?directory={CODE}": {}},
+         "Blocked: Could not read /permission for session ses_fake; session aborted."),
         ("a reject that fails", {**good, f"/permission?directory={CODE}": ask, "POST fail": ["/reply"]},
          'Blocked: permission external_directory ["/elsewhere/*"]'),
         ("a failed reject whose abort fails too", {**good, f"/permission?directory={CODE}": ask, "POST fail": ["/reply", "/abort"]},
