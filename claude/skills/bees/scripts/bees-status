@@ -12,8 +12,8 @@ renders the Status column back into the plan; it is idempotent, so it can fire f
                                                             concern: blocked-on: handoff:
   bees-status --plan <plan.md> capture-bee -u <unit>... --role impl|review --ctx <tokens> < report
   bees-status round-out --role impl|review -u <unit>... -o <plan>.work/[<out-file>]   (wrappers)
-  bees-status refresh [--root <dir>]      hooks: refresh the plans with a docs/plans/*.work/ dir that
-                                          changed during the hook's session (every one without a payload)
+  bees-status refresh [--root <dir>]      hooks: refresh the plans with a docs/plans/*.work/ dir whose notes
+                                          or rounds changed during the hook's session (all without a payload)
 """
 import argparse, contextlib, datetime as dt, fcntl, functools, glob, json, os, re, subprocess, sys, tempfile
 
@@ -561,16 +561,17 @@ def hook_session_start(payload):
 
 
 def last_activity(path):
-    """Newest mtime of the plan, its notes and its rounds — the server log and .lock are not activity."""
+    """Newest mtime of the plan's notes and rounds. The plan file itself is not activity: a render,
+    a revert or a checkout rewrites it, and the server log and .lock change on their own."""
     base = path[:-3]
-    files = [path, base + ".notes.md"] + [os.path.join(base + ".work", n) for n in
+    files = [base + ".notes.md"] + [os.path.join(base + ".work", n) for n in
                                           (os.listdir(base + ".work") if os.path.isdir(base + ".work") else []) if ".txt" in n]
     return max((os.path.getmtime(f) for f in files if os.path.exists(f)), default=0)
 
 
 def cmd_refresh(root, since):
-    """Hook entry: refresh the plans with a docs/plans/<plan>.work/ under root that changed since the
-    hook's session began (all of them when that is unknown), so a session never rewrites another
+    """Hook entry: refresh the plans with a docs/plans/<plan>.work/ under root whose notes or rounds
+    changed since the hook's session began (all of them when that is unknown), so a session never rewrites another
     session's plan. Never fails the hook."""
     for work in sorted(glob.glob(os.path.join(root, "docs", "plans", "*.work"))):
         path = work[:-len(".work")] + ".md"

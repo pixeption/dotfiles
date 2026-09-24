@@ -576,6 +576,9 @@ hook = lambda payload: subprocess.run([TOOL, "refresh"], input=payload, capture_
 r = hook(json.dumps({"hook_event_name": "Stop", "transcript_path": transcript}))
 check(r.returncode == 0 and cell(A_, "S1") == "🔴 blocked", f"a plan with a round from this session is refreshed: {r.stderr}")
 check(cell(Q_, "S2") == "☐", "a plan untouched since the session began is left alone, however stale its Status")
+write(Q_, read(Q_) + "\nreverted by hand\n")
+hook(json.dumps({"hook_event_name": "Stop", "transcript_path": transcript}))
+check(cell(Q_, "S2") == "☐", "editing or reverting the plan file alone does not activate it")
 hook(json.dumps({"hook_event_name": "Stop", "transcript_path": os.path.join(T, "missing.jsonl")}))
 check(cell(Q_, "S2") == "🔴 blocked", "an unreadable payload refreshes every plan")
 

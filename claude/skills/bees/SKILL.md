@@ -521,7 +521,7 @@ path on the board — you decide whether the work or only the report is repeated
 
 **Refresh is automatic.** Each wrapper's exit runs `show --write` for its plan; a bee's
 `SubagentStop` and every `Stop` (this skill's hooks) run it for each plan with a `.work/` dir whose
-plan file, notes or rounds changed since that session began — never for another session's plan
+notes or rounds changed since that session began — never for another session's plan
 (a `Stop` once rewrote a finished plan's rows after its repo's history was reset without
 trailers). Writes are serialised per plan by a lock on `.work/.lock`. An `accept:` note is final
 whatever git says later, so note it for every finished unit, and a squash or reset of a unit's
