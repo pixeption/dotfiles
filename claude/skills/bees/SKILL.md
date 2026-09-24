@@ -284,8 +284,9 @@ Rules of continuation:
   can exit 1 on a green run. Briefs say: run from the project dir or pass an absolute `--output`,
   parse the XML, ignore stdout and exit code (unity-cli skill).
 - **Watching a codex round.** Never tail or Read the wrapper's `.log`. Run
-  `~/.claude/skills/bees/scripts/bees-watch <out-file>...` (or `--dir docs/plans/<plan>.work`): one line
-  per round — running/finished, minutes since the log last grew, BUSY/idle, context tokens,
+  `~/.claude/skills/bees/scripts/bees-watch <out-file>...` (or `--dir docs/plans/<plan>.work`, which
+  lists only running or flagged rounds, `--all` every one): one line per round — running/finished,
+  minutes since the log last grew, BUSY/idle, context tokens,
   session id — and a flag, exit 1, when something needs you. BUSY is the server's status for the
   round's directory (`/session/status` is scoped per directory) or a live wrapper mid-step:
   - `ASK WAITING` — a permission ask nobody headless can answer. Answer it through the attach TUI
@@ -297,7 +298,8 @@ Rules of continuation:
   - `failed (…)` — the wrapper finished but the out-file is empty or carries its `Blocked:` line
     (an `error` event, a rejected permission ask, a non-zero `opencode run` exit, no final message,
     a final step that did not stop, a review without a verdict; the wrapper also exited 1).
-    `DEAD` — the wrapper's PID (`.pid`) is gone and it never wrote `.usage`.
+    `DEAD` — the wrapper's PID (`.pid`) is gone and it never wrote `.usage`. Under `--dir` either
+    is `history`, not flagged, once its unit has a newer round of that role or an `accept:` note.
   Then check the editor's state, if the unit held a project. A stuck round is reported to the
   owner in one line with what `bees-watch` printed; it is never left for the next session.
 - On any termination notice (`failed`, cut-off, no report), verify what the agent may have left —

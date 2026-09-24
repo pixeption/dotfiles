@@ -894,6 +894,26 @@ check(w.returncode == 1 and "impl-W5-r1.txt: running" in w.stdout and w.stdout.s
       and "ASK WAITING" not in w.stdout.splitlines()[0], f"an ask waiting only in the round's own directory is reported: {w.stdout}")
 write(FIX, json.dumps(good))
 
+WDIR = os.path.join(T, "watchplan", "2026-01-01-w.work")
+for name, body in [("impl-S1-r1.txt", ""), ("impl-S1-r2.txt", "ok"), ("impl-S2+S3-r1.txt", ""), ("impl-S4-r1.txt", "")]:
+    write(os.path.join(WDIR, name + ".log"), events({"type": "step_finish"}))
+    write(os.path.join(WDIR, name), body)
+    write(os.path.join(WDIR, name + ".usage"), "{}")
+write(WDIR[:-5] + ".notes.md", "- 2026-01-01T00:00:00Z [S2] accept: x\n- 2026-01-01T00:00:00Z [S3] accept: y\n")
+watch_dir = lambda *extra: subprocess.run([WATCH, "--url", URL, "--dir", WDIR, *extra], capture_output=True, text=True)
+w = watch_dir()
+lines = w.stdout.splitlines()
+check(w.returncode == 1 and len(lines) == 2 and lines[0].startswith("impl-S4-r1.txt: failed (empty out-file)")
+      and lines[1] == "(3 finished or superseded round(s) hidden; --all lists them)",
+      f"--dir flags only the newest failed round of an unaccepted unit and hides the rest: {w.stdout}")
+os.remove(os.path.join(WDIR, "impl-S4-r1.txt.log"))
+w = watch_dir()
+check(w.returncode == 0 and w.stdout.strip() == "(3 finished or superseded round(s) hidden; --all lists them)",
+      f"superseded and accepted failures are history: {w.stdout}")
+w = watch_dir("--all")
+check(w.returncode == 0 and "impl-S1-r1.txt: failed (empty out-file)" in w.stdout and w.stdout.count("· history") == 2
+      and "impl-S1-r2.txt: finished" in w.stdout, f"--all lists every round, history marked: {w.stdout}")
+
 
 # ---------- VIEW-08: the store is gone ----------
 
