@@ -640,10 +640,17 @@ write(FAKE, """import http.server, json, sys, urllib.parse
 fixture, port = sys.argv[1], int(sys.argv[-1])
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        path = urllib.parse.urlparse(self.path).path
-        body = json.load(open(fixture)).get(path)
+        url = urllib.parse.urlparse(self.path)
+        directory = urllib.parse.parse_qs(url.query).get("directory")
+        fx = json.load(open(fixture))
+        body = fx.get(f"{url.path}?directory={directory[0]}") if directory else None
+        body = fx.get(url.path) if body is None else body
         self.send_response(200 if body is not None else 404); self.end_headers()
         self.wfile.write(json.dumps(body).encode())
+    def do_POST(self):
+        with open(fixture + ".posts", "a") as f:
+            f.write(urllib.parse.unquote(self.path) + "\\n")
+        self.send_response(200); self.end_headers(); self.wfile.write(b"true")
     def log_message(self, *a): pass
 http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
 """)
@@ -771,12 +778,19 @@ busy = os.path.join(WD, "impl-W3-r1.txt")
 write(busy + ".log", events({"type": "step_finish"}).replace("ses_fake", "ses_busy"))
 write(busy + ".cwd", CODE)
 at(time.time() - 3600, busy + ".log")
-write(FIX, json.dumps({**good, "/session/status": {"ses_busy": {"type": "busy"}}}))
-w = subprocess.run([WATCH, "--url", URL, live, dead, busy], capture_output=True, text=True).stdout
+elsewhere = os.path.join(WD, "impl-W4-r1.txt")
+write(elsewhere + ".log", events({"type": "step_finish"}).replace("ses_fake", "ses_w4"))
+write(elsewhere + ".cwd", CODE2)
+at(time.time() - 3600, elsewhere + ".log")
+write(FIX, json.dumps({**good, "/session/status": {"ses_w4": {"type": "busy"}}, f"/session/status?directory={CODE2}": {},
+                       f"/session/status?directory={CODE}": {"ses_busy": {"type": "busy"}, "ses_w4": {"type": "busy"}}}))
+w = subprocess.run([WATCH, "--url", URL, live, dead, busy, elsewhere], capture_output=True, text=True).stdout
 check("impl-W1-r1.txt: running · log grew 60m ago · BUSY (mid-step)" in w and "quiet but BUSY" in w.splitlines()[0],
       f"a live wrapper mid-step is BUSY, not STALE: {w}")
 check("impl-W2-r1.txt: DEAD (wrapper exited without .usage)" in w, "a wrapper that died without .usage is DEAD")
 check("impl-W3-r1.txt: running · log grew 60m ago · BUSY ·" in w, f"the server's status for the round's directory is read: {w}")
+check("impl-W4-r1.txt: running · log grew 60m ago · idle ·" in w and "STALE" in w.splitlines()[-1],
+      f"a session BUSY only in another directory's (or the unscoped) status is not used: {w}")
 
 
 # ---------- VIEW-08: the store is gone ----------
