@@ -1,6 +1,6 @@
 ---
 name: unity-cli
-description: Reference for the Unity CLI (the `unity` binary) and Unity Pipeline package (`com.unity.pipeline`) — installing/managing Unity editors, batch-mode test/build, and driving a live Editor over its local HTTP API via `unity command` through an iterative code → author → test → fix loop. Load this when scripting `unity command`/`unity test`/`unity status`/`unity job`, iterating on a live Unity editor session, or debugging Unity CLI exit codes.
+description: Reference for the Unity CLI (the `unity` binary) and Unity Pipeline package (`com.unity.pipeline`) — installing/managing Unity editors, batch-mode test/build, and driving a live Editor over its local HTTP API via `unity command` through an iterative code → author → test → fix loop. Load this when scripting `unity command`/`unity recompile`/`unity test`/`unity status`/`unity job`, upgrading the CLI, iterating on a live Unity editor session, or debugging Unity CLI exit codes.
 ---
 
 # Unity CLI + Unity Pipeline
@@ -17,15 +17,21 @@ Two different things that compose:
 The CLI is the client, the package is the server — `unity command`/`unity list` only work once the
 package is in the target project.
 
-Verified against `unity 1.0.0-beta.10`, `com.unity.pipeline 0.7.0-exp.1`, Unity 6000.4.8f1,
-2026-09-17. Both are pre-release — flags move. **Trust `unity <cmd> --help` and
-`unity list --format json` over this file** whenever they disagree with it. `unity commands
---format json` is the machine-readable manifest of the CLI's own verb tree (beta.10).
+CLI `1.0.0-beta.11`, Pipeline `0.7.0-exp.1`, Unity 6000.4.8f1 checked 2026-09-23 in game-core and
+nono4u/Game: native compile checks, detached EditMode tests (20/20 and 4/4), and `console_status`.
+Also checked CLI JSON/NDJSON usage errors and docs lookup; other 0.7 guidance follows the
+[changelog](https://docs.unity3d.com/Packages/com.unity.pipeline@0.7/changelog/CHANGELOG.html)
+and versioned docs. Older observations are dated below; PlayMode/player behavior was not reverified.
+**Trust `unity <cmd> --help` and `unity list --project-path <dir> --format json` over this file.**
+`unity commands --format json` describes the CLI tree; the project's resolved package and live
+command schema determine Pipeline capabilities. Updating the CLI does not update that package.
 
-**43 top-level CLI verbs.** The ones this repo's sessions actually use: `status`, `list`, `open`,
-`close`, `test`, `command` (alias `cmd`), `job`. Everything else — `vcs`, `projects`, `auth`,
-`license`, `cloud`, `templates`, `bug`, `hub`, `plugin`, `mcp`, `shell` — via `unity --help`; this
-repo builds through `game-build`, not `unity build` directly.
+Common verbs: `status`, `list`, `open`, `close`, `recompile`, `test`, `command` (alias `cmd`),
+`job`. Discover the rest through `unity --help`, including read-only `pipeline cloud-build` /
+`pipeline automation`, `cloud org create`, `mcp configure --server issue-tracker`, and
+`editors prune --remove-missing`. This repo builds through `game-build`, not `unity build` directly.
+For version-matched API docs, run `unity docs GameObject --url` from the project; use `--manual`,
+`--search`, or `--editor-version <version>` as needed.
 
 Helper scripts live beside this file in `scripts/`: `unity-editor`, `unity-test`, `unity-suite`,
 `unity-wait`, `_common.sh`. Prefer them over hand-rolling a poll loop — the pitfalls
@@ -71,15 +77,12 @@ unity-editor restart [project] [--scene <path.unity>]     force-close, then up
 unity-editor ensure [project] [--deadline 30]             restart only if it stays silent
 ```
 
-**A silent editor is a hung editor — restart it, never retry.** If `editor_status` answers nothing
-for 30 s (`unity-editor ensure` does exactly this check), the main thread is stuck — a modal
-dialog, or a deadlock that shows in `Editor.log` as `Failed to handle /api/exec request: Main
-thread operation timed out` — and `unity status` still says `ready` while every command times out.
-Nothing you send will get through; `unity close` without `--force` is refused too. Run
-`unity-editor restart` (= `unity close --force` + `up`) once; if it hangs again, stop and report.
-Long operations never look like this: tests detach (`unity-test` → `unity job wait`), compiles are
-polled (`unity-wait recompile`), `ui_*` jobs are read from their record on disk (`unity-wait job`) —
-each keeps `editor_status` answering between steps, so poll *those*, never a single long request.
+**Check active work before diagnosing a silent editor.** `editor_status`/`test_status` can queue
+behind command execution, even for detached work. Read the job/progress endpoint or the `ui_*`
+disk job record first; Pipeline's `/api/status` and `/api/progress` stay off the main thread.
+With no active work or reload, 30 s of silence suggests a blocked dialog or hung main thread.
+`unity-editor ensure` restarts on that silence, so use it only after ruling out active work.
+Run `unity-editor restart` once; if it hangs again, stop and report rather than looping.
 
 `up` does, in order: skip `unity open` if `unity status` already shows a live editor for the
 project; otherwise `unity open <project> --args "-automated"` then wait for it; `set_autotick
@@ -109,8 +112,8 @@ report the active scene and its `rootCount`. Reasons each step exists:
   command exits non-zero. `unity-wait ready` polls `editor_status` itself, so this is only
   relevant when you read `unity status` by hand. The beta.8 bug where a healthy editor showed no
   instance at all (a stale-token `401` after a recompile, a descriptor the CLI refused to read
-  before parsing the manifest) is fixed in beta.10 — an empty `unity status` now means Safe Mode
-  or no editor, nothing else.
+  before parsing the manifest) is fixed in beta.10. An empty `unity status` still needs diagnosis:
+  `unity pipeline list` can show a running Editor whose Pipeline server is unreachable.
 - **`set_autotick --enable true`**: an unfocused GUI editor throttles its update loop, so
   `recompile`/`run_tests` make no progress — a full-deadline symptom with no editor activity.
   Batch-mode editors always tick, so they don't need this.
@@ -141,18 +144,36 @@ flag, so a `--json '{...}'` positional is silently dropped and the run falls bac
 suite. Confirm the response's `FilterApplied` echoes what you asked for before waiting. **Never
 call `run_tests` with no filter**, even just to "see its params" — that starts a full run.
 
-Footnote: the pre-detach route (`--async_tests true` + poll `Temp/pipeline_test_status.json`) still
-works but is superseded — that file is a single global path a second driver can overwrite.
+**Job completion versus operation completion (beta.11):** `unity job wait <id> --project-path
+<dir> --timeout 120 --format json` may report that work was *dispatched* and name a status command
+such as `build_status`. Follow that command to the operation's terminal result; dispatch is not
+success. For tests, require the actual test summary/filter, not just a successful job envelope:
+the verified failed-test run returned top-level success but `Summary.Failed: 1`.
+The older `--async_tests true` + `Temp/pipeline_test_status.json` route uses a shared status file.
 
-### Compiles: `unity-wait recompile`
+### Compiles: `unity recompile` / `unity-wait recompile`
 
-`recompile_status` has **two success terminals**: `completed` and `up_to_date` (a trivial edit, or
+For a running, stopped Editor, beta.11 adds a native compile check:
+
+```bash
+unity recompile --project-path <dir> --timeout 120 --format json
+```
+
+It reports errors with file/line; documented exits are 0 success, 6 compile errors, 7 unreachable.
+Verified clean `completed`/`up_to_date` and unreachable results; compile-error/strict-warning exits
+remain documentation-based. `compilationFailed` can be null in the CLI's `up_to_date` result;
+Pipeline 0.7 `console_status.groundTruth.compilationFailed` provides the native flag.
+`--strict` also fails on warnings; `--focus` brings the Editor forward. Keep `unity-wait recompile`
+when you need its existing PlayMode stop and post-reload settling behavior; native equivalence for
+those steps has not been verified. Both require a reachable Pipeline server.
+
+`recompile_status` has **two completion terminals**: `completed` and `up_to_date` (a trivial edit, or
 one Unity already auto-compiled, finishes as `up_to_date` — a poll that waits only for `completed`
 spins to its deadline on a compile that's already done). 0.7 adds `compilationFailed`, read from
 Unity's native flag: a repeat `recompile` with errors still standing no longer erases them into
-a false `up_to_date`. `console_status` returns the same flag plus console counts without the
-entries — cheap enough to poll during a compile. `data.result` there is a **JSON-encoded
-string**, not an object — decode twice. `unity command` fails outright (unreachable/timeout) while
+a false `up_to_date`; check failure fields before declaring success. `console_status` returns
+the native flag and counts without entries. `data.result` can be a JSON-encoded string — decode
+it if needed, or use `--result-only`. `unity command` can fail (unreachable/timeout) while
 the editor is mid-domain-reload — that's "still working", not a failure; always set a deadline.
 
 ```bash
@@ -172,24 +193,22 @@ unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode]
 The Game/CLAUDE.md rule: a Play-mode session poisons the live editor for full-suite runs, so the
 suite must run in a fresh batch editor holding no lock. This script closes any live editor
 (`unity close`), runs `unity test`, reopens the editor afterward if one was open, and parses the
-NUnit XML report for pass/fail (`unity test`'s exit code collapses every failure to a plain `6`).
+NUnit XML report for pass/fail rather than guessing from a generic nonzero exit.
 With a compile error it exits 2 in ~10 s listing the `error CS` lines and does **not** reopen the
 editor (that would only put it into Safe Mode) — fix, then `unity-editor up`.
 
-### A batch `unity test` prints nothing and writes its report into the **cwd**
+### Batch tests: use an explicit report path
 
-A successful `unity test` produces **no stdout at all**, and its exit code is meaningless (a
-1719/0 run exited `1`). The only evidence is the NUnit XML, and its default `--output
+Earlier runs produced no stdout, and a 1719/0 run exited `1` (2026-09-12; not rechecked on beta.11).
+Read a fresh NUnit XML report as well as the CLI envelope/exit code. The default `--output
 test-results.xml` is resolved against **the shell's cwd, not the project** — `unity test
 ../other-project …` run from `myproject/` writes `myproject/test-results.xml`, and a
 `ls ../other-project/test-results.xml` afterwards says "no such file", which reads exactly like a run that
 never happened (observed 2026-09-12: three back-to-back re-runs of a suite that had passed the first
-time). Either `cd` into the project and pass `.`, or always pass an absolute `--output`:
+time). Use an absolute `--output` and an explicit process timeout:
 
 ```bash
-unity test --mode EditMode <project> --filter <filter> --output /abs/path/report.xml
-python3 - /abs/path/report.xml <<'PY'   # read total/passed/failed/skipped from <test-run>
-PY
+unity test --mode EditMode <project> --filter <filter> --output /abs/path/report.xml --timeout 900
 ```
 
 beta.10 makes one case honest: a run that produced no fresh report (filter matched nothing,
@@ -198,9 +217,9 @@ could not be converted to JUnit". Per-project defaults for `unity test`/`unity b
 report format, timeout, target) can be committed in `ProjectSettings/UnityCliConfig.json`;
 `unity config resolve <key>` shows which layer supplied a value.
 
-Four more traps from the same runs (2026-09-18):
+Earlier test-run traps (2026-09-18; not reverified on beta.11):
 
-- **Any failing test makes `unity test` exit 2** — the same code the docs give a usage error. Do
+- **Failing tests were observed to make `unity test` exit 2** — also the documented usage-error code. Do
   not chase the CLI syntax; open the XML, the failure is in there.
 - **Raw NUnit args go after `--`, CLI flags before it.** `unity test … -- -testCategory '!Integration'`
   is honoured but nothing echoes that it was; `… -- --output x.xml` is swallowed by NUnit and the
@@ -219,18 +238,21 @@ failed` may **hang instead of exiting** (no XML, no `Temp/UnityLockfile`). That 
 client, not a live held project: report it as environmental, and do not commit — the unit has no
 evidence. One second invocation is allowed to get a clean error; never poll the first for minutes.
 
-## Exit codes are lossy
+## Exit codes and result envelopes
 
-Every non-zero editor exit collapses to **6** through `unity run`/`unity build`/`unity test`
-(`EditorApplication.Exit(1|2|3)` all surface as `6`). Never branch on the exit code for *why*
-something failed — parse the NUnit XML or `--format json`'s `.success`/`.errors`.
+An Editor process failure can surface as **6** through batch commands; test-report failures and
+CLI usage errors have also surfaced as 2. Use the command's contract plus NUnit XML or the JSON
+envelope to determine *why* it failed. Beta.11 CLI usage errors honor JSON/NDJSON with
+`INVALID_COMMAND_ARGS`, exit 2 (JSON and NDJSON unknown-option cases checked locally).
 
 `unity command` is different — it returns a structured envelope
 (`{ "success", "command", "data", "errors", "warnings" }`), so branch on `.success`/`.errors`
 directly; `--result-only` (beta.10) prints just the tool's result as parsed JSON, which is all a
-script usually wants (not combinable with `--detach`). But **`unity run --command <name>` still reports a false success**: exits `0` with
-top-level `"success": true` even on a failed `eval`, with only nested `data.result.success` false —
-branch on `data.result.success` there, never the exit code.
+script usually wants (not combinable with `--detach`). Earlier `unity run --command` runs reported
+exit 0/top-level success on a failed `eval`; inspect nested `data.result.success` when present too
+(not reverified on beta.11). For headless diagnostics, `unity run <project> --command <name>
+--log-file /abs/path/editor.log --timeout 120 -- <tool flags>` writes and streams a per-run log;
+add `--no-tail` to write it without streaming.
 
 | Code | Meaning |
 |---|---|
@@ -239,17 +261,17 @@ branch on `data.result.success` there, never the exit code.
 | 2 | usage error |
 | 3 | authentication failure |
 | 4 | precondition not met (no license, floating server not configured) |
-| 6 | editor exit collapsed (see above) |
+| 6 | editor process failure; `recompile`: compile failure (warnings too with `--strict`) |
 | 7 | service unreachable |
 | 130 | user cancelled |
 | 143 | SIGTERM |
 
 ## `unity command` parameter binding
 
-Named parameters only — **no positionals** (except `eval`'s single trailing token, which binds
-`--code`). `unity command ui_new SettingsPopup` silently drops the token; it must be `--name
-SettingsPopup`. An unknown parameter is refused with `INVALID_COMMAND_ARGS`, exit code still `0` —
-branch on `.success`.
+Prefer **named parameters**: `unity command ui_new --name SettingsPopup --project-path <dir>`.
+Older routes silently dropped positionals; newer Pipeline schemas can bind them, so inspect the
+schema before relying on them. CLI usage errors exit 2; editor-side argument rejection may have
+a different exit contract — always inspect `.success`/`.errors` for `INVALID_COMMAND_ARGS`.
 
 Two collisions to know:
 
@@ -297,6 +319,10 @@ other `ExecuteMenuItem`.
 
 ## Assets
 
+- For `.unitypackage` files, use `unity assets inspect <file>` before import. Import with
+  `unity assets import <file> --project <dir>`; export with `unity assets export Assets/Art
+  --output /abs/path/art.unitypackage --project <dir>`. Dependencies are included unless
+  `--no-dependencies` is set. These import/export operations use batch Editors: honor project ownership.
 - `find_assets --type` matches the asset's **main** type — a sprite-mode texture is `Texture2D`,
   not `Sprite` (the Sprite is a sub-asset). Use `--type Texture2D`, or `search --query "t:Sprite
   ..."`, which resolves sub-assets.
@@ -342,20 +368,24 @@ an `info` field carrying the not-automated warning when the editor was opened wi
 `localhost` resolves non-deterministically between the two. The token survives a domain reload but
 regenerates on editor restart.
 
-## Hot reload
+## Code reload
 
-`reload_file` applies method-body edits in place with no domain reload, but in the **Editor** a
-plain `[HotReload]` target is never auto-registered — the first call fails "No Methods Applied"
-until you call `HotReloadRegistry.RegisterReloadableMethod` yourself once per play session (players
-register automatically via `RuntimePipelineDriver`). Constraints: **void or `IEnumerator` methods
-only**; the compiled backend requires the body touch **public members only**
-(`reload_file_editor_interpreter` reaches private members too, at the cost of interpreted
-dispatch). A partial apply still reports `success: true` — read `Items`/`Diagnostics`, not
-`success` alone.
+Current [Pipeline 0.7 docs](https://docs.unity3d.com/Packages/com.unity.pipeline@0.7/manual/code-reload.html)
+use `[CodeReload]`/`[OnCodeReload]`, namespace `Unity.Pipeline.CodeReload`, `CodeReloadRegistry`,
+and `codereload_status`/`cleanup_codereload`. The previously installed 0.6 package had `HotReload` APIs despite
+the published changelog dating the rename to 0.6: inspect the resolved package before choosing names.
+
+`reload_file --filename <file>` applies edited method bodies without a domain reload. Tag entry
+methods before compiling/entering Play; they must be **public**, returning **void or `IEnumerator`**.
+The compiled backend may access only public host members; `reload_file_editor_interpreter` reaches
+private members via its supported C# subset. Current docs fix Editor registration on entering Play
+even when the runtime server is disabled; manual registration is an older-package workaround, not
+the default. No methods applied is a failure; unchanged bodies can report explicit up-to-date success.
+Inspect per-method results/diagnostics for partial applies, not just top-level success.
 
 A full recompile is **deferred while the Editor is in Play Mode** — `unity command recompile`
 hangs until Play Mode exits, so a playing editor silently keeps running old code. To load a
-structural change (new method, new `[CliArg]`, new field) into a playing editor: `editor_stop` →
+structural change (new entry point, new `[CliArg]`, new field) into a playing editor: `editor_stop` →
 recompile (now completes) → `editor_play`. `unity-wait recompile` does the `editor_stop` for you
 (set `UNITY_WAIT_NO_STOP=1` to fail fast instead) — it does not resume Play, so call `editor_play`
 yourself if you still need it.
@@ -373,17 +403,18 @@ working in it, so stopping Play to get work done is correct, not disruptive.
   into Safe Mode with six `CS0122` errors on that upgrade. If you need the descriptor's fields,
   read the JSON file directly (`port`/`evalToken` are stable, documented) rather than referencing
   those model types.
-- **0.7 removed `get_console_logs`** — use `console` (entries carry `logType`, a `session` and
-  `cursor`; a cursor from an earlier editor session comes back with `reset: true`) and it now
-  backfills the compile errors logged before capture started. `clear_console` clears both
-  buffers. The `[HotReload]`/`[OnHotReload]` attributes moved to a `Unity.Pipeline.Attributes`
-  assembly — an asmdef that referenced `Unity.Pipeline` only for them must reference that
-  instead (none of `game-core`'s six referencing asmdefs use them; they compiled unchanged).
-- `unity self-update` (alias `upgrade`) updates the CLI binary (`--check`, `--changelog`,
-  `--rollback`; the beta channel is `--channel beta`); `unity pipeline upgrade` bumps the
-  package in the manifest and needs an editor restart to resolve. `unity skill refresh`
-  re-renders the *package's* mirrored skill, not this hand-written one — after an upgrade,
-  re-verify this file against `unity <cmd> --help` and the two changelogs instead.
+- **0.7 removed `get_console_logs`** — use `console`. Pair `since` with `since_session`; a cursor
+  it cannot honor returns the tail with `reset: true` / `dropped: true`. Entries include `logType`
+  and `seeded`; `counts` describes the buffer, `groundTruth` the Editor's counts/compile state.
+  Compile errors predating capture are backfilled; `clear_console` clears both buffers.
+- **0.7 runtime builds:** `[CodeReload]`/`[OnCodeReload]` live in `Unity.Pipeline.Attributes`;
+  asmdefs using them must reference it. Runtime Pipeline/Roslyn are excluded from non-development
+  builds unless `ENABLE_RUNTIME_PIPELINE` is defined; attributes remain usable with no reload effect.
+- Upgrade with **plain `unity self-update`**, then `unity --version` / `unity self-update --changelog`.
+  Use `--check` to inspect availability or `--rollback` to undo; override channels only when requested.
+  `unity pipeline upgrade --project-path <dir>` separately updates the package and needs an Editor
+  restart to resolve. `unity skill refresh` updates the package's mirrored skill, not this file:
+  recheck affected sections against command help and both changelogs after an upgrade.
 - `unity open --wait` (macOS/Linux) blocks until the editor exits and reports a crash or
   licensing failure as exit 6 — for CI, not for a live session. A descriptor whose PID was
   recycled by another process is now recognised as stale rather than dialled.
@@ -391,16 +422,16 @@ working in it, so stopping Play to get work done is correct, not disruptive.
   install claude-code --local` mirrors it into the project and it shares this skill's trigger.
   It's useful to read once after each `unity pipeline upgrade` (it's guaranteed version-matched)
   but two skills answering the same trigger is a conflict, not a redundancy.
-- `unity mcp` survives recompiles — the Editor rotates its auth token on every domain reload, and
-  the MCP server retries once with a fresh token rather than failing every call.
+- `unity mcp` can survive recompiles: Pipeline has persisted the auth token across domain reloads
+  since 0.4. Editor restarts require fresh discovery/token; do not cache a descriptor indefinitely.
 
 ## Capturing what you built
 
-`capture_game_view` renders **a camera** to a PNG (base64, or a path with `save_path`); `screenshot`
-writes a PNG to disk and returns the path. Neither sees a **Screen Space Overlay** canvas — the
-camera's render target never gets that pass, so the PNG is bare skybox while the UI is plainly on
-screen. To capture such a UI headlessly, build it on a `ScreenSpaceCamera` canvas whose camera
-targets a `RenderTexture` and capture that camera instead.
+`capture_game_view` defaults to `--source camera`, which misses **Screen Space Overlay** canvases.
+Since Pipeline 0.4, `--source screen` captures the composited backbuffer, including overlays, in
+**Play Mode only**. Use `--save_path <path>` for a path-only result; `--include_inline_image true`
+also returns image data. A plain `screenshot` is not a substitute for composited screen capture.
 
-For a `Core.View` UI specifically, don't reach for these directly — use the `unity-ui` skill's
-`ui_*` pipeline (`ui_render`/`ui_validate`), never hand-edit prefab YAML.
+For `Core.View` UI, use `unity-ui` (`ui_render`/`ui_validate`) or `unity-ui-live` in Play Mode.
+Follow those skills' prefab/document workflow, including exporting again before applying after
+direct prefab edits.
