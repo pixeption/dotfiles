@@ -11,14 +11,20 @@ model the wrapper asks for (a stale catalogue: `ProviderModelNotFoundError`, 202
 
 Checks, against the live server:
   fence  /config has a permission.external_directory block
-  paths  the plan's repo and every checklist Repo outside -C match an `allow` in that block
-         (the most specific matching pattern wins; -C itself is the session's own directory)
+  paths  the plan's repo and every checklist Repo outside -C is allowed by that block, both as
+         given and symlink-resolved (-C itself is the session's own directory)
   model  -m is listed by /config/providers
-A server that is down is started. A failed check restarts it when no `opencode run --attach` /
-`opencode attach` process uses it and no session is busy, then checks again; a busy server is
-never restarted. Exit 0 ok · 1 not fixed (stderr says why) · 2 usage.
+A server that is down is started. A failed check restarts it only when no `opencode run`/`attach`
+process names its port and no session in any directory is busy, then checks again; a busy server,
+or one whose sessions cannot be listed, is never restarted. Exit 0 ok · 1 not fixed · 2 usage.
+
+The fence is evaluated as OpenCode 1.18.32 does (bundled Permission.evaluate / Wildcard.match /
+fromConfig): a leading `~/` or `$HOME` becomes the home dir, `*` matches any run of characters
+(slashes too), `?` one character, and the LAST matching rule in config order wins (no match: ask).
+A file's ask is `<its directory>/*`, from the given path on some tool paths and the canonical one on
+others, so a repo passes only when both spellings are allowed.
 """
-import argparse, importlib.machinery, importlib.util, json, os, re, subprocess, sys, time, urllib.request
+import argparse, importlib.machinery, importlib.util, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 
 
 def say(msg):
@@ -38,20 +44,23 @@ def get(url, path):
         return None
 
 
-def glob_re(pattern):
+def expand_home(pattern):
     home = os.path.expanduser("~")
-    pattern = home + pattern[1:] if pattern.startswith("~") else pattern
-    return re.compile(".*".join(re.escape(part) for part in re.split(r"\*+", pattern)) + "$")
+    if pattern == "~" or pattern.startswith("~/"):
+        return home + pattern[1:]
+    return home + pattern[5:] if pattern.startswith("$HOME") else pattern
+
+
+def wildcard(pattern, text):
+    regex = re.escape(expand_home(pattern)).replace(r"\*", ".*").replace(r"\?", ".")
+    return re.fullmatch(regex, text, re.S) is not None
 
 
 def allowed(fence, path):
-    """OpenCode's wildcard rule: `*` matches anything; the most specific (longest) matching pattern wins."""
-    probes = {os.path.join(os.path.abspath(path), "x"), os.path.join(os.path.realpath(path), "x")}
-    for probe in probes:
-        hits = sorted((p for p in fence if glob_re(p).match(probe)), key=len)
-        if hits and fence[hits[-1]] == "allow":
-            return True
-    return False
+    """The last fence rule matching `<dir>/*` decides, for the given and the resolved spelling alike."""
+    probes = {os.path.join(os.path.abspath(path), "*"), os.path.join(os.path.realpath(path), "*")}
+    last_match = lambda probe: next((fence[p] for p in reversed(list(fence)) if wildcard(p, probe)), "ask")
+    return all(last_match(probe) == "allow" for probe in probes)
 
 
 def plan_repos(plan):
@@ -84,10 +93,26 @@ def problems(url, model, workdir, repos):
     return out
 
 
-def busy(url):
-    status = get(url, "/session/status") or {}
-    clients = subprocess.run(["pgrep", "-f", f"opencode (run --attach|attach) {re.escape(url)}"], capture_output=True, text=True)
-    return any(v.get("type") == "busy" for v in status.values()) or clients.stdout.strip() != ""
+def session_busy(url):
+    """/session/status answers per directory, so every directory with a session is asked; a listing
+    or a status that cannot be read counts as busy."""
+    sessions = get(url, "/experimental/session?limit=100000")
+    if not isinstance(sessions, list):
+        return True
+    for directory in {s.get("directory") for s in sessions}:
+        status = get(url, "/session/status?directory=" + urllib.parse.quote(directory or "", safe=""))
+        if not isinstance(status, dict) or any(v.get("type") != "idle" for v in status.values()):
+            return True
+    return False
+
+
+def client_attached(port):
+    clients = subprocess.run(["pgrep", "-f", f"opencode (run|attach) .*:{port}( |/|$)"], capture_output=True, text=True)
+    return clients.returncode != 1
+
+
+def busy(url, port):
+    return client_attached(port) or session_busy(url)
 
 
 def wait(url, up, seconds):
@@ -124,10 +149,10 @@ def main():
     found = problems(url, a.model, workdir, repos)
     if not found:
         return 0
-    if a.no_restart or busy(url):
+    if a.no_restart or busy(url, a.port):
         for p in found:
             say(p)
-        say("not restarting: " + ("--no-restart" if a.no_restart else "a session is busy or a client is attached — let it finish, then re-run"))
+        say("not restarting: " + ("--no-restart" if a.no_restart else "a session is busy, its status is unreadable, or a client is attached — let it finish, then re-run"))
         return 1
     say(f"{'; '.join(found)} — restarting the idle server")
     subprocess.run(["pkill", "-f", f"opencode serve --port {a.port}( |$)"])

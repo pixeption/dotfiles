@@ -74,9 +74,11 @@ that exists.
 ```
 
 Exit 0 = the server is up, carries the fence, lists the model, and every repo in the plan's
-`Repo` column outside `-C` (plus the plan's own repo) is inside the fence. A failure restarts an
-idle server and checks again; a busy one is never restarted. What still fails names the path to
-allow in `opencode.jsonc` — an owner edit; route those units to Claude until then.
+`Repo` column outside `-C` (plus the plan's own repo) is inside the fence, as given and
+symlink-resolved (the last matching fence rule wins, as in OpenCode). A failure restarts an idle
+server and checks again; a server with a session busy in any directory, an unreadable session
+list or an attached `opencode run`/`attach` client is never restarted. What still fails names the
+path to allow in `opencode.jsonc` — an owner edit; route those units to Claude until then.
 
 ## 1. Size the plan first
 

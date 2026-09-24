@@ -671,7 +671,7 @@ FIX = os.path.join(T, "fixture.json")
 good = {"/config": {"permission": {"external_directory": {"*": "deny", T + "/**": "allow"}},
                     "agent": {"review-discovery": {"permission": {"edit": "deny"}}}},
         "/config/providers": {"providers": [{"id": "openai", "models": {"gpt-6-luna": {}, "gpt-6-sol": {}}}]},
-        "/session/status": {}, "/permission": []}
+        "/session/status": {}, "/permission": [], "/experimental/session": []}
 stale_catalogue = {**good, "/config/providers": {"providers": [{"id": "openai", "models": {"gpt-5.6-luna": {}}}]}}
 fenv = {**os.environ, "PATH": fake_bin + os.pathsep + os.environ["PATH"], "FAKE_FIXTURE": FIX}
 
@@ -703,10 +703,33 @@ r = preflight("-m", "openai/gpt-6-luna", "--no-restart")
 check(r.returncode == 1 and f"outside the live fence: {PLANS}" in r.stderr, f"the plan's repo outside the fence is named: {r.stderr}")
 write(FIX, json.dumps({**good, "/config": {}}))
 check("no permission fence" in preflight("-m", "openai/gpt-6-luna", "--no-restart").stderr, "a fenceless server is refused")
-write(FIX, json.dumps({**stale_catalogue, "/session/status": {"ses_other": {"type": "busy"}}}))
+write(FIX, json.dumps({**good, "/config": {"permission": {"external_directory": {T + "/plans/**": "allow", T + "/**": "deny"}}}}))
+r = preflight("-m", "openai/gpt-6-luna", "--no-restart")
+check(r.returncode == 1 and f"outside the live fence: {PLANS}" in r.stderr, f"the last matching fence rule wins, not the longest: {r.stderr}")
+os.symlink(CODE, os.path.join(T, "code-link"))
+LN = os.path.join(PLANS, "docs/plans/2026-01-14-link.md")
+write(LN, plan_md([("L1", 1, "")], repo_rel="../code-link"))
+write(FIX, json.dumps({**good, "/config": {"permission": {"external_directory": {"*": "deny", T + "/plans/**": "allow", T + "/code-link/**": "allow"}}}}))
+r = subprocess.run([PREFLIGHT, "--url", URL, "--port", str(PORT), "-C", CODE2, "--plan", LN, "-m", "openai/gpt-6-luna", "--no-restart"],
+                   capture_output=True, text=True, env=fenv)
+check(r.returncode == 1 and "outside the live fence: " + os.path.join(T, "code-link") in r.stderr,
+      f"a symlinked repo passes only when its resolved path is allowed too: {r.stderr}")
+OTHER = os.path.join(T, "other-dir")
+cross = {**stale_catalogue, "/experimental/session": [{"id": "ses_other", "directory": OTHER}],
+         f"/session/status?directory={OTHER}": {"ses_other": {"type": "busy"}}}
+write(FIX, json.dumps(cross))
 r = preflight("-m", "openai/gpt-6-luna")
 check(r.returncode == 1 and "not in /config/providers" in r.stderr and "a session is busy" in r.stderr and server.poll() is None,
-      f"a busy server with a stale catalogue is refused, never restarted: {r.stderr}")
+      f"a session busy in another directory refuses the restart: {r.stderr}")
+write(FIX, json.dumps({k: v for k, v in stale_catalogue.items() if k != "/experimental/session"}))
+r = preflight("-m", "openai/gpt-6-luna")
+check(r.returncode == 1 and "a session is busy" in r.stderr and server.poll() is None, f"sessions that cannot be listed count as busy: {r.stderr}")
+write(FIX, json.dumps(stale_catalogue))
+client = subprocess.Popen(["bash", "-c", f'exec -a "opencode attach {URL}" sleep 30'])
+time.sleep(0.2)
+r = preflight("-m", "openai/gpt-6-luna")
+client.kill(); client.wait()
+check(r.returncode == 1 and "a client is attached" in r.stderr and server.poll() is None, f"an attached client refuses the restart: {r.stderr}")
 write(FIX, json.dumps(stale_catalogue))
 write(FIX + ".after", json.dumps(good))
 r = preflight("-m", "openai/gpt-6-luna")
