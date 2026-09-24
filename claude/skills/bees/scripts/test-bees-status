@@ -219,6 +219,9 @@ write(TR5, "\n".join([said(handed("BEES: results=A1:done:-\n")), continuation_us
                       said({"type": "text", "text": "still working"}), said(handed("BEES: results=A1:done:-\n"))]) + "\n")
 check(bs.handback(TR5) == "BEES: results=A1:done:-\n",
       f"a hand-back in the final turn wins over that turn's plain text: {bs.handback(TR5)!r}")
+TR6 = os.path.join(T, "agent6.jsonl")
+write(TR6, "\n".join([said({"type": "text", "text": "old report"}), continuation_user]) + "\n")
+check(bs.handback(TR6) == "", f"a continuation with no new assistant text captures nothing: {bs.handback(TR6)!r}")
 write(TR + "3", said({"type": "text", "text": "  "}) + "\n")
 r = run("--plan", P, "capture-bee", "-u", "A1", "--role", "impl", "--ctx", "1000", "--from", TR + "3")
 check(r.returncode != 0 and "no report in" in r.stderr and listing(W) == [], f"--from without a report writes nothing: {r.stderr}")

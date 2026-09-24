@@ -311,7 +311,7 @@ def handback(transcript):
                 content = (entry.get("message") or {}).get("content")
                 blocks = content if isinstance(content, list) else []
                 if isinstance(content, str) or any(isinstance(c, dict) and c.get("type") == "text" for c in blocks):
-                    handed = None
+                    handed = said = None
                 continue
             if entry.get("type") != "assistant":
                 continue
