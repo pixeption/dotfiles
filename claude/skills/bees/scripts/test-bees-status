@@ -707,7 +707,9 @@ def preflight(*extra, plan=RF):
 
 server = serve(good)
 atexit.register(lambda: subprocess.run(["pkill", "-f", f"opencode serve --port {PORT}( |$)"]))
-check(preflight("-m", "openai/gpt-6-luna").returncode == 0, "preflight passes a fenced server listing the model")
+r = preflight("-m", "openai/gpt-6-luna")
+check(r.returncode == 0 and r.stderr == f"opencode-preflight: ok · {URL} running · model openai/gpt-6-luna listed · fence allows {PLANS}\n",
+      f"preflight passes a fenced server listing the model, in one line naming what it checked: {r.stderr!r}")
 r = preflight("-m", "openai/gpt-6-luna", "--no-restart", plan=MR)
 check(r.returncode == 0, f"repos under the fence pass: {r.stderr}")
 write(FIX, json.dumps({**good, "/config": {"permission": {"external_directory": {"*": "deny", CODE + "/**": "allow"}}}}))
@@ -745,7 +747,8 @@ check(r.returncode == 1 and "a client is attached" in r.stderr and server.poll()
 write(FIX, json.dumps(stale_catalogue))
 write(FIX + ".after", json.dumps(good))
 r = preflight("-m", "openai/gpt-6-luna")
-check(r.returncode == 0 and "restarting the idle server" in r.stderr, f"an idle server with a stale catalogue is restarted: {r.stderr}")
+check(r.returncode == 0 and "restarting the idle server" in r.stderr and r.stderr.splitlines()[-1].startswith(f"opencode-preflight: ok · {URL} restarted"),
+      f"an idle server with a stale catalogue is restarted: {r.stderr}")
 server.wait(timeout=5)
 check(server.returncode is not None, "and the old server is gone")
 os.remove(FIX + ".after")

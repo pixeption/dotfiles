@@ -16,7 +16,8 @@ Checks, against the live server:
   model  -m is listed by /config/providers
 A server that is down is started. A failed check restarts it only when no `opencode run`/`attach`
 process names its port and no session in any directory is busy, then checks again; a busy server,
-or one whose sessions cannot be listed, is never restarted. Exit 0 ok · 1 not fixed · 2 usage.
+or one whose sessions cannot be listed, is never restarted. Success prints one line naming the
+server state, the model and the repos checked against the fence. Exit 0 ok · 1 not fixed · 2 usage.
 
 The fence is evaluated as OpenCode 1.18.32 does (bundled Permission.evaluate / Wildcard.match /
 fromConfig): a leading `~/` or `$HOME` becomes the home dir, `*` matches any run of characters
@@ -72,6 +73,11 @@ def plan_repos(plan):
     return {p.root} | {path for u in p.units.values() for path in u["repo_paths"]}
 
 
+def outside(workdir, repos):
+    inside = lambda path: os.path.realpath(path) == workdir or os.path.realpath(path).startswith(workdir + os.sep)
+    return sorted(r for r in repos if not inside(r))
+
+
 def problems(url, model, workdir, repos):
     config = get(url, "/config")
     if config is None:
@@ -81,10 +87,9 @@ def problems(url, model, workdir, repos):
     if not isinstance(fence, dict):
         out.append("the server has no permission fence (external_directory) — every outside path would be an ask nobody answers")
     else:
-        inside = lambda path: os.path.realpath(path) == workdir or os.path.realpath(path).startswith(workdir + os.sep)
-        outside = sorted(r for r in repos if not inside(r) and not allowed(fence, r))
-        if outside:
-            out.append(f"outside the live fence: {', '.join(outside)} — allow them in ~/.config/opencode/opencode.jsonc")
+        denied = [r for r in outside(workdir, repos) if not allowed(fence, r)]
+        if denied:
+            out.append(f"outside the live fence: {', '.join(denied)} — allow them in ~/.config/opencode/opencode.jsonc")
     provider, _, name = model.partition("/")
     catalogue = get(url, "/config/providers") or {}
     listed = next((p.get("models", {}) for p in catalogue.get("providers", []) if p.get("id") == provider), {})
@@ -144,10 +149,15 @@ def main():
     url = a.url or f"http://127.0.0.1:{a.port}"
     workdir = os.path.realpath(a.dir)
     repos = plan_repos(a.plan) if a.plan else set()
+    checked = " ".join(outside(workdir, repos)) or "no repo outside -C"
+    ok = lambda server: say(f"ok · {url} {server} · model {a.model} listed · fence allows {checked}" + ("" if a.plan else " (no --plan)"))
+    server = "running"
     if get(url, "/config") is None:
         start(url, a.port, a.serverlog)
+        server = "started"
     found = problems(url, a.model, workdir, repos)
     if not found:
+        ok(server)
         return 0
     if a.no_restart or busy(url, a.port):
         for p in found:
@@ -161,7 +171,10 @@ def main():
     found = problems(url, a.model, workdir, repos)
     for p in found:
         say(f"after restart: {p}")
-    return 1 if found else 0
+    if found:
+        return 1
+    ok("restarted")
+    return 0
 
 
 if __name__ == "__main__":
