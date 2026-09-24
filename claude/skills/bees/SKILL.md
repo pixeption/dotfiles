@@ -488,12 +488,12 @@ file is written. A Claude bee has no wrapper: after its Agent result, save the r
 not a transcription — with the harness notification's context figure, never the agent's own.
 Capture after the **final** `completed` task-notification: a bee can hand its report back, or send
 an interim notification while its background work is pending, before that one arrives, and the
-earlier figure is low (257,888 vs the final 294,032 on one bee, 2026-09-24):
+earlier figure is low (257,888 vs the final 294,032 on one bee, 2026-09-24). `--from` takes that
+notification's `output_file` (the bee's transcript) and saves its last `SubagentHandback` message
+(else its last text), dedented — nothing is retyped; a report on stdin still works:
 
 ```sh
-bees-status --plan <plan.md> capture-bee -u G1 [-u G2] --role impl|review --ctx 118000 <<'REPORT'
-<the bee's report, verbatim>
-REPORT
+bees-status --plan <plan.md> capture-bee -u G1 [-u G2] --role impl|review --ctx 118000 --from <output_file>
 ```
 
 `.work/` is never copied or synced: its mtimes are the round times the status is ordered by.

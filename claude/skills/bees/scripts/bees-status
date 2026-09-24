@@ -10,13 +10,13 @@ renders the Status column back into the plan; it is idempotent, so it can fire f
   bees-status --plan <plan.md> init [--repo <rel>]          convert an existing checklist to the bees columns
   bees-status --plan <plan.md> note [unit] "text"         first token: accept: decision: gap:
                                                             concern: blocked-on: handoff:
-  bees-status --plan <plan.md> capture-bee -u <unit>... --role impl|review --ctx <tokens> < report
+  bees-status --plan <plan.md> capture-bee -u <unit>... --role impl|review --ctx <tokens> [--from <output_file>] [< report]
   bees-status round-out --role impl|review -u <unit>... -o <plan>.work/[<out-file>]   (wrappers)
   bees-status refresh [--root <dir>] [--all]   hooks: refresh the plans this Claude session wrote a round,
                                           capture or note to (.work/.sessions/<session_id>); --all (by hand):
                                           every plan with a .work/
 """
-import argparse, contextlib, datetime as dt, fcntl, functools, glob, json, os, re, subprocess, sys, tempfile
+import argparse, contextlib, datetime as dt, fcntl, functools, glob, json, os, re, subprocess, sys, tempfile, textwrap
 
 
 def die(msg):
@@ -292,11 +292,32 @@ def parse_bees(role, text, units, known):
     return entries, None
 
 
-def cmd_capture_bee(plan, units, role, ctx):
+def handback(transcript):
+    """The bee's report from its JSONL transcript (the notification's output_file): its last
+    SubagentHandback message, else its last assistant text, dedented."""
+    handed, said = None, None
+    with open(transcript, encoding="utf-8") as f:
+        for line in f:
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(entry, dict) or entry.get("type") != "assistant":
+                continue
+            for c in (entry.get("message") or {}).get("content") or []:
+                if isinstance(c, dict) and c.get("type") == "tool_use" and c.get("name") == "SubagentHandback":
+                    handed = (c.get("input") or {}).get("message") or handed
+                elif isinstance(c, dict) and c.get("type") == "text" and c.get("text", "").strip():
+                    said = c["text"]
+    report = handed or said
+    return textwrap.dedent(report).strip("\n") + "\n" if report else ""
+
+
+def cmd_capture_bee(plan, units, role, ctx, transcript=None):
     role in ROLES or die(f"--role must be impl or review, not {role!r}")
     re.fullmatch(r"[1-9][0-9]*", ctx or "") or die(f"--ctx must be a positive base-10 integer, not {ctx!r}")
-    report = sys.stdin.read()
-    report.strip() or die("empty report on stdin")
+    report = handback(transcript) if transcript else sys.stdin.read()
+    report.strip() or die(f"no report in {transcript}" if transcript else "empty report on stdin")
     _, out = round_out(role, units, plan.work)
     atomic_write(out, report)
     atomic_write(out + ".usage", json.dumps({"context_tokens": int(ctx), "source": "harness"}) + "\n")
@@ -651,6 +672,7 @@ def main(argv):
     sub = p.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("capture-bee")
     s.add_argument("-u", "--unit", action="append", default=[]); s.add_argument("--role", required=True); s.add_argument("--ctx", required=True)
+    s.add_argument("--from", dest="transcript")
     s = sub.add_parser("round-out")
     s.add_argument("-u", "--unit", action="append", default=[]); s.add_argument("--role", required=True); s.add_argument("-o", required=True)
     s = sub.add_parser("note")
@@ -677,7 +699,7 @@ def main(argv):
         return cmd_init(os.path.abspath(a.plan), a.repo)
     plan = Plan(a.plan)
     if a.cmd == "capture-bee":
-        return cmd_capture_bee(plan, a.unit, a.role, a.ctx)
+        return cmd_capture_bee(plan, a.unit, a.role, a.ctx, a.transcript)
     if a.cmd == "note":
         return cmd_note(plan, a.args)
     if a.cmd == "show":

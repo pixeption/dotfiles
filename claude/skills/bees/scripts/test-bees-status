@@ -196,11 +196,29 @@ for args, stdin, why in [(["capture-bee", "-u", "A1", "--role", "impl", "--ctx",
                          *[(["capture-bee", "-u", "A1", "--role", "impl", "--ctx", c], report, f"--ctx {c}") for c in ("12k", "0", "-5", "0x10", "1.5")]]:
     r = run("--plan", P, *args, stdin=stdin)
     check(r.returncode != 0 and listing(W) == [], f"capture-bee rejects {why} without artifacts ({r.stderr.strip()})")
+TR = os.path.join(T, "agent.jsonl")
+said = lambda *content: json.dumps({"type": "assistant", "message": {"role": "assistant", "content": list(content)}})
+handed = lambda msg: {"type": "tool_use", "name": "SubagentHandback", "input": {"message": msg}}
+write(TR, "\n".join(["not json", said({"type": "text", "text": "working"}), said(handed("round 1")),
+                     said(handed("    Outcome: Done\n      detail\n    BEES: results=A1:done:-\n")),
+                     json.dumps({"type": "user", "message": {"content": [{"type": "tool_result", "content": "delivered"}]}}),
+                     said({"type": "text", "text": "summary for the owner"})]) + "\n")
+check(bs.handback(TR) == "Outcome: Done\n  detail\nBEES: results=A1:done:-\n", f"--from takes the last hand-back, dedented: {bs.handback(TR)!r}")
+write(TR + "2", said({"type": "text", "text": "Outcome: Done"}) + "\n" + said({"type": "text", "text": "BEES: results=A1:done:-"}) + "\n")
+check(bs.handback(TR + "2") == "BEES: results=A1:done:-\n", "without a hand-back, the last assistant text")
+write(TR + "3", said({"type": "text", "text": "  "}) + "\n")
+r = run("--plan", P, "capture-bee", "-u", "A1", "--role", "impl", "--ctx", "1000", "--from", TR + "3")
+check(r.returncode != 0 and "no report in" in r.stderr and listing(W) == [], f"--from without a report writes nothing: {r.stderr}")
 r = run("--plan", P, "capture-bee", "-u", "A1", "--role", "impl", "--ctx", "91000", stdin="no footer at all\n")
 check(r.returncode == 0 and listing(W) == ["impl-A1-r1.txt", "impl-A1-r1.txt.usage"], f"a malformed report is kept: {r.stderr}")
 r = run("capture-bee", "-u", "F2", "--role", "review", "--ctx", "5000", stdin="x\n", env={"BEES_PLAN": P2})
 check(r.returncode == 0 and listing(W2) == ["review-F2-r1.txt", "review-F2-r1.txt.usage"] and len(listing(W)) == 2,
       "BEES_PLAN selects the plan; the other plan's .work is untouched")
+r = run("capture-bee", "-u", "F2", "--role", "impl", "--ctx", "5000", "--from", TR, env={"BEES_PLAN": P2})
+check(r.returncode == 0 and "malformed" in r.stdout and read(os.path.join(W2, "impl-F2-r1.txt")) == bs.handback(TR),
+      f"capture-bee --from saves the hand-back verbatim: {r.stdout}")
+for name in ("impl-F2-r1.txt", "impl-F2-r1.txt.usage"):
+    os.remove(os.path.join(W2, name))
 check(run("capture-bee", "-u", "A1", "--role", "impl", "--ctx", "1", stdin="x", env={"BEES_PLAN": ""}).returncode != 0, "no plan → error")
 
 write(os.path.join(W, "impl-A2-r1.txt.log"), "{}")
