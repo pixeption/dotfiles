@@ -157,6 +157,15 @@
                             "to": [{ "pointing_button": "button8" }]
                         }
                     ]
+                },
+                {
+                    "identifiers": { "is_keyboard": true },
+                    "simple_modifications": [
+                        {
+                            "from": { "key_code": "caps_lock" },
+                            "to": [{ "key_code": "left_control" }]
+                        }
+                    ]
                 }
             ],
             "name": "Default profile",
