@@ -54,8 +54,12 @@ and usage.
   `review-<unit>[+<unit>…]-r<N>.txt`; without them it fails before writing. The out-files outlive
   the session, and the wrapper's exit refreshes the plan's `Status` column (bees skill §9).
 - The out-file holds **only the final answer** — the last message's text (findings, suggestions,
-  verdict); earlier steps' narration stays in the `.log`. A failed round (an `error` event, or no
-  answer) gets an out-file starting `Blocked: <reason>` and exit 1. The `.log` is a
+  verdict); earlier steps' narration stays in the `.log`. The round runs through codex-implementor's
+  `opencode-round`, so a permission ask is rejected and the run stopped as for an implementor. A
+  failed round (that ask, an `error` event, a non-zero exit, no answer, an unfinished final step, or
+  an answer not ending in `APPROVE`/`CHANGES_REQUIRED`) gets an out-file starting `Blocked: <reason>`
+  and ending `BEES: results=<unit>:blocked:-`, which the board shows as `review blocked` and never
+  counts as a verdict, and exit 1. The `.log` is a
   liveness aid only — never read it into context. Under the ChatGPT oauth credential `.usage`
   `cost` reads 0; report tokens.
 - **Auto-compaction (OpenCode channel only).** The server compacts a session on its own past the

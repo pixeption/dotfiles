@@ -35,11 +35,13 @@
 #    opencode.jsonc and its model catalogue at STARTUP only — a server older than the fence makes
 #    every external path an "ask" nobody answers (a round waited a whole night, 2026-09-20), and a
 #    stale catalogue fails the round's first step (2026-09-24). An idle server is restarted.
-# 7. Watches the run: a pending permission ask for this session means the fence did not cover it.
-#    The watcher rejects it and stops the run. Local HTTP only, no tokens.
-# 8. A round that did not finish — a permission ask, an `error` event in the log, or no final
-#    message — gets `Blocked: <reason>` and `BEES: results=<unit>:blocked:-` for each unit in its
-#    out-file, and the wrapper exits 1, so neither the board nor the notification reads it as done.
+# 7. Runs the round through `opencode-round` (this dir, shared with opencode-review): a pending
+#    permission ask for this session means the fence did not cover it, so it is rejected and the run
+#    stopped. Local HTTP only, no tokens.
+# 8. A round that did not finish — a permission ask, an `error` event, a non-zero `opencode run`
+#    exit, no final message, or a final step that did not stop — gets `Blocked: <reason>` and
+#    `BEES: results=<unit>:blocked:-` for each unit in its out-file, and the wrapper exits 1, so
+#    neither the board nor the notification reads it as done.
 #
 # A NEW session (no -s) gets a preamble prepended: read ~/.claude/CLAUDE.md and every CLAUDE.md in
 # the worktree, and the skills folders — so opencode loads the same guidance a Claude/codex session
@@ -136,7 +138,6 @@ Follow them as user and repository guidance. Skills are available at ~/.claude/s
 prompt="$(cat "$promptfile")"
 [ -n "$session" ] || prompt="${preamble}${prompt}"
 logfile="${outfile}.log"
-sessionfile="${outfile}.session"
 usagefile="${outfile}.usage"
 
 (cd "$workdir" && pwd -P) > "${outfile}.cwd"
@@ -144,46 +145,15 @@ session_args=()
 [ -n "$session" ] && session_args=(--session "$session")
 
 # --dir is the only isolation opencode has: a worktree is reviewed as a diff before merging; a real
-# checkout is edited in place (the permission block in opencode.jsonc is the fence). < /dev/null keeps
-# stdin closed.
-opencode run --attach "$url" --dir "$workdir" --auto \
+# checkout is edited in place (the permission block in opencode.jsonc is the fence). opencode-round
+# watches for asks, and fails the round unless it finished (see its header).
+blocked=""
+"$(dirname "$0")/opencode-round" --url "$url" -C "$workdir" --role impl -o "$outfile" "${units[@]}" -- \
+  opencode run --attach "$url" --dir "$workdir" --auto \
   -m "$model" --variant "$effort" --title "$title" \
   --format json "${session_args[@]}" \
-  "$prompt" < /dev/null > "$logfile" 2>&1 &
-runpid=$!
-
-# Watcher: with the fence loaded, a pending ask means the unit reached for something the fence
-# does not cover. Nobody headless can answer it, so reject it, stop the run and say why.
-session_id() { [ -n "$session" ] && echo "$session" || jq -r 'select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true; }
-blocked=""
-tick=0
-while kill -0 "$runpid" 2>/dev/null; do
-  sleep 1; tick=$((tick + 1)); [ $((tick % 15)) = 0 ] || continue
-  sid="$(session_id)"; [ -n "$sid" ] || continue
-  ask="$(curl -sf "${url}/permission" | jq -c --arg s "$sid" '.[] | select(.sessionID==$s)' | head -1 || true)"
-  [ -n "$ask" ] || continue
-  askid="$(jq -r .id <<<"$ask")"
-  blocked="Blocked: permission $(jq -r '.permission' <<<"$ask") $(jq -c .patterns <<<"$ask") — outside the fence in ~/.config/opencode/opencode.jsonc; widen it or re-brief."
-  curl -sf -X POST "${url}/session/${sid}/permission/${askid}/reply" -H 'content-type: application/json' -d '{"reply":"reject","message":"headless run: outside the fence"}' >/dev/null || true
-  kill "$runpid" 2>/dev/null || true
-done
-wait "$runpid" 2>/dev/null || true
-
-# Session id: present on every event.
-sid="$(session_id)"
-[ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
-"$(dirname "$0")/extract-opencode-final" "$logfile" "$sid" > "$outfile" 2>/dev/null || true
-apierr="$(jq -rR 'fromjson? | select(.type=="error") | .error | "\(.name // "error")\(if .data.ref then " (\(.data.ref))" else "" end): \(.data.message // "")"' "$logfile" 2>/dev/null | head -1)"
-[ -z "$blocked" ] && [ -n "$apierr" ] && blocked="Blocked: opencode ${apierr} (server log: ~/.local/share/opencode/log/ or ${outfile%/*}/opencode-serve-${port}.log)"
-[ -z "$blocked" ] && [ ! -s "$outfile" ] && blocked="Blocked: the round ended without a final message (see ${logfile})"
-if [ -n "$blocked" ]; then
-  results="$(for ((i = 1; i < ${#units[@]}; i += 2)); do printf '%s:blocked:-;' "${units[$i]}"; done)"
-  partial="$(grep -v '^BEES:' "$outfile" || true)"
-  printf '%s\n\n%s%sBEES: results=%s\n' "$blocked" "$partial" "${partial:+$'\n\n'}" "${results%;}" > "$outfile"
-  echo "opencode-implement: $blocked" >&2
-fi
-# Usage/cost from the final step_finish OF THIS SESSION (scoped — see extract-opencode-usage).
-"$(dirname "$0")/extract-opencode-usage" "$logfile" "$sid" > "$usagefile" || true
+  "$prompt" || blocked="$(head -1 "$outfile")"
+sid="$(cat "${outfile}.session" 2>/dev/null || true)"
 
 ctx="$(jq -r '.context_tokens // empty' "$usagefile" 2>/dev/null)"
 compacted="$(jq -r 'if .compacted then "; COMPACTED (\(if .compacted.auto then "auto" else "manual" end), overflow=\(.compacted.overflow)) — context above is post-compaction, history before it is now a summary" else "" end' "$usagefile" 2>/dev/null)"

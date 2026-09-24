@@ -78,11 +78,13 @@ catalogue at startup only, so a failed check restarts it when idle (no busy sess
 run --attach`/`attach` client) and is refused when busy — a stale catalogue once failed a round's
 first step with `ProviderModelNotFoundError` for an id that existed (2026-09-24). The wrapper then
 runs one round via `--dir` with `--auto`, watches it, and records the final message, session id,
-usage and its own PID (`.pid`). The watcher polls the server's pending-permission list every 15 s
-(local HTTP, no tokens): an ask for this session means the unit reached outside the fence, so it
-rejects it and stops the run. **A round that did not finish** — that ask, an `error` event in the
-log, or no final message — gets `Blocked: <reason>` plus `BEES: results=<unit>:blocked:-` in its
-out-file and the wrapper exits 1. Widen the fence or re-brief; never answer an ask by hand in the
+usage and its own PID (`.pid`). The round runs through `scripts/opencode-round` (shared with
+`opencode-review`), which polls the server's pending-permission list for the session's directory
+every 15 s (local HTTP, no tokens; the list is scoped per directory): an ask for this session means
+the unit reached outside the fence, so it rejects it and stops the run. **A round that did not
+finish** — that ask, an `error` event in the log, a non-zero `opencode run` exit, no final message,
+or a final step that did not end with reason `stop` — gets `Blocked: <reason>` plus
+`BEES: results=<unit>:blocked:-` in its out-file and the wrapper exits 1. Widen the fence or re-brief; never answer an ask by hand in the
 TUI and carry on.
 
 ```bash

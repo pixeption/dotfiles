@@ -295,7 +295,8 @@ Rules of continuation:
   - `STALE` — no log growth in 20 minutes and not BUSY: the run died. `quiet but BUSY` is a long
     tool call (a Unity suite can legitimately be silent for 20 minutes) and is left alone.
   - `failed (…)` — the wrapper finished but the out-file is empty or carries its `Blocked:` line
-    (an `error` event, a rejected permission ask, no final message; the wrapper also exited 1).
+    (an `error` event, a rejected permission ask, a non-zero `opencode run` exit, no final message,
+    a final step that did not stop, a review without a verdict; the wrapper also exited 1).
     `DEAD` — the wrapper's PID (`.pid`) is gone and it never wrote `.usage`.
   Then check the editor's state, if the unit held a project. A stuck round is reported to the
   owner in one line with what `bees-watch` printed; it is never left for the next session.
@@ -519,7 +520,9 @@ a trailer in only some of the row's repos) · 🔴 blocked /
 needs-decision · 🔵 landed (a trailer; `(review open)` while the newest valid review after it
 names open ids for the unit) · ✅ accepted (an `accept:` note; the heading gets
 `**✅ Done <date>**`). A report without its `BEES:` line shows as `malformed result` with its
-path on the board — you decide whether the work or only the report is repeated.
+path on the board — you decide whether the work or only the report is repeated. A failed codex
+review (its wrapper's `Blocked:` out-file, ending `BEES: results=<unit>:blocked:-`) shows as
+`review blocked` and never counts as a verdict.
 
 **Refresh is automatic.** Each wrapper's exit runs `show --write` for its plan; a bee's
 `SubagentStop` and every `Stop` (this skill's hooks) run it for each plan with a `.work/` dir whose

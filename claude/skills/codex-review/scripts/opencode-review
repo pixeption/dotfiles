@@ -17,8 +17,12 @@
 #    review-followup with --no-subagents, both under --auto.
 # 3. Writes ONLY the final answer (findings + verdict: the last message's text, via
 #    codex-implementor's `extract-opencode-final`) to the out-file; the raw JSONL stream, narration
-#    included, goes to <out-file>.log (a liveness aid, never read it into context). A failed round
-#    (an `error` event, or no answer) gets a `Blocked: <reason>` out-file and exit 1.
+#    included, goes to <out-file>.log (a liveness aid, never read it into context). The round runs
+#    through codex-implementor's `opencode-round`, shared with opencode-implement: a pending
+#    permission ask is rejected and the run stopped, and a round with an ask, an `error` event, a
+#    non-zero exit, no answer, an unfinished final step or no terminal verdict gets `Blocked:
+#    <reason>` and `BEES: results=<unit>:blocked:-` per -u (bees-status: "review blocked", never a
+#    verdict) and exit 1.
 # 4. Records the session id (<out-file>.session) so later rounds RESUME it (-s). No 30-min TTL.
 # 5. Records tokens/cost (<out-file>.usage) via `extract-opencode-usage` (codex-implementor
 #    skill) — the shared extractor also used by opencode-implement. It scopes to THIS
@@ -122,9 +126,7 @@ if ! curl -sf "${url}/config" |
   exit 1
 fi
 logfile="${outfile}.log"
-sessionfile="${outfile}.session"
 usagefile="${outfile}.usage"
-
 
 (cd "$workdir" && pwd -P) > "${outfile}.cwd"
 echo $$ > "${outfile}.pid"
@@ -132,28 +134,19 @@ session_args=()
 [ -n "$session" ] && session_args=(--session "$session")
 
 # The selected agent denies the edit tool; review-followup also denies task. --auto approves the
-# read/bash/external prompts, so the preamble must enforce read-only shell use. Keep stdin closed.
-opencode run --attach "$url" --dir "$workdir" --agent "$agent" --auto \
+# read/bash/external prompts, so the preamble must enforce read-only shell use. codex-implementor's
+# opencode-round watches for permission asks and fails the round unless it ended in a verdict.
+failed=""
+"$implementor/opencode-round" --url "$url" -C "$workdir" --role review -o "$outfile" "${units[@]}" -- \
+  opencode run --attach "$url" --dir "$workdir" --agent "$agent" --auto \
   -m "$model" --variant "$effort" --title "$title" \
   --format json "${session_args[@]}" \
-  "$prompt" < /dev/null > "$logfile" 2>&1 || true
-
-sid="$(jq -rR 'fromjson? | select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1 || true)"
-[ -n "$sid" ] && printf '%s\n' "$sid" > "$sessionfile"
-"$implementor/extract-opencode-final" "$logfile" "$sid" > "$outfile" 2>/dev/null || true
-"$implementor/extract-opencode-usage" "$logfile" "$sid" > "$usagefile" || true
-apierr="$(jq -rR 'fromjson? | select(.type=="error") | .error | "\(.name // "error")\(if .data.ref then " (\(.data.ref))" else "" end): \(.data.message // "")"' "$logfile" 2>/dev/null | head -1)"
-failed=""
-[ -n "$apierr" ] && failed="Blocked: opencode ${apierr} — discard any partial answer"
-[ -z "$failed" ] && [ ! -s "$outfile" ] && failed="Blocked: the review ended without an answer (see ${logfile})"
+  "$prompt" || failed="$(head -1 "$outfile")"
+sid="$(cat "${outfile}.session" 2>/dev/null || true)"
 if [ -n "$failed" ]; then
-  printf '%s\n\n%s' "$failed" "$(cat "$outfile")" > "$outfile"
-  echo "opencode-review: FAILED — $failed" >&2
-  case "$apierr" in *expired*|*401*|*nauthorized*) echo "opencode-review: credential expired -> owner runs \`opencode auth login\` (interactive), then rerun" >&2 ;; esac
+  echo "opencode-review: FAILED -> $outfile — $failed" >&2
+  case "$failed" in *expired*|*401*|*nauthorized*) echo "opencode-review: credential expired -> owner runs \`opencode auth login\` (interactive), then rerun" >&2 ;; esac
   exit 1
-fi
-if ! grep -v '^[[:space:]]*$' "$outfile" | tail -n 1 | grep -qE '^[[:space:]]*(APPROVE|CHANGES_REQUIRED)[[:space:]]*$'; then
-  echo "opencode-review: WARNING — answer does not end with a verdict line; possibly truncated" >&2
 fi
 
 compacted="$(jq -r 'if .compacted then "; COMPACTED (\(if .compacted.auto then "auto" else "manual" end), overflow=\(.compacted.overflow)) — reviewer context before this point is now a summary, not the original source read; consider a fresh session if it seems anchored" else "" end' "$usagefile" 2>/dev/null)"

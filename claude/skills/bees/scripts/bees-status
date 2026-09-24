@@ -243,6 +243,7 @@ def unmerged(plan, uid, commits):
 
 STATES = ("done", "blocked", "paused", "needs-decision")
 VERDICTS = ("APPROVE", "CHANGES_REQUIRED")
+REVIEW_BLOCKED = "review blocked"
 
 
 def parse_report(r, plan):
@@ -261,6 +262,10 @@ def parse_bees(role, text, units, known):
     if len(at) != 1:
         return {}, "duplicated BEES line" if at else "no BEES line"
     impl = role == "impl"
+    if not impl and lines[-1].startswith("BEES: results="):
+        entries, why = parse_bees("impl", text, units, known)
+        blocked = why is None and all(state == "blocked" for state, _ in entries.values())
+        return {}, REVIEW_BLOCKED if blocked else why or "a review reports results= that are not all blocked"
     if not impl and lines[-1] not in VERDICTS:
         return {}, "no terminal APPROVE/CHANGES_REQUIRED"
     if at[0] != len(lines) - (1 if impl else 2):
@@ -418,7 +423,9 @@ def newest_per_role(rounds):
 def diagnostics(v):
     out = [f"open {','.join(v['open'])}"] if v["open"] else []
     for r in newest_per_role(v["rounds"]):
-        if not r["valid"]:
+        if r["why"] == REVIEW_BLOCKED:
+            out.append(f"{REVIEW_BLOCKED}: {r['path']}")
+        elif not r["valid"]:
             out.append(f"malformed result: {r['path']} ({r['why']})")
         if r["ctx"] is None:
             out.append(f"usage unavailable: {r['name']}")
@@ -454,7 +461,7 @@ def utc(epoch):
 
 def round_summary(r):
     if not r["valid"]:
-        return f"malformed result ({r['why']})"
+        return REVIEW_BLOCKED if r["why"] == REVIEW_BLOCKED else f"malformed result ({r['why']})"
     if r["role"] == "impl":
         return "; ".join(f"{u} {state} {','.join(hashes) or '-'}" for u, (state, hashes) in r["entries"].items())
     return "; ".join(f"{u} " + (f"open {','.join(ids)}" if ids else "clean") for u, ids in r["entries"].items())

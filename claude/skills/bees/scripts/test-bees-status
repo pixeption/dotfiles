@@ -659,7 +659,7 @@ write(os.path.join(fake_bin, "opencode"), f"""#!/usr/bin/env bash
 case "$1" in
   serve) [ -f "$FAKE_FIXTURE.after" ] && cp "$FAKE_FIXTURE.after" "$FAKE_FIXTURE"
          exec python3 {FAKE} "$FAKE_FIXTURE" opencode serve --port "$3" ;;
-  run) cat "$FAKE_RUN_LOG" ;;
+  run) cat "$FAKE_RUN_LOG"; [ -n "$FAKE_RUN_HANG" ] && exec sleep 60; exit "${{FAKE_RUN_EXIT:-0}}" ;;
 esac
 """)
 os.chmod(os.path.join(fake_bin, "opencode"), 0o755)
@@ -741,18 +741,26 @@ os.remove(FIX + ".after")
 OI = os.path.join(SCRIPTS, "opencode-implement")
 OR = os.path.expanduser("~/.claude/skills/codex-review/scripts/opencode-review")
 events = lambda *evs: "\n".join(json.dumps({"sessionID": "ses_fake", **e}) for e in evs) + "\n"
+finish = lambda msg, total, reason="stop": {"type": "step_finish", "part": {"messageID": msg, "reason": reason, "tokens": {"total": total}}}
 step = lambda n: [{"type": "step_start"}, {"type": "text", "part": {"messageID": f"msg_{n}", "text": f"narration {n}"}},
-                  {"type": "step_finish", "part": {"tokens": {"total": 1000 * n}}}]
+                  finish(f"msg_{n}", 1000 * n, "tool-calls")]
 final = [{"type": "step_start"}, {"type": "text", "part": {"messageID": "msg_9", "text": "Outcome: Done"}},
-         {"type": "text", "part": {"messageID": "msg_9", "text": "BEES: results=V1:done:-"}},
-         {"type": "step_finish", "part": {"tokens": {"total": 9000}}}]
+         {"type": "text", "part": {"messageID": "msg_9", "text": "BEES: results=V1:done:-"}}, finish("msg_9", 9000)]
 run_log = os.path.join(T, "run.log")
 
 
-def wrapper(tool, log, unit="V1"):
+def wrapper(tool, log, unit="V1", **env):
     write(run_log, log)
-    return subprocess.run([tool, "--url", URL, "--port", str(PORT), "-C", CODE, "-p", prompt, "-u", unit, "-o", RF[:-3] + ".work"],
-                          capture_output=True, text=True, env={**fenv, "FAKE_RUN_LOG": run_log})
+    try:
+        return subprocess.run([tool, "--url", URL, "--port", str(PORT), "-C", CODE, "-p", prompt, "-u", unit, "-o", RF[:-3] + ".work"],
+                              capture_output=True, text=True, timeout=30, env={**fenv, "FAKE_RUN_LOG": run_log, **env})
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(tool, "timeout", "", "timed out: the wrapper never stopped the run")
+
+
+def newest_out(role):
+    names = [n for n in listing(RF[:-3] + ".work") if n.startswith(f"{role}-V1-r") and n.endswith(".txt")]
+    return os.path.join(RF[:-3] + ".work", max(names, key=lambda n: int(n.split("-r")[-1][:-4])))
 
 
 r = wrapper(OI, events(*step(1), *step(2), *final))
@@ -776,10 +784,41 @@ r = wrapper(OR, events(err))
 out_rev = os.path.join(RF[:-3] + ".work", sorted(n for n in os.listdir(RF[:-3] + ".work") if n.startswith("review-V1-") and n.endswith(".txt"))[-1])
 check(r.returncode == 1 and read(out_rev).startswith("Blocked: opencode UnknownError") and os.path.exists(out_rev + ".usage"),
       f"opencode-review: a failed round is marked and finished: {r.stderr}")
-review_final = [{"type": "text", "part": {"messageID": "msg_1", "text": "reading files"}},
-                {"type": "text", "part": {"messageID": "msg_2", "text": "BEES: reviews=V1:-\nAPPROVE"}}]
+review_final = [{"type": "text", "part": {"messageID": "msg_1", "text": "reading files"}}, finish("msg_1", 10, "tool-calls"),
+                {"type": "text", "part": {"messageID": "msg_2", "text": "BEES: reviews=V1:-\nAPPROVE"}}, finish("msg_2", 20)]
 r = wrapper(OR, events(*review_final))
 check(r.returncode == 0 and read(r.stderr.split(" done -> ")[1].split(" ")[0]) == "BEES: reviews=V1:-\nAPPROVE\n", "opencode-review keeps only the verdict message")
+check(bs.parse_bees("review", read(out_rev), ["V1"], bs.Plan(RF).units)[1] == bs.REVIEW_BLOCKED
+      and read(out_rev).rstrip().endswith("BEES: results=V1:blocked:-"), "a failed review ends in the blocked result bees-status reads")
+r = wrapper(OR, events({"type": "text", "part": {"messageID": "msg_1", "text": "MAJ-01 — half a finding"}}, finish("msg_1", 10)))
+body = read(newest_out("review"))
+check(r.returncode == 1 and body.startswith("Blocked: the answer does not end in APPROVE or CHANGES_REQUIRED")
+      and "MAJ-01 — half a finding" in body and body.rstrip().endswith("BEES: results=V1:blocked:-"),
+      f"a review answer without a verdict fails the round: {r.returncode} {body!r}")
+check(bs.parse_bees("review", "BEES: results=V1:done:-\n", ["V1"], bs.Plan(RF).units)[1] != bs.REVIEW_BLOCKED,
+      "only an all-blocked results line reads as a blocked review")
+view_rf = bs.compute_view(bs.Plan(RF))
+check(f"review blocked: {newest_out('review')}" in bs.diagnostics(view_rf["units"]["V1"]), "the board names the blocked review")
+check(not next(r for r in view_rf["rounds"] if r["path"] == newest_out("review"))["valid"], "a blocked review never counts as a verdict")
+for why, log, env in [("a non-zero opencode run exit", events(*final), {"FAKE_RUN_EXIT": "1"}),
+                      ("a final step cut at the length limit", events(*final[:-1], finish("msg_9", 9000, "length")), {}),
+                      ("a final message without its step_finish", events(*final[:-1]), {})]:
+    r = wrapper(OI, log, **env)
+    body = read(newest_out("impl"))
+    check(r.returncode == 1 and body.startswith("Blocked: ") and body.rstrip().endswith("BEES: results=V1:blocked:-")
+          and body.count("BEES:") == 1, f"opencode-implement fails the round on {why}: {r.returncode} {body!r}")
+ask = [{"id": "per_1", "sessionID": "ses_fake", "permission": "external_directory", "patterns": ["/elsewhere/*"]}]
+write(FIX, json.dumps({**good, f"/permission?directory={CODE}": ask}))
+for tool in (OI, OR):
+    posts = FIX + ".posts"
+    os.path.exists(posts) and os.remove(posts)
+    r = wrapper(tool, events({"type": "step_start"}), FAKE_RUN_HANG="1", OPENCODE_ROUND_POLL="1")
+    role = "impl" if tool == OI else "review"
+    body = read(newest_out(role)) if r.stdout != "timeout" else r.stderr
+    check(r.returncode == 1 and body.startswith('Blocked: permission external_directory ["/elsewhere/*"]')
+          and body.rstrip().endswith("BEES: results=V1:blocked:-"), f"{os.path.basename(tool)} rejects an ask waiting in its directory: {body!r}")
+    check(os.path.exists(posts) and f"/permission/per_1/reply?directory={CODE}" in read(posts), f"{os.path.basename(tool)} posts the reject to the ask's directory")
+write(FIX, json.dumps(good))
 write(FIX, json.dumps(stale_catalogue))
 rounds_in = lambda: [n for n in listing(RF[:-3] + ".work") if ".txt" in n]
 before = rounds_in()
