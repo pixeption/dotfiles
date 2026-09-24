@@ -1,58 +1,515 @@
-#!/usr/bin/env bash
-# Drives one plan through bees-status and asserts the rendered doc, the archive roll and the
-# narrow views. Run: ./test-bees-status
-set -euo pipefail
-S="$(cd "$(dirname "$0")" && pwd)/bees-status"
-T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
-mkdir -p "$T/docs/plans"; echo "# demo" > "$T/docs/plans/demo.md"
-cd "$T"
-export BEES_STATUS="$T/docs/plans/demo-status.json"
-has() { grep -qF -- "$2" "$1" || { echo "FAIL: '$2' not in $1"; sed -n 1,80p "$1"; exit 1; }; }
-lacks() { ! grep -qF -- "$2" "$1" || { echo "FAIL: '$2' unexpectedly in $1"; exit 1; }; }
-md=docs/plans/demo-status.md; ar=docs/plans/demo-status-log.md
+#!/usr/bin/env python3
+"""Fixture tests for bees-status's derived view (plan checklist, .work/ rounds, trailers, notes).
 
-"$S" init docs/plans/demo.md --scope "demo" --focus "f" --by "fable low" --setup "buckets default"
-"$S" unit add G1 --pts 3 --bucket low --impl "codex luna max" --reviewer bee-reviewer --resource "— (worktree)" --title "seed wiring" --acceptance "tests green"
-"$S" unit add B4 --pts 8 --bucket high --impl bee-implementor --depends G1 --resource nono4u/Game
-"$S" decision add D1 "continue < 120k, none ≥ 200k"
-"$S" decision add D2 "old rule"
-"$S" decision supersede D2 D1
-"$S" slot set 2 --agent "bee-implementor (Opus 5 med)" --holds nono4u/Game --unit "B4 (8 · high)" --ctx "110k / 8 of 26"
-"$S" unit G1 state fix "round 3, MAJ-02 open"
-"$S" unit G1 round 1 --done 06:55Z --verdict 07:05Z --fixed "CRIT-01" --open "APP-02"
-"$S" unit G1 finding add APP-02 "read side uses old shape" --ref "Runtime/UISeed.cs:214"
-"$S" unit G1 finding fix APP-02
-"$S" next "B4 → G1 validate → owner report"
-"$S" takeover "game-core clean; suite: unity test … 412 green"
-"$S" friction add F1 "codex committed on licensing hang" --evidence 0f4c12d --fix "no report no commit"
-"$S" friction resolve F1 "brief rule added"
-"$S" noise add "flaky TestX"
-for i in $(seq 1 25); do "$S" log add G1 --by "codex luna" --outcome "round $i" --cost "0.1M / 50k / 3" --commits "abc$i" --note "note $i" >/dev/null; done
+Every fixture is synthetic: a temporary plan repo, a temporary code repo with trailer commits,
+generated out-files and sidecars. Nothing is copied from a real plan. Run: ./test-bees-status
+"""
+import atexit, importlib.machinery, importlib.util, json, os, shutil, subprocess, sys, tempfile
 
-has $md "**Setup:** buckets default"
-has $md "| D1 |"; lacks $md "| D2 |"; has $ar "superseded by D1"
-has $md "🟠 fix round — round 3, MAJ-02 open"
-has $md "| B4 | 8 | high | bee-implementor | — | nono4u/Game | G1 | ⚪ queued |"
-has $md "| 2 | bee-implementor (Opus 5 med) | nono4u/Game | B4 (8 · high) | 110k / 8 of 26 |"
-has $md "### G1 · seed wiring · 3 pts · low · codex luna max"
-has $md "- [x] APP-02 — read side uses old shape — [Runtime/UISeed.cs:214](Runtime/UISeed.cs#L214)"
-has $md "| 1 | 06:55Z | 07:05Z | CRIT-01 | APP-02 |"
-has $md "**Next:** B4 → G1 validate → owner report"
-lacks $md "F1"; has $ar "F1 · codex committed"; has $md "- flaky TestX"
-has $md "- B4 · 8 pts · high · bee-implementor · resource nono4u/Game"
-[ "$(grep -c '| codex luna | round' $md)" = 20 ] || { echo "FAIL: log window"; exit 1; }
-has $md "note 25"; lacks $md "note 5 |"; has $ar "note 5 |"
+HERE = os.path.dirname(os.path.abspath(__file__))
+TOOL = os.path.join(HERE, "bees-status")
+_loader = importlib.machinery.SourceFileLoader("bees_status", TOOL)
+bs = importlib.util.module_from_spec(importlib.util.spec_from_loader("bees_status", _loader))
+_loader.exec_module(bs)
 
-"$S" unit G1 accept "seed wiring" --commit 3b73b3a --evidence "412 green"
-has $md "- G1 · 3 pts · codex luna max · seed wiring · 412 green · \`3b73b3a\`"
-has $md "🟢 accepted — \`3b73b3a\`"; lacks $md "### G1"
-"$S" unit B4 drop "superseded by G2"; has $md "⚫ dropped — superseded by G2"; lacks $md "### B4"
+T = os.path.realpath(tempfile.mkdtemp(prefix="bees-view-"))
+atexit.register(shutil.rmtree, T, True)
+passed = 0
 
-out="$("$S" show now)"; grep -q '^## Now' <<<"$out"; ! grep -q '## Triage' <<<"$out"
-[ "$(wc -l <<<"$out")" -lt 12 ] || { echo "FAIL: show now too long"; exit 1; }
-"$S" show brief | grep -q '## Triage'
-"$S" show decisions | grep -q '| D1 |'
-"$S" show doc | grep -q '^# demo — status and handover'
-! "$S" unit ZZ state running 2>/dev/null || { echo "FAIL: unknown unit accepted"; exit 1; }
-! "$S" unit G9 add --pts 3 2>/dev/null || { echo "FAIL: incomplete add accepted"; exit 1; }
-echo "PASS ($(wc -c < $md) bytes)"
+
+def check(cond, msg):
+    global passed
+    if not cond:
+        sys.exit(f"FAIL: {msg}")
+    passed += 1
+
+
+def dies(fn, text):
+    try:
+        fn()
+    except SystemExit as e:
+        check(text in str(e.code), f"expected error containing {text!r}, got {e.code!r}")
+        return
+    check(False, f"expected error containing {text!r}, got success")
+
+
+def sh(*args, cwd=None, env=None):
+    return subprocess.run(args, cwd=cwd, capture_output=True, text=True, check=True,
+                          env={**os.environ, **(env or {})}).stdout
+
+
+def write(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        f.write(text)
+
+
+def read(path):
+    with open(path) as f:
+        return f.read()
+
+
+def repo(path):
+    os.makedirs(path, exist_ok=True)
+    sh("git", "init", "-q", "-b", "main", path)
+    sh("git", "-C", path, "config", "user.email", "t@example.com")
+    sh("git", "-C", path, "config", "user.name", "t")
+    commit(path, "chore: root", 1000)
+    return path
+
+
+def commit(path, msg, epoch, amend=False):
+    stamp = {"GIT_AUTHOR_DATE": f"@{epoch} +0000", "GIT_COMMITTER_DATE": f"@{epoch} +0000"}
+    sh("git", "-C", path, "commit", "-q", "--allow-empty", *(["--amend"] if amend else []), "-m", msg, env=stamp)
+    return sh("git", "-C", path, "rev-parse", "HEAD").strip()
+
+
+def plan_md(units, repo_rel="../code", extra_cols=True):
+    """units: [(id, phase, depends)] → a plan with the canonical checklist and one heading per unit."""
+    cols = "| ID | Item | Repo | Pts | Route | Phase | Depends | Status |" if extra_cols else "| ID | Item | Pts | Status |"
+    rows = [f"| [{u}](#{u.lower()}--item-{u.lower()}) | item {u} | {repo_rel} | 1 | luna | {ph} | {dep or '-'} | ☐ |"
+            if extra_cols else f"| {u} | item {u} | 1 | ☐ |" for u, ph, dep in units]
+    heads = [f"### {u} · item {u}\nbody of {u}.\n" for u, _, _ in units]
+    return "\n".join(["# demo", "", "Prose before.", "", "## Checklist", "", cols,
+                      "|" + "---|" * (8 if extra_cols else 4), *rows, "", "## Fixes", "", *heads])
+
+
+# ---------- VIEW-01: checklist parsing, precedence, patching ----------
+
+PLANS = repo(os.path.join(T, "plans"))
+CODE = repo(os.path.join(T, "code"))
+P = os.path.join(PLANS, "docs/plans/2026-01-01-demo.md")
+write(P, plan_md([("A1", 1, ""), ("A2", 1, "A1"), ("B1", 2, "A1,A2")]))
+plan = bs.Plan(P)
+check(list(plan.units) == ["A1", "A2", "B1"], "units in checklist order")
+check(plan.slug == "demo", "slug drops date and .md")
+check(plan.units["B1"]["depends"] == ["A1", "A2"] and plan.units["A1"]["depends"] == [], "depends parsed")
+check(plan.units["A1"]["repo_path"] == os.path.normpath(CODE), "repo resolved against the plan's repo")
+check(bs.gh_slug("### VIEW-11 · `show --log` and `show --takeover`") == "view-11--show---log-and-show---takeover", "slug keeps --")
+check(bs.gh_slug("### A1 · item a1 **✅ Done 2026-01-02**") == "a1--item-a1--done-2026-01-02", "slug drops emoji and bold")
+
+bad = os.path.join(PLANS, "docs/plans/bad.md")
+for text, err in [(plan_md([("A1", 1, "")], extra_cols=False), "lacks column(s) Repo, Route, Phase, Depends"),
+                  (plan_md([("A1", 1, ""), ("A1", 1, "")]), "duplicate unit id A1"),
+                  (plan_md([("A1", 1, "Z9")]), "depends on unknown Z9"),
+                  (plan_md([("A1", 1, "")], repo_rel="../nowhere"), "unknown repo ../nowhere"),
+                  ("# no checklist\n", "no '## Checklist'")]:
+    write(bad, text)
+    dies(lambda: bs.Plan(bad), err)
+
+
+def rnd(role, units, time, entries=None, valid=True, n=1):
+    return {"role": role, "units": units, "time": time, "valid": valid, "entries": entries or {}, "finished": True, "n": n}
+
+
+def note(unit, kind, time="2026-01-02T00:00:00Z"):
+    return {"unit": unit, "kind": kind, "time": time, "text": ""}
+
+
+H1, H2 = "a" * 40, "b" * 40
+landing = [(H1, 100)]
+st = lambda rounds, landings=(), notes=(): bs.status_cell(bs.unit_status("A1", rounds, list(landings), list(notes)))
+blocked_late = rnd("impl", ["A1"], 200, {"A1": ("blocked", [])})
+precedence = [
+    ("accept note beats a later blocked result", [blocked_late], landing, [note("A1", "accept:")], "✅"),
+    ("blocked after the trailer", [blocked_late], landing, [], "🔴 blocked"),
+    ("needs-decision after the trailer", [rnd("impl", ["A1"], 200, {"A1": ("needs-decision", [])})], landing, [], "🔴 needs-decision"),
+    ("blocked before the trailer", [rnd("impl", ["A1"], 50, {"A1": ("blocked", [])})], landing, [], "🔵"),
+    ("blocked in the same second as the trailer is newer", [rnd("impl", ["A1"], 100, {"A1": ("blocked", [])})], landing, [], "🔴 blocked"),
+    ("paused after the trailer", [rnd("impl", ["A1"], 200, {"A1": ("paused", [])})], landing, [], "🟡 paused"),
+    ("trailer, later changes-required review", [rnd("review", ["A1"], 150, {"A1": ["MAJ-01"]})], landing, [], "🔵 (review open)"),
+    ("review before the landing does not count", [rnd("review", ["A1"], 50, {"A1": ["MAJ-01"]})], landing, [], "🔵"),
+    ("newer clean review clears", [rnd("review", ["A1"], 150, {"A1": ["MAJ-01"]}), rnd("review", ["A1"], 160, {"A1": []})], landing, [], "🔵"),
+    ("same-second reviews: the higher round wins", [rnd("review", ["A1"], 150, {"A1": ["MAJ-01"]}), rnd("review", ["A1"], 150, {"A1": []}, n=2)], landing, [], "🔵"),
+    ("same-second results: the higher round wins", [rnd("impl", ["A1"], 200, {"A1": ("blocked", [])}), rnd("impl", ["A1"], 200, {"A1": ("done", [H1[:7]])}, n=2)], landing, [], "🔵"),
+    ("malformed newer review never displaces", [rnd("review", ["A1"], 150, {"A1": ["MAJ-01"]}), rnd("review", ["A1"], 160, valid=False)], landing, [], "🔵 (review open)"),
+    ("older landing then done with an unknown hash", [rnd("impl", ["A1"], 200, {"A1": ("done", ["c" * 7])})], landing, [], "🟡 done, trailer missing"),
+    ("done with -", [rnd("impl", ["A1"], 200, {"A1": ("done", [])})], landing, [], "🟡 done, trailer missing"),
+    ("done with every hash trailed", [rnd("impl", ["A1"], 200, {"A1": ("done", [H1[:7], H2[:9]])})], landing + [(H2, 110)], [], "🔵"),
+    ("done with one of two hashes trailed", [rnd("impl", ["A1"], 200, {"A1": ("done", [H1[:7], "d" * 7])})], landing, [], "🟡 done, trailer missing"),
+    ("trailer, no out-file", [], landing, [], "🔵"),
+    ("newer trailer than a blocked result", [rnd("impl", ["A1"], 90, {"A1": ("blocked", [])})], landing, [], "🔵"),
+    ("a malformed round only", [rnd("impl", ["A1"], 90, valid=False)], [], [], "🟡"),
+    ("an unfinished round only", [dict(rnd("impl", ["A1"], 90, valid=False), finished=False)], [], [], "🟡"),
+    ("nothing", [], [], [], "☐"),
+    ("another unit's accept is ignored", [], [], [note("A2", "accept:")], "☐"),
+]
+for name, rounds, landings, notes, want in precedence:
+    got = st(rounds, landings, notes)
+    check(got == want, f"precedence '{name}': got {got!r}, want {want!r}")
+
+before = read(P)
+check(bs.patch_plan(P, {"A1": {"mark": "✅", "qual": "", "date": "2026-01-02", "open": []},
+                        "A2": {"mark": "🔵", "qual": "(review open)", "date": None, "open": ["F1"]}}), "patch reports a change")
+after = read(P)
+check("| [A1](#a1--item-a1--done-2026-01-02) | item A1 | ../code | 1 | luna | 1 | - | ✅ |" in after, "accepted row: cell and href")
+check("### A1 · item A1 **✅ Done 2026-01-02**" in after, "accepted heading marker")
+check("| [A2](#a2--item-a2) | item A2 | ../code | 1 | luna | 1 | A1 | 🔵 (review open) |" in after, "landed row")
+changed = [(a, b) for a, b in zip(before.split("\n"), after.split("\n")) if a != b]
+check(len(changed) == 3, f"only two rows and one heading change, got {changed}")
+check(not bs.patch_plan(P, {"A1": {"mark": "✅", "qual": "", "date": "2026-01-02", "open": []}}), "second patch is a no-op")
+check(bs.gh_slug("### A1 · item A1 **✅ Done 2026-01-02**") in after, "href resolves to the new heading")
+
+
+# ---------- VIEW-02: .work/ out-files, round-out, capture-bee, wrappers ----------
+
+def run(*args, stdin="", env=None):
+    return subprocess.run([TOOL, *args], input=stdin, capture_output=True, text=True, env={**os.environ, **(env or {})})
+
+
+def at(epoch, *paths):
+    for path in paths:
+        os.utime(path, (epoch, epoch))
+
+
+def listing(d):
+    return sorted(os.listdir(d)) if os.path.isdir(d) else []
+
+
+P2 = os.path.join(PLANS, "docs/plans/2026-01-02-other.md")
+write(P2, plan_md([("A1", 1, ""), ("F2", 1, "")], repo_rel="`../code`"))
+check(bs.Plan(P2).units["F2"]["repo_path"] == os.path.normpath(CODE), "a Repo cell in backticks resolves")
+W, W2 = P[:-3] + ".work", P2[:-3] + ".work"
+check(bs.round_out("impl", ["A1", "A2"], W)[1] == os.path.join(W, "impl-A1+A2-r1.txt"), "round-out allocates r1 in the .work dir")
+write(os.path.join(W, "impl-A1+A2-r1.txt.log"), "{}")
+check(bs.round_out("impl", ["A1", "A2"], W + "/")[1].endswith("impl-A1+A2-r2.txt"), "round-out allocates the next r<N>")
+check(bs.round_out("review", ["A1", "A2"], W)[1].endswith("review-A1+A2-r1.txt"), "review rounds never collide with impl rounds")
+os.remove(os.path.join(W, "impl-A1+A2-r1.txt.log"))
+ELSEWHERE = os.path.join(PLANS, "notes/2026-01-02-elsewhere.md")
+write(ELSEWHERE, plan_md([("A1", 1, "")]))
+for args, err in [(("impl", [], W), "need one or more -u"), (("impl", ["A1", "A1"], W), "repeated -u"),
+                  (("impl", ["A1"], ELSEWHERE[:-3] + ".work"), "must be inside " + os.path.join(PLANS, "docs/plans")),
+                  (("impl", ["A1"], os.path.join(W, "nested.work")), "inside exactly one"),
+                  (("impl", ["Z9"], W), "unknown unit(s) Z9"), (("impl", ["A1"], os.path.join(T, "x.txt")), "inside exactly one"),
+                  (("impl", ["A1"], os.path.join(W, "review-A1-r1.txt")), "must be named impl-A1-r<N>.txt"),
+                  (("audit", ["A1"], W), "--role must be impl or review")]:
+    dies(lambda: bs.round_out(*args), err)
+
+report = "Outcome: Done\nBEES: results=A1:done:-\n"
+for args, stdin, why in [(["capture-bee", "-u", "A1", "--role", "impl", "--ctx", "1000"], "  \n", "empty stdin"),
+                         (["capture-bee", "--role", "impl", "--ctx", "1000"], report, "missing unit"),
+                         (["capture-bee", "-u", "A1", "-u", "A1", "--role", "impl", "--ctx", "1000"], report, "repeated unit"),
+                         (["capture-bee", "-u", "Z9", "--role", "impl", "--ctx", "1000"], report, "unknown unit"),
+                         (["capture-bee", "-u", "A1", "--role", "audit", "--ctx", "1000"], report, "invalid role"),
+                         (["capture-bee", "-u", "A1", "--role", "impl"], report, "missing --ctx"),
+                         *[(["capture-bee", "-u", "A1", "--role", "impl", "--ctx", c], report, f"--ctx {c}") for c in ("12k", "0", "-5", "0x10", "1.5")]]:
+    r = run("--plan", P, *args, stdin=stdin)
+    check(r.returncode != 0 and listing(W) == [], f"capture-bee rejects {why} without artifacts ({r.stderr.strip()})")
+r = run("--plan", P, "capture-bee", "-u", "A1", "--role", "impl", "--ctx", "91000", stdin="no footer at all\n")
+check(r.returncode == 0 and listing(W) == ["impl-A1-r1.txt", "impl-A1-r1.txt.usage"], f"a malformed report is kept: {r.stderr}")
+r = run("capture-bee", "-u", "F2", "--role", "review", "--ctx", "5000", stdin="x\n", env={"BEES_PLAN": P2})
+check(r.returncode == 0 and listing(W2) == ["review-F2-r1.txt", "review-F2-r1.txt.usage"] and len(listing(W)) == 2,
+      "BEES_PLAN selects the plan; the other plan's .work is untouched")
+check(run("capture-bee", "-u", "A1", "--role", "impl", "--ctx", "1", stdin="x", env={"BEES_PLAN": ""}).returncode != 0, "no plan → error")
+
+write(os.path.join(W, "impl-A2-r1.txt.log"), "{}")
+write(os.path.join(W, "review-A1-r1.txt"), "partial")
+write(os.path.join(W, "review-A1-r1.txt.log"), "{}")
+write(os.path.join(W, "review-A1-r1.txt.usage"), "")
+write(os.path.join(W, "review-A1-r1.txt.session"), "ses_1\n")
+write(os.path.join(W, "review-A1-r1.txt.cwd"), os.path.join(T, "gone-worktree") + "\n")
+write(os.path.join(W, "opencode-serve-4096.log"), "server")
+at(5000, os.path.join(W, "impl-A1-r1.txt.usage"))
+rounds = {r["name"]: r for r in bs.read_rounds(bs.Plan(P))}
+check(sorted(rounds) == ["impl-A1-r1.txt", "impl-A2-r1.txt", "review-A1-r1.txt"], f"rounds enumerated: {sorted(rounds)}")
+check(rounds["impl-A1-r1.txt"]["ctx"] == 91000 and rounds["impl-A1-r1.txt"]["time"] == 5000, "bee round: harness ctx, .usage mtime")
+check(not rounds["impl-A2-r1.txt"]["finished"], "a .log without .usage is unfinished")
+check(rounds["review-A1-r1.txt"]["ctx"] is None and rounds["review-A1-r1.txt"]["session"] == "ses_1", "empty .usage: usage unavailable")
+
+WRAPPERS = {"opencode-implement": "codex-implementor", "codex-implement": "codex-implementor",
+            "opencode-review": "codex-review", "codex-review": "codex-review"}
+prompt = os.path.join(T, "prompt.txt")
+write(prompt, "brief")
+for name, skill in WRAPPERS.items():
+    w = os.path.join(os.path.expanduser("~/.claude/skills"), skill, "scripts", name)
+    base = [] if name == "codex-review" else ["-C", CODE]
+    before = listing(W)
+    for extra, why in [(["-o", os.path.join(W, "impl-A1-r9.txt")], "no -u"),
+                       (["-u", "A1", "-o", os.path.join(T, "out.txt")], "-o outside .work"),
+                       (["-u", "Z9", "-o", W], "unknown unit")]:
+        r = subprocess.run([w, *base, "-p", prompt, *extra], capture_output=True, text=True)
+        check(r.returncode == 2 and listing(W) == before and not os.path.exists(os.path.join(T, "out.txt")),
+              f"{name} rejects {why} before writing ({r.stderr.strip()})")
+
+
+# ---------- VIEW-03: the BEES: last-line contract ----------
+
+KNOWN = {u: {} for u in ("A1", "A2", "B1", "C1")}
+parse = lambda role, text, units=("A1",): bs.parse_bees(role, text, list(units), KNOWN)
+legacy_shapes = ["**Outcome:** Blocked\n\nlicensing hang, see log\n",
+                 "## Report\n**Outcome**\nDone. Commits 1234567 and 89abcde.\n",
+                 "Outcome: Done\nChanges: four units across two commits\n"]
+for text in legacy_shapes:
+    check(parse("impl", text)[1] == "no BEES line", f"legacy report without the line is malformed: {text[:20]!r}")
+four = "Outcome: Done\nBEES: results=A1:done:1234567;A2:done:1234567;B1:done:89abcde;C1:blocked:-\n"
+entries, why = parse("impl", four, ("A1", "A2", "B1", "C1"))
+check(why is None and entries["C1"] == ("blocked", []) and entries["A2"] == ("done", ["1234567"]), "one round, four units")
+for text, units, err in [
+        ("BEES: results=A1:done:-\ntrailing prose\n", ("A1",), "not the last line"),
+        ("BEES: results=A1:done:-\nBEES: results=A1:done:-\n", ("A1",), "duplicated BEES line"),
+        ("BEES: results=A1:done:12345\n67\n", ("A1",), "not the last line"),
+        ("BEES: results=A1:done:-;A1:done:-\n", ("A1",), "unit A1 duplicated"),
+        ("BEES: results=A1:done:-\n", ("A1", "A2"), "do not match"),
+        ("BEES: results=A1:done:-;Z9:done:-\n", ("A1", "Z9"), "do not match"),
+        ("BEES: results=A1:finished:-\n", ("A1",), "bad entry"),
+        ("BEES: results=A1:done\n", ("A1",), "bad entry"),
+        ("BEES: results= A1:done:-\n", ("A1",), "not a 'BEES: results=' line"),
+        ("BEES: reviews=A1:MAJ-01\n", ("A1",), "no terminal"),
+        ("BEES: reviews=A1:MAJ-01\nCHANGES_REQUIRED\n", ("A1",), None)]:
+    role = "review" if "reviews" in text else "impl"
+    check(parse(role, text, units)[1] == err or err and err in (parse(role, text, units)[1] or ""),
+          f"{text!r}: got {parse(role, text, units)[1]!r}, want {err!r}")
+mixed = "Findings…\nBEES: reviews=A1:MAJ-01;A2:-\nCHANGES_REQUIRED\n"
+check(parse("review", mixed, ("A1", "A2")) == ({"A1": ["MAJ-01"], "A2": []}, None), "mixed two-unit review")
+check(parse("review", "BEES: reviews=A1:MAJ-01\nAPPROVE\n")[1] == "APPROVE with open ids", "contradictory report 1")
+check(parse("review", "BEES: reviews=A1:-;A2:-\nCHANGES_REQUIRED\n", ("A1", "A2"))[1] == "CHANGES_REQUIRED with no open id", "contradictory report 2")
+check(parse("review", "BEES: reviews=A1:-\n\nAPPROVE\n\n")[1] is None, "blank lines around the verdict are fine")
+r = run("--plan", P, "capture-bee", "-u", "A2", "--role", "impl", "--ctx", "7", stdin="Outcome: Done\n")
+check("malformed result: no BEES line" in r.stdout, "capture-bee flags a malformed report and keeps it")
+r = run("--plan", P, "capture-bee", "-u", "A1", "--role", "review", "--ctx", "7", stdin=mixed.replace(";A2:-", ""))
+check(r.stdout.startswith("ok ") and "malformed" not in r.stdout, "capture-bee accepts a valid review")
+
+
+# ---------- VIEW-04: Bees-Unit trailers ----------
+
+G = repo(os.path.join(T, "trailers"))
+demo, other = bs.Plan(P), bs.Plan(P2)
+trailer = lambda plan, uid: f"feat: work\n\nBees-Unit: {plan.slug}/{uid}"
+h_other = commit(G, trailer(other, "F2"), 2000)
+lands = lambda plan, uid: bs.landings(plan, uid, bs.trailer_commits(G))
+check(lands(other, "F2") == [(h_other, 2000)], "a trailer lands its own plan's unit")
+check(lands(demo, "F2") == [], "the same unit id in another plan does not land")
+commit(G, "docs: mention demo/F2 and other/F2 in prose\n\nsee demo/F2", 2100)
+check(len(lands(other, "F2")) == 1, "subjects and bodies are never matched")
+commit(G, "feat: two units\n\nBees-Unit: demo/A1\nBees-Unit: demo/A2", 2200)
+check([t for _, t in lands(demo, "A1")] == [2200] and [t for _, t in lands(demo, "A2")] == [2200], "one commit, two trailers")
+h_amend = commit(G, "feat: two units, amended\n\nBees-Unit: demo/A1\nBees-Unit: demo/A2", 2300, amend=True)
+check(lands(demo, "A1") == [(h_amend, 2300)], "amend keeps the landing")
+sh("git", "-C", G, "branch", "side", "HEAD~1")
+sh("git", "-C", G, "checkout", "-q", "side")
+commit(G, "chore: upstream work", 2400)
+sh("git", "-C", G, "checkout", "-q", "main")
+sh("git", "-C", G, "rebase", "-q", "side", env={"GIT_COMMITTER_DATE": "@2500 +0000"})
+rebased = lands(demo, "A1")
+check(len(rebased) == 1 and rebased[0][0] != h_amend, "rebase keeps the landing on the new hash")
+commit(G, "feat: more\n\nBees-Unit: demo/B1", 2600)
+sh("git", "-C", G, "reset", "-q", "--soft", "HEAD~2")
+commit(G, "feat: squashed without trailers", 2700)
+check(lands(demo, "A1") == [] and lands(demo, "B1") == [], "a trailer-dropping squash loses the landing")
+
+
+# ---------- VIEW-05: notes ----------
+
+N = P[:-3] + ".notes.md"
+for args in (["A1", "accept: 412 green, reviewed"], ["decision: one budget for both vendors"],
+             ["B1", "handoff: editor closed; verify with ./test"], ["A2", "free text, no prefix"]):
+    check(run("--plan", P, "note", *args).returncode == 0, f"note {args}")
+for args, why in [(["Z9", "accept: x"], "unknown unit"), (["A1", "two\nlines"], "multi-line"), (["A1", "  "], "empty"),
+                  (["A1", "x", "y"], "unquoted text")]:
+    check(run("--plan", P, "note", *args).returncode != 0, f"note rejects {why}")
+lines = read(N).splitlines()
+check(len(lines) == 4 and all(bs.NOTE_LINE.fullmatch(l) for l in lines), f"one UTC line per note: {lines}")
+check(lines[0].endswith("Z [A1] accept: 412 green, reviewed") and " [" not in lines[1], "unit tag optional")
+check(all(l.startswith("- ") for l in lines), "each note is a markdown list item")
+notes = bs.read_notes(demo)
+check([n["kind"] for n in notes] == ["accept:", "decision:", "handoff:", None], "first token selects the kind")
+check(notes[3]["text"] == "free text, no prefix" and notes[1]["unit"] is None, "text is opaque")
+check(bs.read_notes(other) == [], "notes belong to their plan")
+with open(N, "a", encoding="utf-8") as f:
+    f.write("2026-01-01T00:00:00Z [A1] gap: legacy line without a list marker\n")
+check(bs.read_notes(demo)[-1]["kind"] == "gap:", "unprefixed legacy lines still parse")
+
+
+# ---------- VIEW-06 (and VIEW-01's end-to-end acceptance): show --write ----------
+
+E = os.path.join(PLANS, "docs/plans/2026-01-03-e2e.md")
+EU = [f"U{i}" for i in range(1, 13)]
+write(E, plan_md([(u, 1 if i < 6 else 2, "") for i, u in enumerate(EU)]))
+EW = E[:-3] + ".work"
+land = lambda uid, t: commit(CODE, f"feat: {uid}\n\nBees-Unit: e2e/{uid}", t)
+
+
+def out(name, text, t, ctx=1000):
+    path = os.path.join(EW, name)
+    write(path, text)
+    write(path + ".log", "{}")
+    if t is not None:
+        write(path + ".usage", json.dumps({"context_tokens": ctx}) if ctx else "")
+        at(t, path + ".usage")
+
+
+for uid in ("U2", "U3", "U4", "U5", "U7", "U10"):
+    land(uid, 3000)
+h6 = land("U6", 3000)
+out("impl-U1-r1.txt", "BEES: results=U1:blocked:-\n", 3100)
+out("impl-U2-r1.txt", "BEES: results=U2:blocked:-\n", 3100)
+out("impl-U3-r1.txt", "BEES: results=U3:paused:-\n", 3100, ctx=None)
+out("review-U4+U7-r1.txt", "MAJ-01 — x — a.cs:1\nBEES: reviews=U4:MAJ-01;U7:-\nCHANGES_REQUIRED\n", 3100)
+out("review-U4-r1.txt", "BEES: reviews=U4:MAJ-01\nAPPROVE\n", 3200)
+untrailed = commit(CODE, "feat: reachable without trailer", 3050)
+out("impl-U5-r1.txt", f"BEES: results=U5:done:{untrailed[:8]}\n", 3100)
+out("impl-U6-r1.txt", f"BEES: results=U6:done:{h6[:8]}\n", 3100, ctx=120000)
+out("impl-U8-r1.txt", "", None)
+out("impl-U10-r1.txt", "BEES: results=U10:blocked:-\n", 2900)
+out("impl-U11-r1.txt", "**Outcome:** Blocked\n", 3100)
+out("impl-U12-r1.txt", "BEES: results=U12:blocked:-\n", 3100.25)
+out("impl-U12-r2.txt", "BEES: results=U12:paused:-\n", 3100.75)
+with open(E[:-3] + ".notes.md", "w") as f:
+    f.write("2026-01-04T00:00:00Z [U1] accept: synthetic evidence\n")
+want = {"U1": "✅", "U2": "🔴 blocked", "U3": "🟡 paused", "U4": "🔵 (review open)", "U5": "🟡 done, trailer missing",
+        "U6": "🔵", "U7": "🔵", "U8": "🟡", "U9": "☐", "U10": "🔵", "U11": "🟡", "U12": "🟡 paused"}
+r = run("--plan", E, "show", "--write")
+check(r.returncode == 0, f"show --write runs: {r.stderr}")
+got = {uid: u["status"] for uid, u in bs.Plan(E).units.items()}
+check(got == want, f"--write fills every row: {got}")
+check("open MAJ-01" in r.stdout and "malformed result: " + os.path.join(EW, "impl-U11-r1.txt") in r.stdout,
+      "board shows open ids and the malformed report's path")
+check("malformed result: " + os.path.join(EW, "review-U4-r1.txt") in r.stdout, "the contradictory newer review is a diagnostic")
+check("usage unavailable: impl-U3-r1.txt" in r.stdout and "impl 120k" in r.stdout, "context per role, or usage unavailable")
+check("Next: U9" in r.stdout, "next is the first queued unit whose dependencies are accepted")
+first = read(E)
+check(run("--plan", E, "show", "--write").returncode == 0 and read(E) == first, "a second --write changes no bytes")
+slugs = {bs.gh_slug(l) for l in first.splitlines() if l.startswith("### ")}
+check(all(u["href"] in slugs for u in bs.Plan(E).units.values()), "after an accept every checklist link resolves")
+check("### U1 · item U1 **✅ Done 2026-01-04**" in first, "accepted heading carries the note's date")
+
+plan_e = bs.Plan(E)
+view = bs.compute_view(plan_e)
+edited = read(E).replace("Prose before.", "Prose before.\n\nThe owner added a paragraph mid-render.")
+write(E, edited.replace("| ✅ |", "| ☐ |"))
+bs.patch_plan(E, view["units"])
+check(read(E) == edited, "a prose edit between read and write survives; only Status cells change")
+
+
+# ---------- VIEW-11: show --log and show --takeover ----------
+
+write(os.path.join(EW, "impl-U2-r1.txt.session"), "ses_u2\n")
+write(os.path.join(EW, "impl-U2-r1.txt.cwd"), CODE + "\n")
+write(os.path.join(EW, "impl-U3-r1.txt.session"), "ses_u3\n")
+write(os.path.join(EW, "impl-U3-r1.txt.cwd"), os.path.join(T, "deleted-worktree") + "\n")
+with open(E[:-3] + ".notes.md", "a") as f:
+    f.write("1970-01-01T00:50:50Z [U2] blocked-on: owner decision on the API shape\n"
+            "1970-01-01T00:50:51Z handoff: editor closed, suite ./run-tests last 12 green\n"
+            "1970-01-01T00:50:52Z concern: fixture flakiness\n")
+log = run("--plan", E, "show", "--log").stdout.splitlines()
+check(log == sorted(log), "the log is in time order")
+check(any("commit  U6 · " + h6[:8] in l for l in log) and any("impl    U2 r1 · U2 blocked -" in l for l in log)
+      and any("note    [U1] accept:" in l for l in log), "log merges commits, rounds and notes")
+check(any("malformed result (no BEES line)" in l for l in log), "log shows a malformed round")
+take = run("--plan", E, "show", "--takeover").stdout
+check("## Repos\n- ../code · main @ " in take, "takeover: HEAD per repo")
+check(f"- U2 · impl r1 · session ses_u2 · ctx 1k · {CODE}\n" in take, "takeover: session, ctx and cwd")
+check("session ses_u3 · ctx ? · " + os.path.join(T, "deleted-worktree") + " (non-resumable: directory missing)" in take,
+      "takeover: a deleted worktree is non-resumable")
+check("- U2 🔴 blocked · last out-file " + os.path.join(EW, "impl-U2-r1.txt") in take and "- U8 🟡 · last out-file" in take,
+      "takeover: unfinished units with their last out-file")
+check("## handoff:" not in take and "## handoff\n- 1970-01-01T00:50:51Z handoff: editor closed" in take
+      and "## blocked-on\n" in take and "## concern\n" in take, "takeover: tagged notes by section")
+check("- U6 · impl r1 · session — (Claude bee)" in take, "takeover: a round without a session")
+
+
+# ---------- VIEW-07: phases and handoff ----------
+
+PH = os.path.join(PLANS, "docs/plans/2026-01-05-phases.md")
+write(PH, plan_md([("P1", 1, ""), ("P2", 1, "P1"), ("Q1", 2, "P2"), ("Q2", 2, ""), ("R1", 10, "")]))
+phase_line = lambda: next(l for l in run("--plan", PH, "show", "--takeover").stdout.splitlines() if l.startswith("Phase:"))
+check(phase_line() == "Phase: phases phase 1 — first unfinished unit P1", "a fresh plan names phase 1")
+run("--plan", PH, "note", "P1", "accept: synthetic")
+check(phase_line() == "Phase: phases phase 1 continued — first unfinished unit P2", "a mid-phase handoff names phase N continued")
+run("--plan", PH, "note", "P2", "accept: synthetic")
+check(phase_line() == "Phase: phases phase 2 — first unfinished unit Q1", "a completed phase names phase N+1")
+handoff = next(l for l in run("--plan", PH, "show", "--takeover").stdout.splitlines() if l.startswith("Handoff:"))
+check(handoff == f"Handoff: ~/.claude/skills/bees/scripts/bees-status --plan {PH} show --takeover | ~/.claude/skills/handoff/scripts/spawn-handoff.sh"
+      f' --cwd {PLANS} --task "phases phase 2" --model <exact current model id>', f"the handoff command: {handoff}")
+for u in ("Q1", "Q2"):
+    run("--plan", PH, "note", u, "accept: synthetic")
+check(phase_line() == "Phase: phases phase 10 — first unfinished unit R1", "phases order numerically")
+run("--plan", PH, "note", "R1", "accept: synthetic")
+check(phase_line() == "Phase: every unit is accepted", "a finished plan")
+
+
+# ---------- VIEW-09: refresh from anywhere, serialised per plan ----------
+
+import fcntl, time
+RF = os.path.join(PLANS, "docs/plans/2026-01-06-refresh.md")
+write(RF, plan_md([("V1", 1, ""), ("V2", 1, "")]))
+idle = os.path.join(PLANS, "docs/plans/2026-01-07-idle.md")
+write(idle, plan_md([("V1", 1, "")]))
+cell = lambda path, uid: bs.Plan(path).units[uid]["status"]
+refresh = lambda: subprocess.run([TOOL, "refresh"], input='{"hook_event_name":"Stop"}', capture_output=True, text=True,
+                                 env={**os.environ, "CLAUDE_PROJECT_DIR": PLANS})
+os.makedirs(RF[:-3] + ".work")
+head_file = os.path.join(CODE, ".git", "HEAD")
+head_before = read(head_file)
+commit(CODE, "feat: v1\n\nBees-Unit: refresh/V1", 4000)
+r = refresh()
+check(r.returncode == 0 and cell(RF, "V1") == "🔵", f"a branch advance with .git/HEAD unchanged refreshes: {r.stderr}")
+check(read(head_file) == head_before, "HEAD stayed a symbolic ref")
+check(not os.path.exists(idle[:-3] + ".work") and cell(idle, "V1") == "☐", "a plan without .work/ is not refreshed")
+rw = os.path.join(RF[:-3] + ".work", "impl-V2-r1.txt")
+write(rw, "BEES: results=V2:done:-\n")
+write(rw + ".usage", "{}")
+refresh()
+check(cell(RF, "V2") == "🟡 done, trailer missing", "a new round refreshes")
+dir_mtime = os.path.getmtime(RF[:-3] + ".work")
+write(rw, "BEES: results=V2:blocked:-\n")
+os.utime(RF[:-3] + ".work", (dir_mtime, dir_mtime))
+refresh()
+check(cell(RF, "V2") == "🔴 blocked", "a rewritten out-file refreshes although the dir mtime did not move")
+write(os.path.join(PLANS, "docs/plans/2026-01-08-broken.work/x"), "")
+write(os.path.join(PLANS, "docs/plans/2026-01-08-broken.md"), "# no checklist\n")
+r = refresh()
+check(r.returncode == 0 and "no '## Checklist'" in r.stderr and r.stdout == "", "a broken plan never fails the hook")
+
+with open(os.path.join(RF[:-3] + ".work", ".lock"), "w") as held:
+    fcntl.flock(held, fcntl.LOCK_EX)
+    run("--plan", RF, "note", "V1", "accept: synthetic")
+    waiting = subprocess.Popen([TOOL, "--plan", RF, "show", "--write"], stdout=subprocess.DEVNULL)
+    time.sleep(0.5)
+    check(waiting.poll() is None and cell(RF, "V1") == "🔵", "show --write waits on the plan's lock")
+    write(RF, read(RF).replace("| item V1 |", "| item V1 renamed |"))
+waiting.wait()
+check(cell(RF, "V1") == "✅", "and writes once the lock is released")
+check("| item V1 renamed |" in read(RF), "reading the plan inside the lock keeps an edit made while waiting")
+racers = [subprocess.Popen([TOOL, "--plan", RF, "show", "--write"], stdout=subprocess.DEVNULL) for _ in range(6)]
+check(all(p.wait() == 0 for p in racers), "concurrent show --write all succeed")
+check(bs.Plan(RF).units["V1"]["status"] == "✅" and read(RF).count("### V1 · item V1 **✅ Done") == 1, "and leave one intact plan")
+
+bin_dir = os.path.join(T, "bin")
+write(os.path.join(bin_dir, "codex"), """#!/usr/bin/env bash
+while [ $# -gt 0 ]; do [ "$1" = --output-last-message ] && out="$2"; shift; done
+printf 'fake review\\nBEES: reviews=V2:MAJ-01\\nCHANGES_REQUIRED\\n' > "$out"
+echo '{"thread_id":"fake-thread"}'
+""")
+os.chmod(os.path.join(bin_dir, "codex"), 0o755)
+commit(CODE, "feat: v2\n\nBees-Unit: refresh/V2", 5000)
+at(4500, rw + ".usage")
+cr = os.path.join(os.path.expanduser("~/.claude/skills/codex-review/scripts/codex-review"))
+r = subprocess.run([cr, "-p", prompt, "-u", "V2", "-o", RF[:-3] + ".work"], capture_output=True, text=True, cwd=CODE,
+                   env={**os.environ, "PATH": bin_dir + os.pathsep + os.environ["PATH"], "CODEX_HOME": os.path.join(T, "codex-home")})
+check(r.returncode == 0 and cell(RF, "V2") == "🔵 (review open)", f"a wrapper's exit refreshes the plan: {r.stderr}")
+check(read(os.path.join(RF[:-3] + ".work", "review-V2-r1.txt.cwd")).strip() == os.path.realpath(CODE), "the wrapper wrote .cwd")
+ci = os.path.expanduser("~/.claude/skills/codex-implementor/scripts/codex-implement")
+before = read(RF), sorted(os.listdir(RF[:-3] + ".work"))
+at(9000, RF)
+r = subprocess.run([ci, "-C", CODE, "-p", prompt, "-u", "V1", "-o", RF[:-3] + ".work", "-t", "bogus"], capture_output=True, text=True)
+check(r.returncode == 2 and "-t must be" in r.stderr, "codex-implement rejects an invalid -t")
+check((read(RF), sorted(os.listdir(RF[:-3] + ".work"))) == before and os.path.getmtime(RF) == 9000,
+      "and an invalid invocation writes nothing and never refreshes the plan")
+write(os.path.join(bin_dir, "opencode"), "#!/usr/bin/env bash\nexit 0\n"); os.chmod(os.path.join(bin_dir, "opencode"), 0o755)
+for w in ("codex-implementor/scripts/opencode-implement", "codex-review/scripts/opencode-review"):
+    r = subprocess.run([os.path.expanduser("~/.claude/skills/" + w), "-C", CODE, "-p", prompt, "-u", "V1", "-o", idle[:-3] + ".work",
+                        "-s", "ses_bogus", "--url", "http://127.0.0.1:1"], capture_output=True, text=True,
+                       env={**os.environ, "PATH": bin_dir + os.pathsep + os.environ["PATH"]})
+    check(r.returncode == 1 and "cannot be resumed: no server" in r.stderr, f"{w.split('/')[-1]} refuses an unresumable -s before allocating")
+    check(not os.path.exists(idle[:-3] + ".work") and cell(idle, "V1") == "☐", "and created no .work/ dir")
+
+
+# ---------- VIEW-08: the store is gone ----------
+
+for args in (["init", P, "--scope", "s"], ["unit", "add", "G1"], ["log", "add", "G1"], ["slot", "set", "1"], ["import", P]):
+    check(run(*args, env={"BEES_PLAN": ""}).returncode != 0, f"legacy command {args[0]} is gone")
+r = run("show", env={"BEES_PLAN": ""})
+check(r.returncode != 0 and "--plan" in r.stderr, "show without a plan names --plan")
+
+print(f"PASS test-bees-status ({passed} checks)")

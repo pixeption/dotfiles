@@ -1,6 +1,17 @@
 ---
 name: bees
-description: Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work (1 2 3 5 8 13), route each unit to a cost bucket (codex luna / Sonnet ≤ 3, codex sol / Sonnet at 5, codex sol / Opus 5 for 8–13), pair it with the cross-vendor reviewer, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
+description: >-
+  Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work (1 2 3 5 8 13), route each unit to a cost bucket (codex luna / Sonnet ≤ 3, codex sol / Sonnet at 5, codex sol / Opus 5 for 8–13), pair it with the cross-vendor reviewer, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
+hooks:
+  SubagentStop:
+    - matcher: "bee-implementor|bee-mechanical|bee-reviewer"
+      hooks:
+        - type: command
+          command: "~/.claude/skills/bees/scripts/bees-status refresh"
+  Stop:
+    - hooks:
+        - type: command
+          command: "~/.claude/skills/bees/scripts/bees-status refresh"
 ---
 
 # Bees — orchestrated development
@@ -30,8 +41,10 @@ bake-off):
 - **A blocked agent costs wall-clock, not tokens — and wall-clock is the owner's.** A codex round
   waited on a permission prompt from 23:18 to the next morning (2026-09-20) because nothing
   watched it. A background task is inspected, never waited on (§4).
-- **The status document grows without bound** unless pruned: one plan's doc went 49 KB → 135 KB
-  (~34k tokens) in two days, read by the orchestrator many times a session (§9).
+- **Bookkeeping is a second job unless it is derived.** A hand-kept status document went 49 KB →
+  135 KB in two days; a script fed by dictated events still cost ~50 calls a session re-typing
+  facts already on disk. Status is now derived from the plan, the out-files, git and one-line
+  notes (§9).
 - **Small plans paid the full machinery**: a status doc, a reviewer, a slot table and an
   orchestrator commentary loop for work one agent could finish in one sitting.
 - **Exclusive resources deadlock silently**, and agents die holding them.
@@ -39,7 +52,7 @@ bake-off):
 ## 0. Setup phase (every new bees session)
 
 Before scoring anything, ask the owner in one AskUserQuestion call and record the answers in
-your first status line (and in the status doc's `Setup:` line in full mode):
+your first status line (and, in full mode, as one `decision: setup — …` note, §9):
 
 | question | default |
 |---|---|
@@ -49,7 +62,7 @@ your first status line (and in the status doc's `Setup:` line in full mode):
 
 Do not start a unit until the answers are in. They hold for the whole session; a later change
 is an owner decision with an id. A session started by a handoff (§10) inherits the answers from
-the status doc's `Setup:` line and does not re-ask.
+that note (`show --takeover` lists it) and does not re-ask.
 
 **Before the first codex unit**, confirm the OpenCode server carries the fence: the server reads
 `~/.config/opencode/opencode.jsonc` **at startup only**. A server older than the file has no
@@ -65,9 +78,9 @@ Score every item (§3). Then:
 
 | total score | mode |
 |---|---|
-| ≤ 3 | **No bees.** Do it yourself, or one agent, one brief, no status doc, no reviewer unless the change is risky. |
-| 4–13 | **Light.** One implementor, continued across units until its budget is spent; review only risky units; status kept in your final message, no status doc. |
-| > 13, or multi-session, or two exclusive resources | **Full.** Slot table, status doc, review per §8. |
+| ≤ 3 | **No bees.** Do it yourself, or one agent, one brief, no plan checklist, no reviewer unless the change is risky. |
+| 4–13 | **Light.** One implementor, continued across units until its budget is spent; review only risky units; status kept in your final message, no plan checklist. |
+| > 13, or multi-session, or two exclusive resources | **Full.** A plan with the canonical checklist, rounds in its `.work/`, notes, review per §8 (§9). |
 
 Choosing "full" for a small plan is the error, not the safe default.
 
@@ -83,8 +96,7 @@ Choosing "full" for a small plan is the error, not the safe default.
 3. **One driver per exclusive resource, named in the brief.** A Unity project is one resource
    across editor, batch test host, project lock *and every source it compiles* (`file:` packages
    included): driving `nono4u/Game` locks `game-core` and `game-build` sources. The second slot
-   does read-only work or work no editor compiles — or waits. There is no lock mechanism; your
-   slot table is it. A codex worktree is outside every compile domain; **validating its diff**
+   does read-only work or work no editor compiles — or waits. There is no lock mechanism; your roster and the briefs' held/off-limits lines are it. A codex worktree is outside every compile domain; **validating its diff**
    against the real project is not, and needs the resource like any other unit.
 4. **One session budget, both vendors: continue below 120k, finish below 200k, retire at 200k.**
    The figure is the harness's token count on a Claude agent's last notification, or
@@ -111,17 +123,18 @@ Choosing "full" for a small plan is the error, not the safe default.
 7. **Review in proportion to risk.** Fix rounds continue until the recheck is clean; a codex
    review then runs the final holistic pass `codex-review` requires. The churn check in §8, not a
    round count, stops a loop that is not converging.
-8. **The status document is the handover** (full mode only), and **a script owns it**: you emit
-   one-line `bees-status` events and read narrow `show` views; you never Read or Edit the
-   markdown (§9). A new session starts from it with fresh agents.
+8. **Status is derived, never dictated** (full mode only): the plan's checklist, the rounds in
+   its `.work/`, `Bees-Unit:` trailers and one-line notes are the whole record; `bees-status show`
+   renders it and the hooks write the plan's `Status` column (§9). You type only notes —
+   decisions and acceptances. A new session starts from `show --takeover` with fresh agents.
 9. **The orchestrator hands off at 200k, at a safe point** (§10). Compaction is the fallback,
    never the plan.
 10. **Delegate execution — including reading.** Inspect directly only when cheaper than a spawn:
     one diff, a few definitions, reconciling two contradictory reports. Anything that means more
     than two file reads or a grep fan-out is a **scout** (§3): a read-only `bee-scout` returns
     1–3k of evidence once, while files you read yourself stay in your context for every later
-    turn of the session. The same rule covers the status doc and wrapper logs: `bees-status
-    show` and `bees-watch` print a few lines; a Read of either file is paid every turn after.
+    turn of the session. The same rule covers the plan's status and wrapper logs: `bees-status
+    show` and `bees-watch` print a few lines; a Read of a `.log` is paid every turn after.
 
 ## 3. Scoring, buckets, budgets
 
@@ -178,12 +191,12 @@ Before every codex unit (implementation or review) run `~/.claude/skills/bees/sc
 it prints the 5-hour and weekly windows from the newest snapshot codex wrote and exits 1 when the
 5-hour window is ≥ 80% or the weekly ≥ 90% (thresholds are flags). Exit 1 → the unit goes to the
 Claude column of its bucket, same score, and its review goes to `bee-reviewer` since codex is
-unavailable for that too; the status doc notes the reading. The snapshot is from the last codex
+unavailable for that too; a note records the reading. The snapshot is from the last codex
 turn; a 5-hour window whose reset has passed reads as 0%. **A STALE reading is not a reading**: it
 said "ok" once while the real window was at 100% and three reviews came back truncated or empty
 (429). When it is STALE, read `x-codex-primary-used-percent` from the newest wrapper `.log`
-instead, or spend one cheap codex turn to refresh it. Record the reading on the unit's line when
-it changed the routing. OpenCode reports `cost: 0` for every round — the plan is metered by the
+instead, or spend one cheap codex turn to refresh it. Note the reading on the unit
+(`note <unit> "decision: codex 5h window 84% → bee-mechanical"`) when it changed the routing. OpenCode reports `cost: 0` for every round — the plan is metered by the
 usage windows, and the token figures are for the budget rule only.
 
 Everything that can be done blind in a worktree and validated afterward goes to codex. Model and
@@ -225,21 +238,21 @@ Rules of continuation:
   a reply. Past the clock, continue only an agent under ~100k; otherwise spawn.
 - Spawn fresh when: context at or past 200k, different bucket, area, resource or repo, a review
   of that agent's own work, or the cache is cold and the context is over ~100k.
-- Read context/turns (Claude) or `.usage` `context_tokens` (codex) from every report and record
-  them (`bees-status slot set … --ctx`, `log add … --cost`). An agent that reports no numbers is
-  asked once, in the next brief. For an OpenCode-channel unit, a `compacted` key in `.usage`
+- Read context from every report: codex's lands in `.usage` by itself; a Claude bee's is the
+  harness notification's figure, saved with its report by `capture-bee --ctx` (§9). An agent that
+  reports no numbers is asked once, in the next brief. For an OpenCode-channel unit, a `compacted` key in `.usage`
   (surfaced in the wrapper's own stderr line) means the server auto-summarized the session at
   ~270k: `context_tokens` afterward is the real, smaller size — record it as-is — but treat the
   agent as if freshly spawned re: recall, since everything before the compaction is now a summary,
   not the original detail (codex-implementor's `extract-opencode-usage`).
 - **Handover instead of continuation.** When a resource holder must be retired, its last message
   is "stop at a safe point; write the state a successor needs (suite command + last green count,
-  uncommitted files, what is half-done, resources/Play-mode state) in your report"; you record it
-  with `bees-status takeover`. The fresh agent's brief carries that text; it does not re-derive
+  uncommitted files, what is half-done, resources/Play-mode state) in your report"; you turn its facts
+  into `handoff:` notes (§9). The fresh agent's brief carries that text; it does not re-derive
   the area from the transcript. A retire-and-spawn costs one spawn's warm-up; continuing past the
   cap costs that much again on every single turn.
 - A scout is never continued and never asked a second question. ≤ 2 scouts per unit; a third is
-  a diagnosis unit. Log scout tokens on the unit's line (`scout ×2 · 90k`); they add no points.
+  a diagnosis unit. Note scout tokens on the unit (`note <unit> "scout ×2 · 90k"`); they add no points.
 - Never brief more than the per-brief points at once; two half-briefs to one agent beat one full
   brief because each report is a checkpoint you can steer from.
 - A batch step that runs over the agent's cache clock (a full Integration suite on a Claude agent)
@@ -254,12 +267,13 @@ Rules of continuation:
 - Disjoint file sets inside one compile domain are not enough; sequence the units. A trial unit
   launched from a *second orchestrator session* into a domain the first one held hit that first
   session's uncommitted edits as a Safe-Mode compile error (2026-09-20): the slot table is per
-  plan, so a second session runs `bees-status show now` before touching any project.
+  plan, so a second session runs `bees-status --plan <plan.md> show --takeover` (repo HEADs,
+  uncommitted paths, live sessions) before touching any project.
 - Batch `unity test` writes its report to a cwd-relative `test-results.xml`, prints nothing and
   can exit 1 on a green run. Briefs say: run from the project dir or pass an absolute `--output`,
   parse the XML, ignore stdout and exit code (unity-cli skill).
 - **Watching a codex round.** Never tail or Read the wrapper's `.log`. Run
-  `~/.claude/skills/bees/scripts/bees-watch <out-file>...` (or `--dir <scratchpad>`): one line
+  `~/.claude/skills/bees/scripts/bees-watch <out-file>...` (or `--dir docs/plans/<plan>.work`): one line
   per round — running/finished, minutes since the log last grew, BUSY/idle on the server, context
   tokens, session id — and a flag, exit 1, when something needs you:
   - `ASK WAITING` — a permission ask nobody headless can answer. Answer it through the attach TUI
@@ -312,8 +326,8 @@ Rules of continuation:
 through a scout when it is more than two reads; a diagnosis unit when it needs a run or a
 judgment. 5. Roster: **resources → holders → slots → order**, units grouped by area and bucket so
 one agent can take several. 6. Delegate; continue or spawn per §3. 7. Review per §8; evaluate;
-delegate fixes; recheck. 8. Accept against the criteria. 9. Report; emit the `bees-status` events
-(full mode). 10. At every pause, decision or acceptance: check your own context against §10.
+delegate fixes; recheck. 8. Accept against the criteria. 9. Report; note decisions and acceptances
+(full mode) — everything else is derived. 10. At every pause, decision or acceptance: check your own context against §10.
 
 Convergence tasks (iterating toward a measured target): freeze metric, threshold, reference set and
 known floor before the loop; put open owner questions into one decision packet with costs.
@@ -358,7 +372,25 @@ Resources: projects driven; Play-mode state before/after; isolation restored.
 Cost: context now / turns / elapsed.
 Concerns: risks, assumptions, regressions.
 Need from orchestrator: only if a decision is required.
+BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]
 ```
+
+**The last line is a contract, codex and bee alike.** Every implementor brief ends with: *"Your
+final message's last line is exactly `BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]`"*
+— one entry per unit the round serves (the wrapper's `-u` list), hashes comma-separated, `-` for
+none: a round that finishes F2 and blocks LV-02 ends `BEES: results=F2:done:4a31ceeb;LV-02:blocked:-`.
+Every review brief keeps the terminal `APPROVE`/`CHANGES_REQUIRED` as the last line and puts
+`BEES: reviews=<unit>:<open-ids|->[;…]` on the line directly above it. `bees-status` greps that one
+line and parses no prose; a report whose line is missing, duplicated, wrapped or names the wrong
+units renders `malformed result` with its path — you decide whether the work or only the report
+is repeated, never an automatic re-run.
+
+**Every commit names its units.** The brief also says: *"Every commit carries one
+`Bees-Unit: <plan-slug>/<unit>` trailer per unit it serves"* (`git commit --trailer
+"Bees-Unit: skills-docs-rewrite-v3/F2"`; the slug is the plan's basename without the leading
+`YYYY-MM-DD-` and `.md`, because unit ids recur across plans). Only the exact trailer value in
+the row's `Repo` marks a unit landed — never the subject or body. Amend and rebase keep trailers;
+a squash must carry them over, or the unit stops counting as landed.
 
 Implementors classify every failure (introduced / pre-existing with evidence / unknown), add tests,
 no opportunistic refactors. A compile break in another agent's file is reported once.
@@ -393,7 +425,8 @@ end (then the reviewer is chosen by the vendor that implemented **most points**)
 fresh, read-only, holds no resource, never edits, never the implementor of the unit. The review
 covers a **quiescent tree** and states the commit or diff hash reviewed; never while another agent
 edits the same domain. Input: changed files, surrounding code, acceptance criteria, related tests.
-Findings one line each with a stable id (`MAJ-02 — sentence — file:line`), severity
+The report ends with the `BEES: reviews=…` line above the verdict (§7). Findings one line each
+with a stable id (`MAJ-02 — sentence — file:line`), severity
 **Critical / Major / Minor / Nit**; only Critical/Major block, and each finding carries its
 **fix as exact code or text**, so the implementor applies rather than reinterprets. A recheck is
 **targeted**: the brief carries the fix commit range, the reviewer verifies the listed findings
@@ -407,72 +440,63 @@ finding regressed twice, or new findings outnumbering closed ones two rounds run
 structural problem — stop, report, and re-plan the unit rather than queue another fix round. A
 clean review is valid. Acceptance of a new document key, command or config surface includes an
 **end-to-end fixture through the real path** (apply/export/run), not only a helper's unit tests.
-When codex is out (usage limit, 429), the review goes to `bee-reviewer` and the unit line says so.
+When codex is out (usage limit, 429), the review goes to `bee-reviewer` and a note says so.
 
-## 9. The status document (full mode)
+## 9. Status is derived (full mode)
 
-`docs/plans/<plan>-status.md`, next to the plan — **rendered by a script, never edited by hand**.
-`~/.claude/skills/bees/scripts/bees-status` owns the state in `<plan>-status.json` and re-renders
-the markdown (the dashboard for the owner and the successor) and `<plan>-status-log.md` (the
-archive) on every command. The orchestrator's part is one line per event and a narrow `show`
-when it needs a fact; the doc itself is read once, by the successor at handoff. Why: the doc
-grows to 40 KB (~10k tokens) and a Read of it stays in context for every later turn, an Edit puts
-the old and new text in again, and a paraphrased anchor after compaction broke two hand edits.
-The script makes every §9 rule structural: fixed state vocabulary, pts · bucket · implementor on
-every unit wherever it is named, log window of 20, accepted units collapsed, superseded decisions
-and resolved frictions archived, one `How to take over` — none of it is discipline any more.
+There is no status document and nothing to dictate. `~/.claude/skills/bees/scripts/bees-status`
+computes the board on demand from four things that exist anyway, and writes one thing back: the
+plan's own `Status` column.
 
-```
-export BEES_STATUS=docs/plans/<plan>-status.json          # after init; or -f on each call
-bees-status init docs/plans/<plan>.md --scope … --focus … --by "fable low" --setup "<routing chosen in §0>"
-bees-status unit add G1 --pts 3 --bucket low --impl "codex luna max" --reviewer bee-reviewer \
-    --resource "— (worktree)" --title "seed wiring gaps" --acceptance "…" [--depends B2]
-bees-status unit G1 state running|landed|fix|blocked|queued "round 3, MAJ-02 open"
-bees-status unit G1 round 3 --done 06:55Z --verdict 07:05Z --fixed "CRIT-01,MAJ-01" --open "APP-02"
-bees-status unit G1 finding add APP-02 "read side still uses the old shape" --ref Runtime/UISeed.cs:214
-bees-status unit G1 finding fix APP-02
-bees-status unit G1 accept "one projected-basis helper" --commit 3b73b3a --evidence "412 green"
-bees-status slot set 2 --agent "bee-implementor (Opus 5 med)" --holds nono4u/Game --unit "B4 (8 · high)" --ctx "110k / 8 of 26"
-bees-status slot set codex --agent "luna max (opencode :4096, dir game-core)" --unit "G1 (3 · low) round 3" --ctx 190k
-bees-status slot clear 2
-bees-status decision add D7 "one budget both vendors: continue < 120k …"   [--who owner]
-bees-status decision supersede D2 D7 | decision done D2
-bees-status log add G1 --by "codex luna" --outcome "DONE, awaiting recheck" --cost "0.4M / 190k / 17" --commits 3b73b3a --note "…"
-bees-status next "B4 (slot 2 continues) → G1 validate (slot 1) → owner report"
-bees-status owner-open "D6 …" | takeover "<item 0: projects driven, suite + last green, state to verify, uncommitted trees, owner WIP paths>"
-bees-status friction add F3 "codex committed on licensing hang" --evidence 0f4c12d --fix "no report, no commit"
-bees-status friction resolve F3 "brief rule added" | noise add "…" | updated "session 4 · game-core 9a8808b"
-bees-status show [brief|now|triage|unit G1|decisions|log|frictions|done]      # brief = Now + Triage
+| fact | derived from |
+|---|---|
+| units, points, route, phase, dependencies | the plan's `## Checklist` — `ID`, `Item`, `Repo`, `Pts`, `Route`, `Phase`, `Depends`, `Status`; one row per unit, `Repo` relative to the plan's repo |
+| rounds, outcome, context, session, pinned directory | out-files in `docs/plans/<plan>.work/` (gitignored) and their `.usage`/`.session`/`.cwd` |
+| landed | `Bees-Unit: <plan-slug>/<unit>` trailers in the row's `Repo` (§7) |
+| decisions, acceptance, gaps, concerns, handoff facts | `docs/plans/<plan>.notes.md`, one line each |
+
+**Rounds.** Every codex wrapper takes `-u <unit>` (repeatable) and `-o docs/plans/<plan>.work/`,
+which names the file `impl-<unit>[+<unit>…]-r<N>.txt` or `review-…`; anything else fails before a
+file is written. A Claude bee has no wrapper: after its Agent result, save the report — a copy,
+not a transcription — with the harness notification's context figure, never the agent's own:
+
+```sh
+bees-status --plan <plan.md> capture-bee -u G1 [-u G2] --role impl|review --ctx 118000 <<'REPORT'
+<the bee's report, verbatim>
+REPORT
 ```
 
-Every command prints `ok …` on one line; `show` prints one section (a few hundred tokens);
-`show doc` is for the owner, not for you. Timestamps come from the clock, never from memory
-(three hand-written rows once carried future times); pass `--at`/`--done`/`--since` only for a
-time you copied from a report. The one `Now` row of a codex session names its pinned directory,
-so the next brief for another repo is visibly a new session. On acceptance the unit collapses to
-a Done line; the Log keeps the timeline. Commit the three status files at every pause, decision
-or acceptance — the script does not touch git.
+`.work/` is never copied or synced: its mtimes are the round times the status is ordered by.
 
-The rendered layout (what the owner and the successor read):
+**Notes are the only thing you type.** One line, optional unit, first token picks the kind —
+`accept:`, `decision:`, `gap:`, `concern:`, `blocked-on:`, `handoff:`; anything else is a plain
+log line. A note that needs more than one line is a checklist row.
 
-```markdown
-# <plan> — status and handover
-**Date / Scope / Focus / By / Method** · **Setup:** … · **Last updated:** <stamp> · <note>
-## Decisions (in force)      | id | date | who | rule | status |
-## Triage                    legend · | unit | pts | bucket | implementor | reviewer | resource | depends on | state |
-## Now                       | slot | agent (model) | holds | unit (pts · bucket) | ctx / pts used | since |
-**Next:** …  **Owner decisions open:** …
-## How to take over          item 0 only
-## Log                       last 20 rows, newest first; older in <plan>-status-log.md
-## Units                     open units: heading with pts · bucket · implementor, rounds table, findings checklist
-## Done · ## Queue · ## Known noise / deferred · ## Frictions (open)
+```sh
+bees-status --plan <plan.md> note G1 "accept: 412 green; bee-reviewer clean at 3b73b3a"   # the only way to ✅
+bees-status --plan <plan.md> note "decision: D7 one budget, both vendors: continue < 120k, none ≥ 200k"
+bees-status --plan <plan.md> note B4 "handoff: editor closed; unity test … 412 green; Assets/X.cs uncommitted"
 ```
 
-State vocabulary, always marker + word, then ` — detail`: ⚪ queued · 🟡 running · 🔵 landed
-(committed, review pending) · 🟠 fix round · 🔴 blocked / needs decision · 🟢 accepted · ⚫
-dropped. The script rejects anything else. A unit is 🟢 only when its review is closed; commits
-alone are 🔵. The size budget of 40 KB is checked on every write and printed as a warning; the
-cure is `unit … accept` / `drop` and `friction resolve`, not editing.
+**Reading.** `BEES_PLAN=<plan.md>` saves the flag.
+
+```sh
+bees-status --plan <plan.md> show              # board: status, rounds, context per role, open review ids, diagnostics, Next
+bees-status --plan <plan.md> show --log        # notes, rounds and trailer commits in time order
+bees-status --plan <plan.md> show --takeover   # repo HEADs, sessions + pinned dirs, unfinished units, tagged notes, phase + handoff line
+```
+
+The `Status` column is written by the tool, never by hand: ☐ queued · 🟡 attempted (a round
+exists without a completed result, `paused`, or `done, trailer missing`) · 🔴 blocked /
+needs-decision · 🔵 landed (a trailer; `(review open)` while the newest valid review after it
+names open ids for the unit) · ✅ accepted (an `accept:` note; the heading gets
+`**✅ Done <date>**`). A report without its `BEES:` line shows as `malformed result` with its
+path on the board — you decide whether the work or only the report is repeated.
+
+**Refresh is automatic.** Each wrapper's exit, a bee's `SubagentStop` and every `Stop` (this
+skill's hooks) run `show --write` for every plan that has a `.work/` dir, serialised per plan by
+a lock on `.work/.lock`. Run `show` yourself only to read the board. Commit the plan and its
+notes file at every pause, decision or acceptance; nothing else needs committing.
 
 ## 10. The orchestrator's own context: hand off at 200k
 
@@ -486,19 +510,29 @@ At or past 200k, at the **next safe point**:
 2. Bring the slot table to empty, or to a state the successor can pick up without this
    session's notifications: every running agent has reported and been retired with a handover
    (§3), or is a codex session under 200k the successor can resume by id in the same directory.
-3. `bees-status takeover "…"` (item 0), `bees-status next "…"`, `bees-status updated "session <n>
-   · <repo> <sha>"`, commit the three status files.
-4. Run the **`handoff` skill**: compose the message from the doc (state, next unit, routing in
-   force, resource state, constraints the briefs carry, owner WIP paths, codex window reset
-   time), spawn the successor with `--task "<plan> session <n+1>"`, confirm it is up, report the
+3. Note what no file derives — `handoff:` (editor state, verify command and last green count,
+   half-done work, protected owner WIP paths, codex window reset time), `blocked-on:`,
+   `concern:` — and commit the plan and its notes file.
+4. Hand off with the takeover (**Phases** below): `show --takeover` prints its `Handoff:` line,
+   the exact pipe into the `handoff` skill's script. Confirm the successor is up and report the
    tab name to the owner. This session stays open as a fallback and starts nothing.
 
 Why not compaction: a compaction fires whenever the window fills, usually mid-unit with agents
 running, and its summary is lossy in ways nobody chose. A handoff at a safe point is written by
-the session that still knows everything, and the status doc is already the handover artefact. The
+the session that still knows everything, and `show --takeover` is already the handover. The
 cost is the same order (a fresh system prefix plus the message). Compaction stays enabled as the
 fallback for a single unit that overruns the window before a safe point; when it happens, the
-first action after it is `bees-status show brief` and `bees-watch`, not trusting the summary.
+first action after it is `bees-status --plan <plan.md> show --takeover` and `bees-watch`, not
+trusting the summary.
+
+**Phases.** The plan's checklist has a `Phase` column that groups rows into what one orchestrator
+session should finish (≈ 5–8 units). When every unit in phase N is ✅, run
+`~/.claude/skills/bees/scripts/bees-status --plan <plan.md> show --takeover | ~/.claude/skills/handoff/scripts/spawn-handoff.sh --cwd <repo> --task "<plan> phase N+1" --model <exact current model id>`
+— the script is not on PATH and reads the message from stdin. If your context passes the one
+threshold above before that, hand off the same way with `--task "<plan> phase N continued"`; the
+takeover names the first unfinished unit and the phase is not complete. The takeover's `Phase:`
+and `Handoff:` lines print both, ready to run. You decide a phase is done — it happens a few
+times per plan, so no hook and no persisted phase state.
 
 A handoff is never done with two agents mid-unit: the successor cannot receive their task
 notifications, and the old session is then the only one that can. Retire them first.
@@ -516,7 +550,7 @@ Say the **delta**, sized by what happened:
 | an agent reported | unit (pts · bucket · who) · outcome · commit/suite · one clause of substance · continued or retired, and why | 2–3 lines |
 | a round went quiet | what §4's checks found and what you did about it | 1–2 lines |
 | owner decision or blocker | question, options with cost, your recommendation | ≤ 6 lines |
-| pause or session end | the `Now` block, `Next` as one arrow line, uncommitted state | ≤ 10 lines |
+| pause or session end | the board's changed rows, `Next`, uncommitted state | ≤ 10 lines |
 | handoff | tab name, first unit the successor starts on, "this session stays open" | 3 lines |
 | completion | what changed, decisions by id, verification, review status, open risks, what the user must decide | as needed |
 

@@ -15,4 +15,8 @@ citation; never cite from memory. On a recheck, work from the fix diff the brief
 each listed finding from that diff and the finding's rationale, review the delta and its
 dependencies for what the fix introduced or exposed, and re-read nothing else. Return four id
 lists — Fixed / Partial / Open / Regressed — then new findings continuing the id sequence. A clean
-review is a valid result. Always include the Cost line (context now / turns / elapsed).
+review is a valid result. End with `BEES: reviews=<unit>:<open-ids|->[;…]` (one entry per unit
+the brief names; `<open-ids>` contains only unresolved Critical/Major findings, `-` when none —
+Minor, Nit and suggestions stay in prose and never appear in the list) on the line directly above
+the terminal `APPROVE` or `CHANGES_REQUIRED`, which is the last line; the Cost line (context now /
+turns / elapsed) goes above them.

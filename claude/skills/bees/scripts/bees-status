@@ -1,42 +1,19 @@
 #!/usr/bin/env python3
-"""Own the bees status document so the orchestrator never reads or edits it.
+"""Derive a bees plan's status from what already exists: nothing here is a store.
 
-State lives in <plan>-status.json next to the plan; every write re-renders <plan>-status.md
-(the human/handover view) and rolls old rows into <plan>-status-log.md. Each command prints a
-one-line ack. `show` prints one narrow view, never the whole doc, unless `show doc` is asked.
+The plan's `## Checklist` is the unit list; rounds are the out-files in docs/plans/<plan>.work/
+and their .usage/.session/.cwd sidecars; landed is a `Bees-Unit: <plan-slug>/<unit>` git trailer
+in the row's Repo; decisions and acceptances are one-line notes in <plan>.notes.md. `show --write`
+renders the Status column back into the plan; it is idempotent, so it can fire from anywhere.
 
-  bees-status [-f status.json] <command> ...        (or set BEES_STATUS=path)
-
-  init <plan.md> --scope S --focus F --by B [--method M] [--setup S]
-  unit add ID --pts N --bucket low|mid|high --impl I [--reviewer R] [--resource R]
-           [--depends A,B] [--acceptance TEXT]
-  unit ID state queued|running|landed|fix|blocked|accepted|dropped [DETAIL]
-  unit ID round N [--done HH:MMZ] [--verdict HH:MMZ] [--fixed IDS] [--open IDS]
-  unit ID finding add FID TEXT [--ref path:line] | unit ID finding fix FID
-  unit ID accept WHAT [--commit SHA] [--evidence TEXT]    (collapses the unit to a Done line)
-  unit ID drop WHY
-  slot set NAME --agent A [--holds H] [--unit U] [--ctx C] [--since HH:MMZ] | slot clear NAME
-  decision add ID RULE [--who owner] | decision supersede OLD NEW | decision done ID [NOTE]
-  log add UNIT --by WHO --outcome O [--cost "0.4M / 190k / 17"] [--commits SHA] [--note N] [--pts P]
-  next TEXT | owner-open TEXT | takeover TEXT | updated TEXT | noise add TEXT | noise drop PREFIX
-  friction add ID WHAT [--evidence E] [--fix F] | friction resolve ID FIX
-  show [brief|triage|now|unit ID|decisions|log|frictions|done|doc]
-  roll | import <old-status.md>      (one-time migration of a hand-written doc into a fresh state)
+  bees-status --plan <plan.md> show [--write] [--log | --takeover]   (or set BEES_PLAN)
+  bees-status --plan <plan.md> note [unit] "text"         first token: accept: decision: gap:
+                                                            concern: blocked-on: handoff:
+  bees-status --plan <plan.md> capture-bee -u <unit>... --role impl|review --ctx <tokens> < report
+  bees-status round-out --role impl|review -u <unit>... -o <plan>.work/[<out-file>]   (wrappers)
+  bees-status refresh [--root <dir>]      hooks: refresh every plan with a docs/plans/*.work/ dir
 """
-import argparse, datetime as dt, glob, json, os, sys
-
-MARK = {"queued": "⚪ queued", "running": "🟡 running", "landed": "🔵 landed", "fix": "🟠 fix round",
-        "blocked": "🔴 blocked", "accepted": "🟢 accepted", "dropped": "⚫ dropped"}
-LEGEND = "⚪ queued · 🟡 running · 🔵 landed (committed, review pending) · 🟠 fix round · 🔴 blocked / needs decision · 🟢 accepted · ⚫ dropped"
-LOG_WINDOW, SIZE_BUDGET = 20, 40_000
-
-
-def now_hm():
-    return dt.datetime.now(dt.timezone.utc).strftime("%H:%MZ")
-
-
-def now_stamp():
-    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%MZ")
+import argparse, contextlib, datetime as dt, fcntl, functools, glob, json, os, re, subprocess, sys, tempfile
 
 
 def die(msg):
@@ -53,386 +30,534 @@ def table(cols, rows):
     return "\n".join(out)
 
 
-def load(path):
-    try:
-        with open(path) as f:
-            return json.load(f)
-    except FileNotFoundError:
-        die(f"no state at {path}; run init or set BEES_STATUS")
+# ---------- derived view: the plan's checklist is the unit list ----------
+
+COLUMNS = ("ID", "Item", "Repo", "Pts", "Route", "Phase", "Depends", "Status")
+ID_LINK = re.compile(r"\[([^\]]+)\]\(#([^)]*)\)")
+DONE_MARK = re.compile(r" \*\*✅ Done \d{4}-\d\d-\d\d\*\*$")
+HASH = re.compile(r"[0-9a-f]{7,40}")
 
 
-def paths(st):
-    base = st["base"]
-    return base + "-status.json", base + "-status.md", base + "-status-log.md"
-
-
-# ---------- rendering ----------
-
-def unit_line(u):
-    return f"{u['id']} · {u['pts']} pts · {u['bucket']} · {u['impl']}"
-
-
-def render(st):
-    h = st["header"]
-    L = [f"# {st['title']} — status and handover",
-         f"**Date:** {h['date']} · **Scope:** {h['scope']} · **Focus:** {h['focus']} · **By:** {h['by']} · **Method:** {h.get('method') or '—'}",
-         f"**Setup:** {st.get('setup') or '—'}",
-         f"**Last updated:** {st.get('updated_at')} · {st.get('updated') or '—'}", ""]
-    dec = [d for d in st["decisions"] if d["status"] == "in force"]
-    L += ["## Decisions (in force)", table(["id", "date", "who", "rule", "status"],
-                                           [(d["id"], d["date"], d["who"], d["rule"], d["status"]) for d in dec]), ""]
-    units = [u for u in st["units"].values() if u["state"] not in ("accepted", "dropped")]
-    rows = [(u["id"], u["pts"], u["bucket"], u["impl"], u.get("reviewer"), u.get("resource"),
-             ", ".join(u.get("depends") or []), MARK[u["state"]] + (f" — {u['detail']}" if u.get("detail") else ""))
-            for u in units]
-    rows += [(u["id"], u["pts"], u["bucket"], u["impl"], u.get("reviewer"), u.get("resource"), "",
-              MARK[u["state"]] + " — " + (f"`{u['commit']}`" if u["state"] == "accepted" else u.get("detail") or "—"))
-             for u in st["units"].values() if u["state"] in ("accepted", "dropped")]
-    L += ["## Triage", LEGEND, table(["unit", "pts", "bucket", "implementor", "reviewer", "resource", "depends on", "state"], rows), ""]
-    L += ["## Now", table(["slot", "agent (model)", "holds", "unit (pts · bucket)", "ctx / pts used", "since"],
-                          [(n, s["agent"], s.get("holds"), s.get("unit"), s.get("ctx"), s.get("since")) for n, s in st["slots"].items()]),
-          "", f"**Next:** {st.get('next') or '—'}", f"**Owner decisions open:** {st.get('owner_open') or '—'}", ""]
-    L += ["## How to take over", st.get("takeover") or "—", ""]
-    L += ["## Log (newest first; last 20 rows — older in " + os.path.basename(paths(st)[2]) + ")",
-          table(["when", "unit", "pts", "by", "outcome", "tokens / ctx / min", "commits", "note"],
-                [(r["when"], r["unit"], r["pts"], r["by"], r["outcome"], r.get("cost"), r.get("commits"), r.get("note")) for r in st["log"]]), ""]
-    L += ["## Units"]
-    for u in units:
-        L += [f"### {u['id']} · {u.get('title') or u['id']} · {u['pts']} pts · {u['bucket']} · {u['impl']}",
-              f"**State:** {MARK[u['state']]}" + (f" — {u['detail']}" if u.get("detail") else "") + f" · **Acceptance:** {u.get('acceptance') or '—'}"]
-        if u["rounds"]:
-            L.append(table(["round", "done", "verdict", "fixed", "open"],
-                           [(r["n"], r.get("done"), r.get("verdict"), r.get("fixed"), r.get("open")) for r in u["rounds"]]))
-        L += [f"- [{'x' if f['fixed'] else ' '}] {f['id']} — {f['text']}" + (f" — [{f['ref']}]({f['ref'].split(':')[0]}#L{f['ref'].split(':')[-1]})" if f.get("ref") and ":" in f["ref"] else "")
-              for f in u["findings"]]
-        L.append("")
-    L += ["## Done", *[f"- {d['id']} · {d['pts']} pts · {d['impl']} · {d['what']} · {d.get('evidence') or '—'} · `{d['commit']}`" for d in st["done"]], ""]
-    queued = [u for u in units if u["state"] == "queued"]
-    L += ["## Queue", *[f"- {unit_line(u)} · resource {u.get('resource') or '—'}" for u in queued], ""]
-    L += ["## Known noise / deferred", *[f"- {n}" for n in st["noise"]], ""]
-    L += ["## Frictions (open)", *[f"- {f['id']} · {f['what']} · evidence: {f.get('evidence') or '—'} · fix planned: {f.get('fix') or '—'}"
-                                    for f in st["frictions"] if f["status"] == "open"], ""]
-    return "\n".join(L)
-
-
-def render_archive(st):
-    a = st["archive"]
-    return "\n".join([
-        f"# {st['title']} — status archive", "",
-        "## Log (newest first)", table(["when", "unit", "pts", "by", "outcome", "tokens / ctx / min", "commits", "note"],
-                                        [(r["when"], r["unit"], r["pts"], r["by"], r["outcome"], r.get("cost"), r.get("commits"), r.get("note")) for r in a["log"]]), "",
-        "## Decisions (superseded / done)", table(["id", "date", "who", "rule", "status"],
-                                                   [(d["id"], d["date"], d["who"], d["rule"], d["status"]) for d in a["decisions"]]), "",
-        "## Frictions (resolved)", *[f"- {f['id']} · {f['what']} · fix taken: {f.get('fix') or '—'}" for f in a["frictions"]], "",
-        "## Units (accepted / dropped, full detail)", *[f"- {json.dumps(u, ensure_ascii=False)}" for u in a["units"]], ""])
-
-
-def roll(st):
-    st["archive"]["log"] = st["log"][LOG_WINDOW:] + st["archive"]["log"]
-    st["log"] = st["log"][:LOG_WINDOW]
-    keep, gone = [], []
-    for d in st["decisions"]:
-        (keep if d["status"] == "in force" else gone).append(d)
-    st["decisions"], st["archive"]["decisions"] = keep, gone + st["archive"]["decisions"]
-    keep, gone = [], []
-    for f in st["frictions"]:
-        (keep if f["status"] == "open" else gone).append(f)
-    st["frictions"], st["archive"]["frictions"] = keep, gone + st["archive"]["frictions"]
-
-
-def save(st, ack):
-    st["updated_at"] = now_stamp()
-    roll(st)
-    jp, mp, ap = paths(st)
-    md = render(st)
-    with open(jp, "w") as f:
-        json.dump(st, f, ensure_ascii=False, indent=1)
-    with open(mp, "w") as f:
-        f.write(md)
-    with open(ap, "w") as f:
-        f.write(render_archive(st))
-    size = len(md.encode())
-    warn = f" · WARN doc {size // 1000} KB > budget" if size > SIZE_BUDGET else ""
-    print(f"ok {ack}{warn}")
-
-
-# ---------- commands ----------
-
-def unit_of(st, uid):
-    u = st["units"].get(uid)
-    if not u:
-        die(f"unknown unit {uid}")
-    return u
-
-
-def cmd_init(a):
-    plan = os.path.abspath(a.plan)
-    base = plan[:-3] if plan.endswith(".md") else plan
-    if os.path.exists(base + "-status.json"):
-        die(f"{base}-status.json exists")
-    st = {"base": base, "title": os.path.basename(base),
-          "header": {"date": dt.date.today().isoformat(), "scope": a.scope, "focus": a.focus, "by": a.by, "method": a.method},
-          "setup": a.setup, "updated": "session 1", "next": "", "owner_open": "", "takeover": "",
-          "decisions": [], "units": {}, "slots": {}, "log": [], "done": [], "noise": [], "frictions": [],
-          "archive": {"log": [], "decisions": [], "frictions": [], "units": []}}
-    save(st, f"init {base}-status.{{json,md}} — export BEES_STATUS={base}-status.json")
-
-
-# ---------- one-time import of a hand-written doc ----------
-
-def md_sections(text):
-    out, head, buf = {}, "_", []
-    for line in text.split("\n"):
-        if line.startswith("## "):
-            out[head] = "\n".join(buf); head, buf = line[3:].split(" (")[0].strip(), []
-        else:
-            buf.append(line)
-    out[head] = "\n".join(buf)
+def pipes(line):
+    out, code, prev = [], False, ""
+    for i, ch in enumerate(line):
+        if ch == "`":
+            code = not code
+        elif ch == "|" and not code and prev != "\\":
+            out.append(i)
+        prev = ch
     return out
 
 
-def md_table(block):
-    rows = [l for l in block.split("\n") if l.startswith("|")]
-    if len(rows) < 2:
+def cells(line):
+    p = pipes(line)
+    return [line[a + 1:b].strip() for a, b in zip(p, p[1:])]
+
+
+def set_cell(line, k, text):
+    p = pipes(line)
+    return line[:p[k] + 1] + f" {text} " + line[p[k + 1]:]
+
+
+def gh_slug(heading):
+    t = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", heading.lstrip("#").strip())
+    t = re.sub(r"[^\w\- ]", "", t.replace("`", "").replace("*", "").lower())
+    return t.replace(" ", "-")
+
+
+def git(repo, *args):
+    r = subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+@functools.lru_cache(None)
+def git_root(path):
+    top = git(path, "rev-parse", "--show-toplevel") if os.path.isdir(path) else None
+    return top and os.path.realpath(top.strip())
+
+
+def read_text(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def atomic_write(path, text):
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".bees-")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.chmod(tmp, os.stat(path).st_mode & 0o7777 if os.path.exists(path) else 0o644)
+    os.replace(tmp, path)
+
+
+class Plan:
+    def __init__(self, path):
+        self.path = os.path.abspath(path)
+        os.path.isfile(self.path) and self.path.endswith(".md") or die(f"no plan .md at {path}")
+        self.base = self.path[:-3]
+        self.slug = re.sub(r"^\d{4}-\d\d-\d\d-", "", os.path.basename(self.base))
+        self.work, self.notes = self.base + ".work", self.base + ".notes.md"
+        self.root = git_root(os.path.dirname(self.path)) or die(f"{path} is not inside a git repository")
+        self.lines = read_text(self.path).split("\n")
+        self.units = self.parse_units()
+
+    def checklist(self):
+        start = next((i for i, l in enumerate(self.lines) if l.strip() == "## Checklist"), None)
+        start is not None or die(f"{self.path}: no '## Checklist' section")
+        rows = []
+        for n in range(start + 1, len(self.lines)):
+            line = self.lines[n]
+            if line.startswith("|"):
+                rows.append(n)
+            elif rows or line.startswith("## "):
+                break
+        len(rows) >= 2 or die(f"{self.path}: '## Checklist' has no table")
+        return cells(self.lines[rows[0]]), rows[2:]
+
+    def parse_units(self):
+        header, rows = self.checklist()
+        missing = [c for c in COLUMNS if c not in header]
+        missing and die(f"{self.path}: checklist lacks column(s) {', '.join(missing)}")
+        self.col = {c: header.index(c) for c in COLUMNS}
+        units = {}
+        for n in rows:
+            c = cells(self.lines[n])
+            len(c) == len(header) or die(f"{self.path}:{n + 1}: {len(c)} cells, header has {len(header)}")
+            get = lambda k: c[self.col[k]]
+            link = ID_LINK.fullmatch(get("ID"))
+            uid = link[1] if link else get("ID")
+            uid not in units or die(f"{self.path}: duplicate unit id {uid}")
+            dep = get("Depends")
+            units[uid] = {"id": uid, "line": n, "href": link and link[2], "repo": get("Repo").strip("`"), "pts": get("Pts"),
+                          "route": get("Route"), "phase": get("Phase"), "status": get("Status"),
+                          "depends": [] if dep in ("", "-", "—") else [d.strip() for d in dep.split(",")]}
+        for u in units.values():
+            unknown = [d for d in u["depends"] if d not in units]
+            unknown and die(f"{self.path}: {u['id']} depends on unknown {', '.join(unknown)}")
+            path = os.path.normpath(os.path.join(self.root, u["repo"]))
+            git_root(path) == os.path.realpath(path) or die(f"{self.path}: {u['id']} names unknown repo {u['repo']}")
+            u["repo_path"] = path
+        return units
+
+
+# ---------- rounds: out-files in the plan's .work/ dir ----------
+
+ROLES = ("impl", "review")
+ROUND_NAME = re.compile(r"(impl|review)-(.+)-r([1-9]\d*)\.txt")
+
+
+def round_out(role, units, out):
+    """Validate a round's role, units and -o before anything is written → (plan, out-file path)."""
+    role in ROLES or die(f"--role must be impl or review, not {role!r}")
+    units or die("need one or more -u <unit>")
+    len(set(units)) == len(units) or die(f"repeated -u in {' '.join(units)}")
+    out = os.path.abspath(out)
+    work = out if out.endswith(".work") else os.path.dirname(out)
+    in_work = [p for p in work.split(os.sep) if p.endswith(".work")]
+    work.endswith(".work") and len(in_work) == 1 or die(f"-o must be inside exactly one docs/plans/<plan>.work/ dir: {out}")
+    plan = Plan(work[:-len(".work")] + ".md")
+    plans_dir = os.path.realpath(os.path.join(plan.root, "docs", "plans"))
+    os.path.realpath(os.path.dirname(plan.path)) == plans_dir or die(f"-o must be inside {plans_dir}/<plan>.work/: {out}")
+    unknown = [u for u in units if u not in plan.units]
+    unknown and die(f"unknown unit(s) {', '.join(unknown)} in {plan.path}")
+    stem = f"{role}-{'+'.join(units)}"
+    if out == work:
+        taken = [int(m[3]) for m in map(ROUND_NAME.fullmatch, round_names(work)) if m and f"{m[1]}-{m[2]}" == stem]
+        out = os.path.join(work, f"{stem}-r{max(taken, default=0) + 1}.txt")
+    m = ROUND_NAME.fullmatch(os.path.basename(out))
+    m and f"{m[1]}-{m[2]}" == stem or die(f"out-file must be named {stem}-r<N>.txt, not {os.path.basename(out)}")
+    any(os.path.exists(out + s) for s in ("", ".log", ".usage")) and die(f"{out} already holds a round; use the next -r<N>")
+    os.makedirs(work, exist_ok=True)
+    return plan, out
+
+
+def round_names(work):
+    names = os.listdir(work) if os.path.isdir(work) else []
+    return sorted({n[:n.index(".txt") + 4] for n in names if ".txt" in n})
+
+
+def sidecar(out, ext):
+    try:
+        return read_text(out + ext).strip() or None
+    except FileNotFoundError:
+        return None
+
+
+def usage_ctx(out):
+    try:
+        ctx = json.loads(sidecar(out, ".usage") or "{}").get("context_tokens")
+    except ValueError:
+        return None
+    return ctx if isinstance(ctx, int) else None
+
+
+def read_rounds(plan):
+    rounds = []
+    for name in round_names(plan.work):
+        m = ROUND_NAME.fullmatch(name)
+        out = os.path.join(plan.work, name)
+        clock = next((out + s for s in (".usage", "", ".log") if os.path.exists(out + s)), None)
+        if not m or not clock:
+            continue
+        finished = clock.endswith(".usage")
+        r = {"path": out, "name": name, "role": m[1], "units": m[2].split("+"), "n": int(m[3]),
+             "finished": finished, "time": os.stat(clock).st_mtime_ns / 1_000_000_000, "ctx": usage_ctx(out),
+             "session": sidecar(out, ".session"), "cwd": sidecar(out, ".cwd")}
+        r.update(parse_report(r, plan) if finished else {"valid": False, "entries": {}, "why": "unfinished"})
+        rounds.append(r)
+    return rounds
+
+
+def trailer_commits(repo):
+    """Every commit reachable from HEAD with its committer epoch and exact Bees-Unit trailer values."""
+    out = git(repo, "log", "--format=%H%x1f%ct%x1f%(trailers:key=Bees-Unit,valueonly)%x1f%s%x1e") or ""
+    commits = []
+    for rec in filter(None, (r.strip("\n") for r in out.split("\x1e"))):
+        h, ct, trailers, subject = rec.split("\x1f")
+        commits.append({"hash": h, "time": int(ct), "units": set(trailers.split()), "subject": subject})
+    return commits
+
+
+def landings(plan, uid, commits):
+    key = f"{plan.slug}/{uid}"
+    return [(c["hash"], c["time"]) for c in commits if key in c["units"]]
+
+
+STATES = ("done", "blocked", "paused", "needs-decision")
+VERDICTS = ("APPROVE", "CHANGES_REQUIRED")
+
+
+def parse_report(r, plan):
+    try:
+        text = read_text(r["path"])
+    except FileNotFoundError:
+        text = ""
+    entries, why = parse_bees(r["role"], text, r["units"], plan.units)
+    return {"valid": why is None, "entries": entries, "why": why}
+
+
+def parse_bees(role, text, units, known):
+    """The VIEW-03 last-line contract → (entries, None) or ({}, why it is malformed)."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    at = [i for i, l in enumerate(lines) if l.startswith("BEES:")]
+    if len(at) != 1:
+        return {}, "duplicated BEES line" if at else "no BEES line"
+    impl = role == "impl"
+    if not impl and lines[-1] not in VERDICTS:
+        return {}, "no terminal APPROVE/CHANGES_REQUIRED"
+    if at[0] != len(lines) - (1 if impl else 2):
+        return {}, "BEES line is not " + ("the last line" if impl else "right above the verdict")
+    key = "results" if impl else "reviews"
+    m = re.fullmatch(rf"BEES: {key}=(\S+)", lines[at[0]])
+    if not m:
+        return {}, f"not a 'BEES: {key}=' line"
+    entries = {}
+    for e in m[1].split(";"):
+        parts = e.split(":")
+        ids = [] if parts[-1] == "-" else parts[-1].split(",")
+        if len(parts) != (3 if impl else 2) or impl and parts[1] not in STATES or "" in ids:
+            return {}, f"bad entry {e!r}"
+        if parts[0] in entries:
+            return {}, f"unit {parts[0]} duplicated"
+        entries[parts[0]] = (parts[1], ids) if impl else ids
+    if set(entries) != set(units) or any(u not in known for u in entries):
+        return {}, f"units {'+'.join(entries)} do not match the round's {'+'.join(units)}"
+    if not impl and (lines[-1] == "APPROVE") == any(entries.values()):
+        return {}, "APPROVE with open ids" if lines[-1] == "APPROVE" else "CHANGES_REQUIRED with no open id"
+    return entries, None
+
+
+def cmd_capture_bee(plan, units, role, ctx):
+    role in ROLES or die(f"--role must be impl or review, not {role!r}")
+    re.fullmatch(r"[1-9][0-9]*", ctx or "") or die(f"--ctx must be a positive base-10 integer, not {ctx!r}")
+    report = sys.stdin.read()
+    report.strip() or die("empty report on stdin")
+    _, out = round_out(role, units, plan.work)
+    atomic_write(out, report)
+    atomic_write(out + ".usage", json.dumps({"context_tokens": int(ctx), "source": "harness"}) + "\n")
+    why = parse_bees(role, report, units, plan.units)[1]
+    print(f"ok {out}" + (f" · malformed result: {why}" if why else ""))
+
+
+# ---------- notes: the only typed log ----------
+
+NOTE_LINE = re.compile(r"(?:- )?(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ) (?:\[([^\]\s]+)\] )?(.*)")
+PREFIXES = ("accept:", "decision:", "gap:", "concern:", "blocked-on:", "handoff:")
+
+
+def read_notes(plan):
+    try:
+        lines = read_text(plan.notes).splitlines()
+    except FileNotFoundError:
         return []
-    split = lambda l: [c.strip() for c in l.strip().strip("|").split(" | ")]
-    cols = split(rows[0])
-    return [dict(zip(cols, split(r))) for r in rows[2:]]
+    notes = []
+    for m in filter(None, map(NOTE_LINE.fullmatch, lines)):
+        first = m[3].split(" ", 1)[0]
+        notes.append({"time": m[1], "unit": m[2], "text": m[3], "kind": first if first in PREFIXES else None})
+    return notes
 
 
-def md_bullets(block):
-    return [l[2:].strip() for l in block.split("\n") if l.startswith("- ")]
+def cmd_note(plan, args):
+    len(args) in (1, 2) or die('note [unit] "text" — quote the text')
+    unit, text = (None, args[0]) if len(args) == 1 else args
+    unit is None or unit in plan.units or die(f"unknown unit {unit} in {plan.path}")
+    text = text.strip()
+    text and "\n" not in text or die("a note is one non-empty line; anything longer is a checklist row")
+    stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    line = f"{stamp} " + (f"[{unit}] " if unit else "") + text
+    with open(plan.notes, "a", encoding="utf-8") as f:
+        f.write(f"- {line}\n")
+    print(f"ok {line}")
 
 
-def parse_state(cell):
-    marker, _, detail = cell.partition(" — ")
-    key = next((k for k, v in MARK.items() if marker.startswith(v.split(" ")[0])), "queued")
-    return key, detail.strip()
+def unit_status(uid, rounds, landings, notes):
+    """The precedence table of VIEW-01, newest artifact first: → mark, qualifier, accept date, open review ids."""
+    accepted = [n["time"][:10] for n in notes if n["unit"] == uid and n["kind"] == "accept:"]
+    if accepted:
+        return {"mark": "✅", "qual": "", "date": accepted[0], "open": []}
+    mine = [r for r in rounds if uid in r["units"]]
+    last = newest(r for r in mine if r["role"] == "impl" and r["valid"])
+    landed = max((t for _, t in landings), default=None)
+    verdict = lambda mark, qual="", open_=(): {"mark": mark, "qual": qual, "date": None, "open": list(open_)}
+    if last and (landed is None or last["time"] >= landed):
+        state, hashes = last["entries"][uid]
+        if state != "done":
+            return verdict("🟡", "paused") if state == "paused" else verdict("🔴", state)
+        if not hashes or not all(HASH.fullmatch(x) and any(h.startswith(x) for h, _ in landings) for x in hashes):
+            return verdict("🟡", "done, trailer missing")
+    if landed is not None:
+        review = newest(r for r in mine if r["role"] == "review" and r["valid"] and r["time"] >= landed)
+        ids = review["entries"][uid] if review else []
+        return verdict("🔵", "(review open)" if ids else "", ids)
+    return verdict("🟡" if mine else "☐")
 
 
-def cmd_import(a):
-    text = open(a.md).read()
-    base = a.md[:-len("-status.md")] if a.md.endswith("-status.md") else a.md[:-3]
-    os.path.exists(base + "-status.json") and die(f"{base}-status.json exists")
-    sec = md_sections(text)
-    head = {k: "" for k in ("date", "scope", "focus", "by", "method")}
-    setup = updated = ""
-    for line in sec["_"].split("\n"):
-        for k in list(head) + ["setup", "last updated"]:
-            tag = f"**{k.title() if k != 'last updated' else 'Last updated'}:** "
-            if line.startswith(tag):
-                v = line[len(tag):]
-                if k == "setup": setup = v
-                elif k == "last updated": updated = v
-                else: head[k] = v
-    title = text.split("\n", 1)[0].lstrip("# ").split(" — ")[0]
-    st = {"base": base, "title": title, "header": head, "setup": setup, "updated": updated, "next": "",
-          "owner_open": "", "takeover": "", "decisions": [], "units": {}, "slots": {}, "log": [], "done": [],
-          "noise": [], "frictions": [], "archive": {"log": [], "decisions": [], "frictions": [], "units": []}}
-    for d in md_table(sec.get("Decisions", "")):
-        st["decisions"].append({"id": d["id"], "date": d["date"], "who": d["who"], "rule": d["rule"],
-                                "status": "in force" if d["status"].startswith("in force") else d["status"]})
-    for r in md_table(sec.get("Triage", "")):
-        state, detail = parse_state(r["state"])
-        u = {"id": r["unit"], "title": r["unit"], "pts": r["pts"], "bucket": r["bucket"], "impl": r["implementor"],
-             "reviewer": r["reviewer"], "resource": r["resource"], "depends": [r["depends on"]] if r["depends on"] not in ("", "—") else [],
-             "acceptance": "", "state": state, "detail": detail, "rounds": [], "findings": []}
-        if state == "accepted":
-            sha = detail.split("`")[1] if "`" in detail else "—"
-            u["commit"] = sha
-            st["done"].append({"id": u["id"], "pts": u["pts"], "impl": u["impl"], "what": detail or "—", "evidence": None, "commit": sha})
-            st["archive"]["units"].append(u)
-        st["units"][u["id"]] = u
-    now = sec.get("Now", "")
-    for r in md_table(now):
-        st["slots"][r["slot"]] = {"agent": r["agent (model)"], "holds": r["holds"], "unit": r["unit (pts · bucket)"], "ctx": r["ctx / pts used"], "since": r["since"]}
-    for line in now.split("\n"):
-        if line.startswith("**Next:** "): st["next"] = line[10:]
-        if line.startswith("**Owner decisions open:** "): st["owner_open"] = line[26:]
-    st["takeover"] = sec.get("How to take over", "").strip()
-    for r in md_table(sec.get("Log", "")):
-        st["log"].append({"when": r["when"], "unit": r["unit"], "pts": r["pts"], "by": r["by"], "outcome": r["outcome"],
-                          "cost": r["tokens / ctx / min"], "commits": r["commits"], "note": r["note"]})
-    st["noise"] = md_bullets(sec.get("Known noise / deferred", ""))
-    for i, b in enumerate(md_bullets(sec.get("Frictions", "")), 1):
-        st["frictions"].append({"id": f"F{i}", "what": b, "evidence": None, "fix": None, "status": "open"})
-    save(st, f"imported {len(st['units'])} units, {len(st['decisions'])} decisions, {len(st['log'])} log rows, "
-             f"{len(st['noise'])} noise, {len(st['frictions'])} frictions → {base}-status.{{json,md}} (old doc overwritten; git has it)")
+def newest(rounds):
+    return max(rounds, key=lambda r: (r["time"], r.get("n", 0)), default=None)
 
 
-def cmd_unit(a, st):
-    if a.action == "add":
-        if a.uid in st["units"]:
-            die(f"unit {a.uid} exists")
-        st["units"][a.uid] = {"id": a.uid, "title": a.title, "pts": a.pts, "bucket": a.bucket, "impl": a.impl,
-                              "reviewer": a.reviewer, "resource": a.resource, "depends": a.depends.split(",") if a.depends else [],
-                              "acceptance": a.acceptance, "state": "queued", "detail": "", "rounds": [], "findings": []}
-        return save(st, f"{a.uid} added · {a.pts} pts · {a.bucket} · {a.impl}")
-    u = unit_of(st, a.uid)
-    if a.action == "state":
-        u["state"], u["detail"] = a.arg1, " ".join(a.rest)
-        return save(st, f"{a.uid} → {MARK[a.arg1]}")
-    if a.action == "round":
-        n = int(a.arg1)
-        r = next((r for r in u["rounds"] if r["n"] == n), None) or u["rounds"].append({"n": n}) or u["rounds"][-1]
-        for k in ("done", "verdict", "fixed", "open"):
-            if getattr(a, k) is not None:
-                r[k] = getattr(a, k)
-        return save(st, f"{a.uid} round {n} recorded")
-    if a.action == "finding":
-        if a.arg1 == "add":
-            fid, text = a.rest[0], " ".join(a.rest[1:])
-            u["findings"].append({"id": fid, "text": text, "ref": a.ref, "fixed": False})
-            return save(st, f"{a.uid} {fid} open")
-        if a.arg1 == "fix":
-            f = next((f for f in u["findings"] if f["id"] == a.rest[0]), None) or die(f"no finding {a.rest[0]}")
-            f["fixed"] = True
-            return save(st, f"{a.uid} {f['id']} fixed")
-        die("finding add|fix")
-    if a.action == "accept":
-        u["state"], u["detail"], u["commit"] = "accepted", "", a.commit or "—"
-        st["done"].append({"id": u["id"], "pts": u["pts"], "impl": u["impl"], "what": " ".join([a.arg1, *a.rest]),
-                           "evidence": a.evidence, "commit": a.commit or "—"})
-        st["archive"]["units"].append(u)
-        for n, s in list(st["slots"].items()):
-            if (s.get("unit") or "").split(" ")[0] == u["id"]:
-                s["unit"] = None
-        return save(st, f"{a.uid} 🟢 accepted `{u['commit']}` · collapsed to Done")
-    if a.action == "drop":
-        u["state"], u["detail"] = "dropped", " ".join([a.arg1, *a.rest])
-        st["archive"]["units"].append(u)
-        return save(st, f"{a.uid} ⚫ dropped")
-    die(f"unknown unit action {a.action}")
+def status_cell(v):
+    return f"{v['mark']} {v['qual']}".strip()
 
 
-def cmd_slot(a, st):
-    if a.action == "clear":
-        st["slots"].pop(a.name, None)
-        return save(st, f"slot {a.name} cleared")
-    s = st["slots"].setdefault(a.name, {"since": now_hm()})
-    for k in ("agent", "holds", "unit", "ctx", "since"):
-        if getattr(a, k) is not None:
-            s[k] = getattr(a, k)
-    if not s.get("agent"):
-        die("slot set needs --agent")
-    return save(st, f"slot {a.name} = {s['agent']} on {s.get('unit') or '—'} ({s.get('ctx') or '?'})")
+def patch_plan(path, verdicts):
+    """Rewrite only Status cells, accepted-heading markers and those rows' hrefs; re-reads the plan first."""
+    plan = Plan(path)
+    lines = plan.lines[:]
+    for uid, u in plan.units.items():
+        if uid not in verdicts:
+            continue
+        v = verdicts[uid]
+        row = set_cell(lines[u["line"]], plan.col["Status"], status_cell(v))
+        h = next((i for i, l in enumerate(lines) if l.startswith(f"### {uid} · ")), None)
+        if h is not None:
+            heading = DONE_MARK.sub("", lines[h]) + (f" **✅ Done {v['date']}**" if v["date"] else "")
+            if heading != lines[h]:
+                lines[h] = heading
+                if u["href"] is not None:
+                    row = set_cell(row, plan.col["ID"], f"[{uid}](#{gh_slug(heading)})")
+        lines[u["line"]] = row
+    if lines == plan.lines:
+        return False
+    atomic_write(plan.path, "\n".join(lines))
+    return True
 
 
-def cmd_decision(a, st):
-    if a.action == "add":
-        if any(d["id"] == a.id for d in st["decisions"] + st["archive"]["decisions"]):
-            die(f"decision {a.id} exists")
-        st["decisions"].append({"id": a.id, "date": dt.date.today().strftime("%m-%d"), "who": a.who, "rule": " ".join(a.rest), "status": "in force"})
-        return save(st, f"{a.id} in force")
-    d = next((d for d in st["decisions"] if d["id"] == a.id), None) or die(f"no in-force decision {a.id}")
-    d["status"] = f"superseded by {a.rest[0]}" if a.action == "supersede" else "done" + (f" — {' '.join(a.rest)}" if a.rest else "")
-    return save(st, f"{a.id} {d['status']} · archived")
+# ---------- the board ----------
+
+def compute_view(plan):
+    rounds, notes = read_rounds(plan), read_notes(plan)
+    commits = {path: trailer_commits(path) for path in {u["repo_path"] for u in plan.units.values()}}
+    view = {}
+    for uid, u in plan.units.items():
+        v = unit_status(uid, rounds, landings(plan, uid, commits[u["repo_path"]]), notes)
+        v["rounds"] = sorted((r for r in rounds if uid in r["units"]), key=lambda r: r["time"])
+        view[uid] = v
+    return {"plan": plan, "units": view, "rounds": rounds, "notes": notes, "commits": commits}
 
 
-def cmd_log(a, st):
-    u = st["units"].get(a.unit.split(" ")[0])
-    st["log"].insert(0, {"when": a.at or now_hm(), "unit": a.unit, "pts": a.pts or (u["pts"] if u else "—"), "by": a.by, "outcome": a.outcome,
-                         "cost": a.cost, "commits": a.commits, "note": a.note})
-    return save(st, f"log {a.unit} {a.outcome}")
+def kilo(n):
+    return "?" if n is None else f"{round(n / 1000)}k"
 
 
-def cmd_friction(a, st):
-    if a.action == "add":
-        st["frictions"].append({"id": a.id, "what": " ".join(a.rest), "evidence": a.evidence, "fix": a.fix, "status": "open"})
-        return save(st, f"{a.id} open")
-    f = next((f for f in st["frictions"] if f["id"] == a.id), None) or die(f"no open friction {a.id}")
-    f["status"], f["fix"] = "resolved", " ".join(a.rest)
-    return save(st, f"{a.id} resolved · archived")
+def newest_per_role(rounds):
+    return [r for r in (newest(x for x in rounds if x["role"] == role and x["finished"]) for role in ROLES) if r]
 
 
-def cmd_show(a, st):
-    md = render(st)
-    if a.what == "doc":
-        return print(md)
-    if a.what == "unit":
-        u = unit_of(st, a.id)
-        sec = md.split(f"### {u['id']} · ")[1].split("\n### ")[0].split("\n## ")[0]
-        return print(f"### {u['id']} · " + sec.rstrip())
-    heads = {"triage": "## Triage", "now": "## Now", "decisions": "## Decisions", "log": "## Log", "frictions": "## Frictions", "done": "## Done"}
-    if a.what == "brief":
-        for h in ("## Now", "## Triage"):
-            print(section(md, h))
-        return
-    print(section(md, heads.get(a.what) or die(f"unknown view {a.what}")))
+def diagnostics(v):
+    out = [f"open {','.join(v['open'])}"] if v["open"] else []
+    for r in newest_per_role(v["rounds"]):
+        if not r["valid"]:
+            out.append(f"malformed result: {r['path']} ({r['why']})")
+        if r["ctx"] is None:
+            out.append(f"usage unavailable: {r['name']}")
+    return " · ".join(out)
 
 
-def section(md, head):
-    body = md.split(head, 1)[1].split("\n## ")[0]
-    return head + body.rstrip()
+def next_unit(view):
+    done = {uid for uid, v in view["units"].items() if v["mark"] == "✅"}
+    return next((uid for uid, v in view["units"].items()
+                 if v["mark"] == "☐" and all(d in done for d in view["plan"].units[uid]["depends"])), "—")
 
 
-def main():
-    p = argparse.ArgumentParser(add_help=False)
-    p.add_argument("-f", default=os.environ.get("BEES_STATUS"))
+def render_board(view):
+    plan, units = view["plan"], view["units"]
+    counts = " · ".join(f"{m} {sum(v['mark'] == m for v in units.values())}" for m in ("✅", "🔵", "🟡", "🔴", "☐"))
+    rows = []
+    for uid, v in units.items():
+        u = plan.units[uid]
+        rounds = " · ".join(f"{role} " + " ".join(f"r{r['n']}" for r in v["rounds"] if r["role"] == role)
+                            for role in ROLES if any(r["role"] == role for r in v["rounds"]))
+        ctx = " · ".join(f"{r['role']} {kilo(r['ctx'])}" for r in newest_per_role(v["rounds"]))
+        rows.append((uid, u["phase"], u["pts"], u["route"], status_cell(v), rounds, ctx, diagnostics(v)))
+    return "\n".join([f"{plan.slug} · {counts} · {plan.path}",
+                      table(["ID", "Ph", "Pts", "Route", "Status", "Rounds", "Ctx", "Detail"], rows),
+                      f"Next: {next_unit(view)}"])
+
+
+def utc(epoch):
+    return dt.datetime.fromtimestamp(epoch, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def round_summary(r):
+    if not r["valid"]:
+        return f"malformed result ({r['why']})"
+    if r["role"] == "impl":
+        return "; ".join(f"{u} {state} {','.join(hashes) or '-'}" for u, (state, hashes) in r["entries"].items())
+    return "; ".join(f"{u} " + (f"open {','.join(ids)}" if ids else "clean") for u, ids in r["entries"].items())
+
+
+def repo_names(plan):
+    return {u["repo_path"]: u["repo"] for u in plan.units.values()}
+
+
+def render_log(view):
+    plan = view["plan"]
+    events = [(n["time"], "note", (f"[{n['unit']}] " if n["unit"] else "") + n["text"]) for n in view["notes"]]
+    events += [(utc(r["time"]), r["role"], f"{'+'.join(r['units'])} r{r['n']} · {round_summary(r)} · {r['name']}")
+               for r in view["rounds"] if r["finished"]]
+    keys = {f"{plan.slug}/{uid}": uid for uid in plan.units}
+    for path, commits in view["commits"].items():
+        for c in commits:
+            units = [keys[k] for k in sorted(c["units"]) if k in keys]
+            if units:
+                events.append((utc(c["time"]), "commit", f"{'+'.join(units)} · {c['hash'][:8]} {c['subject']} · {repo_names(plan)[path]}"))
+    return "\n".join(f"{t}  {kind:<6}  {text}" for t, kind, text in sorted(events))
+
+
+def repo_head(path):
+    head = (git(path, "log", "-1", "--format=%h %s") or "").strip()
+    branch = (git(path, "rev-parse", "--abbrev-ref", "HEAD") or "").strip()
+    dirty = len((git(path, "status", "--porcelain") or "").splitlines())
+    return f"{branch} @ {head}" + (f" · {dirty} uncommitted path(s)" if dirty else "")
+
+
+def session_line(uid, r):
+    where = r["cwd"] or "no .cwd"
+    if r["cwd"] and not os.path.isdir(r["cwd"]):
+        where += " (non-resumable: directory missing)"
+    return f"- {uid} · {r['role']} r{r['n']} · session {r['session'] or '— (Claude bee)'} · ctx {kilo(r['ctx'])} · {where}"
+
+
+def phase_key(phase):
+    return (0, int(phase), "") if phase.isdigit() else (1, 0, phase)
+
+
+def handoff_task(view):
+    """→ (task, first unfinished unit): 'phase N' when phase N has not started, else 'phase N continued'."""
+    plan, units = view["plan"], view["units"]
+    unfinished = [uid for uid, v in units.items() if v["mark"] != "✅"]
+    if not unfinished:
+        return None, None
+    phase = min((plan.units[uid]["phase"] for uid in unfinished), key=phase_key)
+    started = any(v["mark"] != "☐" for uid, v in units.items() if plan.units[uid]["phase"] == phase)
+    first = next(uid for uid in unfinished if plan.units[uid]["phase"] == phase)
+    return f"{plan.slug} phase {phase}" + (" continued" if started else ""), first
+
+
+def render_takeover(view):
+    plan, units = view["plan"], view["units"]
+    task, first = handoff_task(view)
+    L = [f"# Takeover · {plan.slug}", f"Plan: {plan.path} · Next: {next_unit(view)}"]
+    L += [f"Phase: {task} — first unfinished unit {first}",
+          f"Handoff: ~/.claude/skills/bees/scripts/bees-status --plan {plan.path} show --takeover | ~/.claude/skills/handoff/scripts/spawn-handoff.sh"
+          f' --cwd {plan.root} --task "{task}" --model <exact current model id>'] if task else ["Phase: every unit is accepted"]
+    L += ["", "## Repos"]
+    L += [f"- {name} · {repo_head(path)}" for path, name in repo_names(plan).items()]
+    L += ["", "## Sessions (newest round per unit)"]
+    L += [session_line(uid, newest(v["rounds"])) for uid, v in units.items() if v["rounds"]] or ["- none"]
+    L += ["", "## Unfinished units"]
+    L += [f"- {uid} {status_cell(v)} · last out-file " + (newest(v["rounds"]) or {}).get("path", "—")
+          for uid, v in units.items() if v["mark"] in ("🟡", "🔴")] or ["- none"]
+    for kind in ("handoff:", "blocked-on:", "concern:", "decision:", "gap:"):
+        notes = [n for n in view["notes"] if n["kind"] == kind]
+        if notes:
+            L += ["", f"## {kind[:-1]}", *[f"- {n['time']} " + (f"[{n['unit']}] " if n["unit"] else "") + n["text"] for n in notes]]
+    return "\n".join(L)
+
+
+@contextlib.contextmanager
+def plan_lock(plan):
+    """Serialise refreshes of one plan so an older render never lands after a newer one."""
+    os.makedirs(plan.work, exist_ok=True)
+    with open(os.path.join(plan.work, ".lock"), "w") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        yield
+
+
+def write_view(plan):
+    with plan_lock(plan):
+        plan = Plan(plan.path)
+        view = compute_view(plan)
+        return view, patch_plan(plan.path, view["units"])
+
+
+def cmd_board(plan, write, mode):
+    view, changed = write_view(plan) if write else (compute_view(plan), False)
+    print({"log": render_log, "takeover": render_takeover}.get(mode, render_board)(view))
+    if write:
+        print(f"ok Status {'written' if changed else 'unchanged'} · {plan.path}")
+
+
+def cmd_refresh(root):
+    """Hook entry: refresh every plan whose docs/plans/<plan>.work/ exists under root. Never fails the hook."""
+    for work in sorted(glob.glob(os.path.join(root, "docs", "plans", "*.work"))):
+        path = work[:-len(".work")] + ".md"
+        try:
+            os.path.isfile(path) and write_view(Plan(path))
+        except (SystemExit, Exception) as e:
+            print(f"bees-status refresh: {path}: {e}", file=sys.stderr)
+
+
+def main(argv):
+    p = argparse.ArgumentParser(prog="bees-status")
+    p.add_argument("--plan", default=os.environ.get("BEES_PLAN"))
     sub = p.add_subparsers(dest="cmd", required=True)
-    s = sub.add_parser("init"); s.add_argument("plan"); s.add_argument("--scope", required=True); s.add_argument("--focus", required=True)
-    s.add_argument("--by", required=True); s.add_argument("--method"); s.add_argument("--setup")
-    s = sub.add_parser("unit"); s.add_argument("uid"); s.add_argument("action"); s.add_argument("arg1", nargs="?"); s.add_argument("rest", nargs="*")
-    for k in ("--pts", "--bucket", "--impl", "--reviewer", "--resource", "--depends", "--acceptance", "--title",
-              "--done", "--verdict", "--fixed", "--open", "--ref", "--commit", "--evidence"):
-        s.add_argument(k)
-    s = sub.add_parser("slot"); s.add_argument("action", choices=["set", "clear"]); s.add_argument("name")
-    for k in ("--agent", "--holds", "--unit", "--ctx", "--since"):
-        s.add_argument(k)
-    s = sub.add_parser("decision"); s.add_argument("action", choices=["add", "supersede", "done"]); s.add_argument("id"); s.add_argument("rest", nargs="*"); s.add_argument("--who", default="owner")
-    s = sub.add_parser("log"); s.add_argument("sub", choices=["add"]); s.add_argument("unit")
-    s.add_argument("--by", required=True); s.add_argument("--outcome", required=True); s.add_argument("--cost"); s.add_argument("--commits"); s.add_argument("--at"); s.add_argument("--note", default=""); s.add_argument("--pts")
-    for name in ("next", "owner-open", "takeover", "updated"):
-        sub.add_parser(name).add_argument("text", nargs="+")
-    s = sub.add_parser("noise"); s.add_argument("sub", choices=["add", "drop"]); s.add_argument("text", nargs="+")
-    s = sub.add_parser("friction"); s.add_argument("action", choices=["add", "resolve"]); s.add_argument("id"); s.add_argument("rest", nargs="*"); s.add_argument("--evidence"); s.add_argument("--fix")
-    s = sub.add_parser("show"); s.add_argument("what", nargs="?", default="brief"); s.add_argument("id", nargs="?")
-    sub.add_parser("roll")
-    sub.add_parser("import").add_argument("md")
-    sub.add_parser("help")
-    a = p.parse_args()
-    if a.cmd == "help":
-        return print(__doc__)
-    if a.cmd == "init":
-        return cmd_init(a)
-    if a.cmd == "import":
-        return cmd_import(a)
-    if not a.f:
-        found = glob.glob("docs/plans/*-status.json")
-        a.f = found[0] if len(found) == 1 else die("set BEES_STATUS or pass -f status.json")
-    st = load(a.f)
-    if a.cmd == "unit":
-        # `unit add ID` puts the id second; normalise so add and the rest share one shape.
-        if a.uid == "add":
-            a.uid, a.action = a.action, "add"
-        if a.action == "add" and not (a.pts and a.bucket and a.impl):
-            die("unit add needs --pts --bucket --impl")
-        return cmd_unit(a, st)
-    if a.cmd == "slot":
-        return cmd_slot(a, st)
-    if a.cmd == "decision":
-        return cmd_decision(a, st)
-    if a.cmd == "log":
-        return cmd_log(a, st)
-    if a.cmd == "friction":
-        return cmd_friction(a, st)
-    if a.cmd == "noise":
-        text = " ".join(a.text)
-        if a.sub == "drop":
-            hit = [n for n in st["noise"] if n.startswith(text)]
-            len(hit) == 1 or die(f"{len(hit)} noise items start with '{text}'")
-            st["noise"].remove(hit[0])
-            return save(st, "noise dropped")
-        st["noise"].append(text)
-        return save(st, "noise added")
-    if a.cmd in ("next", "owner-open", "takeover", "updated"):
-        st[a.cmd.replace("-", "_")] = " ".join(a.text)
-        return save(st, f"{a.cmd} set")
+    s = sub.add_parser("capture-bee")
+    s.add_argument("-u", "--unit", action="append", default=[]); s.add_argument("--role", required=True); s.add_argument("--ctx", required=True)
+    s = sub.add_parser("round-out")
+    s.add_argument("-u", "--unit", action="append", default=[]); s.add_argument("--role", required=True); s.add_argument("-o", required=True)
+    s = sub.add_parser("note")
+    s.add_argument("args", nargs="+")
+    s = sub.add_parser("refresh")
+    s.add_argument("--root", default=os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+    s = sub.add_parser("show")
+    s.add_argument("--write", action="store_true")
+    mode = s.add_mutually_exclusive_group()
+    mode.add_argument("--log", action="store_const", const="log", dest="mode")
+    mode.add_argument("--takeover", action="store_const", const="takeover", dest="mode")
+    a = p.parse_args(argv)
+    if a.cmd == "round-out":
+        return print(round_out(a.role, a.unit, a.o)[1])
+    if a.cmd == "refresh":
+        return cmd_refresh(a.root)
+    plan = Plan(a.plan or die("--plan <plan.md> (or BEES_PLAN) is required"))
+    if a.cmd == "capture-bee":
+        return cmd_capture_bee(plan, a.unit, a.role, a.ctx)
+    if a.cmd == "note":
+        return cmd_note(plan, a.args)
     if a.cmd == "show":
-        return cmd_show(a, st)
-    if a.cmd == "roll":
-        return save(st, "rolled")
+        return cmd_board(plan, a.write, a.mode)
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
