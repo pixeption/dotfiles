@@ -494,7 +494,7 @@ Capture after the **final** `completed` task-notification: a bee can hand its re
 an interim notification while its background work is pending, before that one arrives, and the
 earlier figure is low (257,888 vs the final 294,032 on one bee, 2026-09-24). `--from` takes that
 notification's `output_file` (the bee's transcript) and saves its last `SubagentHandback` message
-(else its last text), dedented — nothing is retyped; a report on stdin still works:
+(else its last text), with surrounding blank lines stripped — nothing is retyped; a report on stdin still works:
 
 ```sh
 bees-status --plan <plan.md> capture-bee -u G1 [-u G2] --role impl|review --ctx 118000 --from <output_file>
