@@ -84,18 +84,20 @@ hand in the TUI and carry on.
 ```bash
 # in place (editor-drive) — the common Unity case
 ~/.claude/skills/codex-implementor/scripts/opencode-implement \
-  -C ~/code/game-core -p "$T/brief.md" -o "$T/r1-out.txt" --title <unit>
+  -C ~/code/game-core -p "$T/brief.md" -u <unit> -o docs/plans/<plan>.work/ --title <unit>   # → $W/impl-<unit>-r1.txt
 # worktree (pure diff)
 git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
-~/.claude/skills/codex-implementor/scripts/opencode-implement -C "$T/wt-<unit>" -p "$T/brief.md" -o "$T/r1-out.txt"
+~/.claude/skills/codex-implementor/scripts/opencode-implement -C "$T/wt-<unit>" -p "$T/brief.md" -u <unit> -o docs/plans/<plan>.work/
 # follow-up round, same session, same -C, context < 200k (warm inside 30 min)
-... -p "$T/r2.md" -o "$T/r2-out.txt" -s "$(cat "$T/r1-out.txt.session")"
+... -p "$T/r2.md" -u <unit> -o docs/plans/<plan>.work/ -s "$(cat "$W/impl-<unit>-r1.txt.session")"
 # harder unit
 ... -m openai/gpt-5.6-sol -e high
 ```
 
 - Run via the **Bash tool with `run_in_background: true`**; you are notified on completion.
-  `$T` is your scratchpad, never `/tmp`.
+  `$T` (briefs, worktrees) is your scratchpad, never `/tmp`. Every round serves plan units: `-u <unit>`
+  (repeatable) and `-o docs/plans/<plan>.work/` (`$W`), named `impl-<unit>[+<unit>…]-r<N>.txt` by the
+  wrapper; without them it fails before writing. Its exit refreshes the plan's `Status` column (bees §9).
 - Read **`<out-file>`** (final message) and the change (`git -C <dir> diff`, or the commits it
   reports). The `.log` is a liveness aid only — never read it into context. `.usage` is written
   by `scripts/extract-opencode-usage` (this channel) or `codex-review`'s
@@ -131,8 +133,8 @@ final message, records session id and usage, and **refuses a resume older than 3
 
 ```bash
 ~/.claude/skills/codex-implementor/scripts/codex-implement \
-  -C <dir> -p "$T/brief.md" -o "$T/r1-out.txt" [-m gpt-5.6-sol -e high] [-t fast|standard]
-# in place with the editor: -s danger-full-access ; follow-up within 30 min: -r "$(cat "$T/r1-out.txt.session")"
+  -C <dir> -p "$T/brief.md" -u <unit> -o docs/plans/<plan>.work/ [-m gpt-5.6-sol -e high] [-t fast|standard]
+# in place with the editor: -s danger-full-access ; follow-up within 30 min: -r "$(cat "$W/impl-<unit>-r1.txt.session")"
 ```
 
 **The stdin trap.** `codex exec` appends stdin as a `<stdin>` block and, backgrounded, inherits an
@@ -176,6 +178,10 @@ The implementor knows only the brief and the repo. Structure (bees §7 shape):
    every failure introduced / pre-existing (with evidence) / unknown.
 8. **Return format** — `Outcome / Findings / Changes / Verification (commands verbatim + parsed
    counts) / Resources (editor state before/after) / Cost / Concerns / Need from orchestrator`.
+   The final message's last line is exactly
+   `BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]`, one entry per
+   `-u` unit, and every commit carries `Bees-Unit: <plan-slug>/<unit>` for every unit it serves
+   (bees §7) — `bees-status` reads nothing else.
 
 Cite the contract file, never paraphrase values from memory. Quote a count only with the command
 that produced it. Never send transcripts or source dumps.

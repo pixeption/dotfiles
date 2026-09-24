@@ -1,6 +1,7 @@
 ---
 name: codex-review
-description: Run a second-opinion code/design review with a codex-family model (default gpt-5.6-sol) — grounded against the actual repo source, as a multi-round conversation you steer. DEFAULT channel is OpenCode (`opencode-review`): a persistent, human-attachable session whose edit tool is hard-denied but whose Bash read-only discipline is instruction-enforced with no 30-min resume cliff (findings-application between rounds routinely exceeds it). FALLBACK is the `codex` CLI (`codex-review`, `codex exec --sandbox read-only`). Use whenever the user asks to "run codex", get a "codex review" / "codex sol review", have codex review a plan/design/PR/diff, or a second AI opinion before building. Covers both channels, session reuse across rounds, the review prompt shape, the verdict that ends the loop, and how to read the findings back.
+description: >-
+  Run a second-opinion code/design review with a codex-family model (default gpt-5.6-sol) — grounded against the actual repo source, as a multi-round conversation you steer. DEFAULT channel is OpenCode (`opencode-review`): a persistent, human-attachable session whose edit tool is hard-denied but whose Bash read-only discipline is instruction-enforced with no 30-min resume cliff (findings-application between rounds routinely exceeds it). FALLBACK is the `codex` CLI (`codex-review`, `codex exec --sandbox read-only`). Use whenever the user asks to "run codex", get a "codex review" / "codex sol review", have codex review a plan/design/PR/diff, or a second AI opinion before building. Covers both channels, session reuse across rounds, the review prompt shape, the verdict that ends the loop, and how to read the findings back.
 ---
 
 # Codex review
@@ -33,19 +34,22 @@ findings — routinely past the CLI's 30-minute cache cliff. OpenCode's session 
 ```bash
 # round 1 — write the prompt to a file first (see "Prompt shape")
 ~/.claude/skills/codex-review/scripts/opencode-review \
-  -C <repo> -p "$T/r1-prompt.txt" -o "$T/r1-out.txt"          # default openai/gpt-5.6-sol / medium
+  -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o docs/plans/<plan>.work/   # → review-<unit>-r1.txt; default openai/gpt-5.6-sol / medium
 # follow-up — same session, any time; --no-subagents = the `review-followup` agent, which denies
 # the task tool as well as edits (the wrapper refuses if the running server has not loaded it)
 ~/.claude/skills/codex-review/scripts/opencode-review \
-  -C <repo> -p "$T/r2-prompt.txt" -o "$T/r2-out.txt" -s "$(cat "$T/r1-out.txt.session")" --no-subagents
+    -C <repo> -p "$T/r2-prompt.txt" -u <unit> -o docs/plans/<plan>.work/ -s "$(cat "$W/review-<unit>-r1.txt.session")" --no-subagents
 # final pass — same session, same flag
 ~/.claude/skills/codex-review/scripts/opencode-review \
-  -C <repo> -p "$T/final-prompt.txt" -o "$T/final-out.txt" -s "$(cat "$T/r1-out.txt.session")" --no-subagents
+    -C <repo> -p "$T/final-prompt.txt" -u <unit> -o docs/plans/<plan>.work/ -s "$(cat "$W/review-<unit>-r1.txt.session")" --no-subagents
 # harder review: -e high
 ```
 
-- Run via the **Bash tool with `run_in_background: true`**; reviews take minutes. `$T` is your
-  scratchpad, never `/tmp`.
+- Run via the **Bash tool with `run_in_background: true`**; reviews take minutes. `$T` (prompts)
+  is your scratchpad, never `/tmp`. Every round belongs to a plan unit: `-u <unit>` (repeatable)
+  and `-o docs/plans/<plan>.work/` (`$W` above), which the wrapper turns into
+  `review-<unit>[+<unit>…]-r<N>.txt`; without them it fails before writing. The out-files outlive
+  the session, and the wrapper's exit refreshes the plan's `Status` column (bees skill §9).
 - The out-file holds **only the final answer** (findings, suggestions, verdict). The `.log` is a
   liveness aid only — never read it into context. Under the ChatGPT oauth credential `.usage`
   `cost` reads 0; report tokens.
@@ -71,13 +75,14 @@ findings — routinely past the CLI's 30-minute cache cliff. OpenCode's session 
 
 Same review, codex's harness (`--sandbox read-only`, 30-min TTL). `scripts/codex-review`
 hardcodes `< /dev/null`, reads the prompt from a file, writes only the final answer, records the
-session id, and records context size (`<out-file>.usage`, from the log's last `token_count`
-event's `last_token_usage` — never `total_token_usage`, a cumulative sum across the whole
-session, not the current context).
+session id, and records context size (`<out-file>.usage`, via `extract-codex-cli-usage` from the
+session's rollout file under `~/.codex/sessions`: the last `token_count` event's
+`last_token_usage` — never `total_token_usage`, a cumulative sum across the whole session, not
+the current context).
 
 ```bash
-~/.claude/skills/codex-review/scripts/codex-review -p "$T/r1-prompt.txt" -o "$T/r1-out.txt" -e medium
-~/.claude/skills/codex-review/scripts/codex-review -p "$T/r2-prompt.txt" -o "$T/r2-out.txt" -r "$(cat "$T/r1-out.txt.session")"
+~/.claude/skills/codex-review/scripts/codex-review -p "$T/r1-prompt.txt" -u <unit> -o docs/plans/<plan>.work/ -e medium
+~/.claude/skills/codex-review/scripts/codex-review -p "$T/r2-prompt.txt" -u <unit> -o docs/plans/<plan>.work/ -r "$(cat "$W/review-<unit>-r1.txt.session")"
 ```
 
 **The stdin trap**: `codex exec` (and `resume`) appends stdin as a `<stdin>` block even with a
@@ -122,7 +127,11 @@ All rounds on one artifact run in **one session** (`-s` / `-r`). The reviewer ke
 and every finding it raised, you accepted or rejected, so later rounds neither start cold nor
 re-raise settled points. Start a **new** session only for a different artifact, or if the repo
 or the feature scope changed under it far beyond the artifact's edits, or if the session is anchored
-to a conclusion you can see is wrong. Your follow-up need not restate old findings: reference
+to a conclusion you can see is wrong. **Changing the effort or model is a new session too.** A
+resume with a different `-e`/`-m` invalidates the prompt cache, so the whole history is re-read
+cold at full price — the one thing resuming was meant to avoid. Keep the effort you started with
+for every round; if you want a different effort, start a fresh session with a round-1 prompt and
+hand it the previous session's out-file as context to read. Your follow-up need not restate old findings: reference
 them ("your round-2 F1–F4") and say what you did with each — **applied**, **applied differently
 (how)**, or **rejected (why)**. A rejection with a reason is a decision, not an invitation to
 re-argue; the reviewer may push back once with new evidence, and you rule.
@@ -162,8 +171,12 @@ Required correction: put those operations in the documented atomic ordering.
   state.
 - **Invite suggestions** as a separate, labelled, non-blocking list.
 - **Ask for a terminal verdict** as the last line: `APPROVE` (no blocking High/Med findings remain)
-  or `CHANGES_REQUIRED`. Suggestions never block. A follow-up `APPROVE` advances to the final
-  pass; only the final pass's `APPROVE` ends the loop.
+  or `CHANGES_REQUIRED`, with `BEES: reviews=<unit>:<open-ids|->[;…]` on the line directly above
+  it — one entry per `-u` unit. `<open-ids>` contains only unresolved Critical/Major (High/Med)
+  findings, `-` when none; Minor, Nit and suggestions stay in prose and never appear in the list.
+  `APPROVE` with an open id or `CHANGES_REQUIRED` with none is a malformed report, and so is a
+  missing line. A follow-up `APPROVE` advances to the final pass; only the final pass's `APPROVE`
+  ends the loop.
 
 ## Follow-up rounds: targeted, delta-only
 
@@ -203,7 +216,8 @@ Reuse established repository facts; do not re-read unchanged source or rescan th
 default. Reopen only the specific source needed to verify an uncertain implementation fact or to
 support a new finding, and always before an exact file:line citation.
 For each finding give the exact replacement text or a diff for the artifact.
-Continue finding IDs from F<N>. End with the output contract and APPROVE or CHANGES_REQUIRED.
+Continue finding IDs from F<N>. End with the output contract: the BEES: reviews= line, then
+APPROVE or CHANGES_REQUIRED as the last line.
 ```
 
 Follow-up output contract (ask for it verbatim):
@@ -220,6 +234,7 @@ Claim / Evidence / Impact / Fix (exact text)
 - `File.cs:100-130` — reopened because <reason>   (or: None. Existing repository facts sufficed.)
 ## Review state
 <open findings only, compact form; settled ones as id + status>
+BEES: reviews=<unit>:<open-ids|->[;…]
 CHANGES_REQUIRED | APPROVE
 ```
 
@@ -243,7 +258,7 @@ sub-agents. Reuse existing repository understanding, but reopen source wherever 
 verification is needed. Raise any remaining or newly discovered blocking findings with continuing
 stable IDs, severity, claim, why with a freshly reopened file:line citation, and exact fix text.
 Confirm what is sound, list non-blocking suggestions separately, and end with the compact review
-state followed by APPROVE or CHANGES_REQUIRED.
+state, then `BEES: reviews=<unit>:<open-ids|->[;…]`, then APPROVE or CHANGES_REQUIRED.
 ```
 
 ## Reading the findings back

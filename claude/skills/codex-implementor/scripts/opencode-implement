@@ -44,9 +44,13 @@
 # In place it drives the live editor through the `unity` CLI and verifies itself.
 #
 # Usage:
-#   opencode-implement -C <worktree|real checkout> -p <prompt-file> -o <out-file>
+#   opencode-implement -C <worktree|real checkout> -p <prompt-file> -u <unit>... -o <plan>.work/<out-file>
 #                      [-m openai/gpt-5.6-luna] [-e max] [-s <session-id>]
 #                      [--port 4096] [--url http://127.0.0.1:4096] [--title <unit>]
+#   -u  a unit of the plan this round serves (repeatable, at least one). -o must be a file inside
+#       docs/plans/<plan>.work/ named impl-<unit>[+<unit>…]-r<N>.txt, or the .work dir itself
+#       (the next free r<N> is taken). Anything else fails before a file is written.
+#       Every exit after that refreshes the plan's Status column (bees-status show --write).
 #   -m  provider/model (default openai/gpt-5.6-luna). sol: openai/gpt-5.6-sol.
 #   -e  reasoning effort -> opencode --variant (minimal|low|medium|high|max). Default: max.
 #   -s  resume a session id (from a previous <out-file>.session). Same -C as the session's
@@ -64,6 +68,7 @@ session=""
 port="4096"
 url=""
 title=""
+units=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -72,6 +77,7 @@ while [ $# -gt 0 ]; do
     -C|--cd)          workdir="$2"; shift 2 ;;
     -p|--prompt-file) promptfile="$2"; shift 2 ;;
     -o|--out)         outfile="$2"; shift 2 ;;
+    -u|--unit)        units+=(-u "$2"); shift 2 ;;
     -s|--session)     session="$2"; shift 2 ;;
     --port)           port="$2"; shift 2 ;;
     --url)            url="$2"; shift 2 ;;
@@ -89,6 +95,19 @@ done
 command -v opencode >/dev/null 2>&1 || { echo "opencode-implement: 'opencode' not on PATH" >&2; exit 127; }
 command -v jq >/dev/null 2>&1 || { echo "opencode-implement: 'jq' not on PATH" >&2; exit 127; }
 [ -n "$url" ] || url="http://127.0.0.1:${port}"
+# A resume is validated against the live server before anything is allocated: a session is
+# pinned to the directory it was created in, and a brief for another repo is a new session.
+if [ -n "$session" ]; then
+  curl -sf "${url}/config" >/dev/null 2>&1 || { echo "opencode-implement: session ${session} cannot be resumed: no server at ${url}" >&2; exit 1; }
+  pinned="$(curl -sf "${url}/session/${session}" | jq -r '.directory // empty')"
+  [ -n "$pinned" ] || { echo "opencode-implement: session ${session} not found on ${url} — start a new session without -s" >&2; exit 1; }
+  [ "$(cd "$pinned" 2>/dev/null && pwd -P)" = "$(cd "$workdir" && pwd -P)" ] || {
+    echo "opencode-implement: session ${session} is pinned to ${pinned}, not ${workdir} — start a new session for this directory" >&2
+    exit 1
+  }
+fi
+outfile="$("$HOME/.claude/skills/bees/scripts/bees-status" round-out --role impl "${units[@]}" -o "$outfile")" || exit 2
+plan="${outfile%.work/*}.md"
 [ -n "$title" ] || title="$(basename "$outfile")"
 
 server_up() { curl -sf "${url}/config" >/dev/null 2>&1; }
@@ -120,15 +139,7 @@ if ! server_has_fence; then
   server_has_fence || { echo "opencode-implement: restarted server still has no fence — check ~/.config/opencode/opencode.jsonc" >&2; exit 1; }
 fi
 
-# A session is pinned to the directory it was created in; a brief for another repo is a new session.
-if [ -n "$session" ]; then
-  pinned="$(curl -sf "${url}/session/${session}" | jq -r '.directory // empty')"
-  [ -n "$pinned" ] || { echo "opencode-implement: session ${session} not found on ${url} — start a new session without -s" >&2; exit 1; }
-  if [ "$(cd "$pinned" 2>/dev/null && pwd -P)" != "$(cd "$workdir" && pwd -P)" ]; then
-    echo "opencode-implement: session ${session} is pinned to ${pinned}, not ${workdir} — start a new session for this directory (the old context is dead weight there anyway)" >&2
-    exit 1
-  fi
-fi
+trap '"$HOME/.claude/skills/bees/scripts/bees-status" --plan "$plan" show --write >/dev/null 2>&1 || true' EXIT
 echo "opencode-implement: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
 
 claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
@@ -145,6 +156,7 @@ logfile="${outfile}.log"
 sessionfile="${outfile}.session"
 usagefile="${outfile}.usage"
 
+(cd "$workdir" && pwd -P) > "${outfile}.cwd"
 session_args=()
 [ -n "$session" ] && session_args=(--session "$session")
 

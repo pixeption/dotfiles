@@ -27,8 +27,12 @@
 # It reads the prompt from a FILE, not a shell argument, to avoid quoting traps.
 #
 # Usage:
-#   codex-review -p <prompt-file> -o <out-file> [-e medium|high|low] [-s read-only] [-r <session-id>]
+#   codex-review -p <prompt-file> -u <unit>... -o <plan>.work/<out-file> [-e medium|high|low] [-s read-only] [-r <session-id>]
 #
+#   -u  a unit of the plan this round serves (repeatable, at least one). -o must be a file inside
+#       docs/plans/<plan>.work/ named review-<unit>[+<unit>…]-r<N>.txt, or the .work dir itself
+#       (the next free r<N> is taken). Anything else fails before a file is written.
+#       Every exit after that refreshes the plan's Status column (bees-status show --write).
 #   -r  resume this codex session id (a UUID — the content of a previous round's
 #       <out-file>.session). Omit on the first round. The sandbox/effort are carried
 #       over by codex from the original session; -s is ignored on resume.
@@ -42,12 +46,14 @@ sandbox="read-only"
 promptfile=""
 outfile=""
 session=""
+units=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -e|--effort)      effort="$2"; shift 2 ;;
     -p|--prompt-file) promptfile="$2"; shift 2 ;;
     -o|--out)         outfile="$2"; shift 2 ;;
+    -u|--unit)        units+=(-u "$2"); shift 2 ;;
     -s|--sandbox)     sandbox="$2"; shift 2 ;;
     -r|--resume)      session="$2"; shift 2 ;;
     -h|--help)
@@ -74,11 +80,16 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 127
 fi
 
+outfile="$("$HOME/.claude/skills/bees/scripts/bees-status" round-out --role review "${units[@]}" -o "$outfile")" || exit 2
+plan="${outfile%.work/*}.md"
 prompt="$(cat "$promptfile")"
 logfile="${outfile}.log"
 sessionfile="${outfile}.session"
 usagefile="${outfile}.usage"
 
+
+trap '"$HOME/.claude/skills/bees/scripts/bees-status" --plan "$plan" show --write >/dev/null 2>&1 || true' EXIT
+pwd -P > "${outfile}.cwd"
 # < /dev/null is the whole point — never remove it.
 if [ -n "$session" ]; then
   codex exec resume "$session" \

@@ -25,9 +25,13 @@
 #    stderr line flags it — the review lost the original detail behind a summary at that point.
 #
 # Usage:
-#   opencode-review -C <repo> -p <prompt-file> -o <out-file>
+#   opencode-review -C <repo> -p <prompt-file> -u <unit>... -o <plan>.work/<out-file>
 #                   [-m openai/gpt-5.6-sol] [-e medium] [-s <session-id>]
 #                   [--port 4096] [--url http://127.0.0.1:4096] [--title <artifact>] [--no-subagents]
+#   -u  a unit of the plan this round serves (repeatable, at least one). -o must be a file inside
+#       docs/plans/<plan>.work/ named review-<unit>[+<unit>…]-r<N>.txt, or the .work dir itself
+#       (the next free r<N> is taken). Anything else fails before a file is written.
+#       Every exit after that refreshes the plan's Status column (bees-status show --write).
 #   --no-subagents  use the `review-followup` agent instead of `review-discovery` (both in
 #                   ~/.config/opencode/opencode.jsonc); both deny edit, and review-followup also
 #                   denies task so later rounds cannot spawn sub-agents.
@@ -46,6 +50,7 @@ port="4096"
 url=""
 title=""
 agent="review-discovery"
+units=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -54,6 +59,7 @@ while [ $# -gt 0 ]; do
     -C|--cd)          workdir="$2"; shift 2 ;;
     -p|--prompt-file) promptfile="$2"; shift 2 ;;
     -o|--out)         outfile="$2"; shift 2 ;;
+    -u|--unit)        units+=(-u "$2"); shift 2 ;;
     -s|--session)     session="$2"; shift 2 ;;
     --port)           port="$2"; shift 2 ;;
     --url)            url="$2"; shift 2 ;;
@@ -72,6 +78,19 @@ done
 command -v opencode >/dev/null 2>&1 || { echo "opencode-review: 'opencode' not on PATH" >&2; exit 127; }
 command -v jq >/dev/null 2>&1 || { echo "opencode-review: 'jq' not on PATH" >&2; exit 127; }
 [ -n "$url" ] || url="http://127.0.0.1:${port}"
+# A resume is validated against the live server before anything is allocated: a session is
+# pinned to the directory it was created in, and a brief for another repo is a new session.
+if [ -n "$session" ]; then
+  curl -sf "${url}/config" >/dev/null 2>&1 || { echo "opencode-review: session ${session} cannot be resumed: no server at ${url}" >&2; exit 1; }
+  pinned="$(curl -sf "${url}/session/${session}" | jq -r '.directory // empty')"
+  [ -n "$pinned" ] || { echo "opencode-review: session ${session} not found on ${url} — start a new session without -s" >&2; exit 1; }
+  [ "$(cd "$pinned" 2>/dev/null && pwd -P)" = "$(cd "$workdir" && pwd -P)" ] || {
+    echo "opencode-review: session ${session} is pinned to ${pinned}, not ${workdir} — start a new session for this directory" >&2
+    exit 1
+  }
+fi
+outfile="$("$HOME/.claude/skills/bees/scripts/bees-status" round-out --role review "${units[@]}" -o "$outfile")" || exit 2
+plan="${outfile%.work/*}.md"
 [ -n "$title" ] || title="review $(basename "$outfile")"
 
 if ! curl -sf "${url}/config" >/dev/null 2>&1; then
@@ -82,6 +101,7 @@ if ! curl -sf "${url}/config" >/dev/null 2>&1; then
   for _ in $(seq 1 30); do curl -sf "${url}/config" >/dev/null 2>&1 && break; sleep 1; done
   curl -sf "${url}/config" >/dev/null 2>&1 || { echo "opencode-review: server did not come up on ${url}" >&2; exit 1; }
 fi
+trap '"$HOME/.claude/skills/bees/scripts/bees-status" --plan "$plan" show --write >/dev/null 2>&1 || true' EXIT
 echo "opencode-review: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
 
 claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
@@ -106,6 +126,8 @@ logfile="${outfile}.log"
 sessionfile="${outfile}.session"
 usagefile="${outfile}.usage"
 
+
+(cd "$workdir" && pwd -P) > "${outfile}.cwd"
 session_args=()
 [ -n "$session" ] && session_args=(--session "$session")
 
