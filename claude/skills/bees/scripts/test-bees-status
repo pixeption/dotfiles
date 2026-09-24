@@ -884,6 +884,15 @@ check("impl-W2-r1.txt: DEAD (wrapper exited without .usage)" in w, "a wrapper th
 check("impl-W3-r1.txt: running · log grew 60m ago · BUSY ·" in w, f"the server's status for the round's directory is read: {w}")
 check("impl-W4-r1.txt: running · log grew 60m ago · idle ·" in w and "STALE" in w.splitlines()[-1],
       f"a session BUSY only in another directory's (or the unscoped) status is not used: {w}")
+asking = os.path.join(WD, "impl-W5-r1.txt")
+write(asking + ".log", events({"type": "step_start"}).replace("ses_fake", "ses_w5"))
+write(asking + ".cwd", CODE2)
+write(FIX, json.dumps({**good, f"/permission?directory={CODE}": [],
+                       f"/permission?directory={CODE2}": [{"id": "per_5", "sessionID": "ses_w5", "permission": "bash"}]}))
+w = subprocess.run([WATCH, "--url", URL, live, asking], capture_output=True, text=True)
+check(w.returncode == 1 and "impl-W5-r1.txt: running" in w.stdout and w.stdout.splitlines()[1].endswith("· ASK WAITING")
+      and "ASK WAITING" not in w.stdout.splitlines()[0], f"an ask waiting only in the round's own directory is reported: {w.stdout}")
+write(FIX, json.dumps(good))
 
 
 # ---------- VIEW-08: the store is gone ----------

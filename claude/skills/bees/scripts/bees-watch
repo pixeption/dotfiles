@@ -9,7 +9,8 @@
 # A round is finished once the wrapper wrote .usage; `failed` when its out-file is then empty or
 # carries the wrapper's `Blocked:` line; DEAD when the wrapper (<out-file>.pid) exited without
 # .usage. BUSY is the server's /session/status for the round's directory (.cwd — the endpoint is
-# scoped per directory), or a live wrapper whose last log event is inside a step.
+# scoped per directory), or a live wrapper whose last log event is inside a step; an ask waiting is
+# read from /permission for that directory too.
 # Exit 0 when every round is live or finished, 1 when any is STALE, DEAD, failed or has an ask waiting.
 set -uo pipefail
 url="http://127.0.0.1:4096"; stale=20; files=()
@@ -24,9 +25,10 @@ while [ $# -gt 0 ]; do
 done
 [ "${#files[@]}" -gt 0 ] || { echo "bees-watch: nothing to watch" >&2; exit 2; }
 
-asks="$(curl -sf "$url/permission" 2>/dev/null || echo '[]')"
 busy_on_server() { curl -sfG "$url/session/status" --data-urlencode "directory=$1" 2>/dev/null |
   jq -e --arg s "$2" '.[$s].type == "busy"' >/dev/null 2>&1; }
+asks_waiting() { curl -sfG "$url/permission" --data-urlencode "directory=$1" 2>/dev/null |
+  jq -r --arg s "$2" '[.[] | select(.sessionID==$s)] | length' 2>/dev/null || echo 0; }
 mid_step() { case "$(tail -n 50 "$1" | jq -Rr 'fromjson? | .type // empty' 2>/dev/null | tail -1)" in
   step_start|tool_use|text|reasoning) return 0 ;; *) return 1 ;; esac; }
 bad=0; now=$(date +%s)
@@ -49,7 +51,7 @@ for f in "${files[@]}"; do
     if [ -n "$sid" ] && busy_on_server "$(cat "$f.cwd" 2>/dev/null)" "$sid"; then b="BUSY"
     elif [ "$alive" = 1 ] && mid_step "$log"; then b="BUSY (mid-step)"; fi
   fi
-  ask="$(jq -r --arg s "$sid" '[.[] | select(.sessionID==$s)] | length' <<<"$asks" 2>/dev/null || echo 0)"
+  ask="$(asks_waiting "$(cat "$f.cwd" 2>/dev/null)" "$sid")"
   flag=""
   if [ "$ask" != "0" ]; then flag=" · ASK WAITING"; bad=1
   elif [ "$state" = running ] && [ "$age" -ge "$stale" ] && [ "$b" = idle ]; then flag=" · STALE"; bad=1
