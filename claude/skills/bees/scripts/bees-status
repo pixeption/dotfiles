@@ -12,8 +12,8 @@ renders the Status column back into the plan; it is idempotent, so it can fire f
                                                             concern: blocked-on: handoff:
   bees-status --plan <plan.md> capture-bee -u <unit>... --role impl|review --ctx <tokens> < report
   bees-status round-out --role impl|review -u <unit>... -o <plan>.work/[<out-file>]   (wrappers)
-  bees-status refresh [--root <dir>]      hooks: refresh the plans with a docs/plans/*.work/ dir whose notes
-                                          or rounds changed during the hook's session (all without a payload)
+  bees-status refresh [--root <dir>]      hooks: refresh the plans this Claude session wrote a round, capture
+                                          or note to (.work/.sessions/<session_id>); every plan from a terminal
 """
 import argparse, contextlib, datetime as dt, fcntl, functools, glob, json, os, re, subprocess, sys, tempfile
 
@@ -178,6 +178,7 @@ def round_out(role, units, out):
     m and f"{m[1]}-{m[2]}" == stem or die(f"out-file must be named {stem}-r<N>.txt, not {os.path.basename(out)}")
     any(os.path.exists(out + s) for s in ("", ".log", ".usage")) and die(f"{out} already holds a round; use the next -r<N>")
     os.makedirs(work, exist_ok=True)
+    mark_session(plan)
     return plan, out
 
 
@@ -330,6 +331,7 @@ def cmd_note(plan, args):
     line = f"{stamp} " + (f"[{unit}] " if unit else "") + text
     with open(plan.notes, "a", encoding="utf-8") as f:
         f.write(f"- {line}\n")
+    mark_session(plan)
     print(f"ok {line}")
 
 
@@ -559,31 +561,42 @@ def cmd_board(plan, write, mode):
         print(f"ok Status {'written' if changed else 'unchanged'} · {plan.path}")
 
 
-def hook_session_start(payload):
-    """→ epoch the hook's session began (its transcript's birth time), or None when unknown."""
+# ---------- hooks: a session refreshes only the plans it touched ----------
+
+SESSION_ID = re.compile(r"[\w-]+")
+
+
+def session_marker(work, sid):
+    return os.path.join(work, ".sessions", sid)
+
+
+def mark_session(plan):
+    """Record that the current Claude session wrote to this plan (a round, a capture or a note), so
+    its Stop/SubagentStop hooks refresh it. CLAUDE_CODE_SESSION_ID is the hook payload's session_id,
+    in a bee's shell too; without it (a terminal) nothing is recorded — the wrapper exit refreshes."""
+    sid = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+    if SESSION_ID.fullmatch(sid):
+        os.makedirs(os.path.dirname(session_marker(plan.work, sid)), exist_ok=True)
+        open(session_marker(plan.work, sid), "a").close()
+
+
+def hook_session_id(payload):
+    """→ the hook payload's session_id, or "" when it has none (then no plan is refreshed)."""
     try:
-        return os.stat(json.loads(payload or "{}")["transcript_path"]).st_birthtime
-    except (ValueError, TypeError, KeyError, OSError, AttributeError):
-        return None
+        sid = json.loads(payload or "{}").get("session_id", "")
+    except (ValueError, AttributeError):
+        return ""
+    return sid if isinstance(sid, str) and SESSION_ID.fullmatch(sid) else ""
 
 
-def last_activity(path):
-    """Newest mtime of the plan's notes and rounds. The plan file itself is not activity: a render,
-    a revert or a checkout rewrites it, and the server log and .lock change on their own."""
-    base = path[:-3]
-    files = [base + ".notes.md"] + [os.path.join(base + ".work", n) for n in
-                                          (os.listdir(base + ".work") if os.path.isdir(base + ".work") else []) if ".txt" in n]
-    return max((os.path.getmtime(f) for f in files if os.path.exists(f)), default=0)
-
-
-def cmd_refresh(root, since):
-    """Hook entry: refresh the plans with a docs/plans/<plan>.work/ under root whose notes or rounds
-    changed since the hook's session began (all of them when that is unknown), so a session never rewrites another
-    session's plan. Never fails the hook."""
+def cmd_refresh(root, sid):
+    """Hook entry: refresh the plans under root/docs/plans whose .work/ carries this session's
+    marker (every plan with a .work/ when run by hand, sid None), so a session never rewrites a plan
+    only another session is working on. Never fails the hook."""
     for work in sorted(glob.glob(os.path.join(root, "docs", "plans", "*.work"))):
         path = work[:-len(".work")] + ".md"
         try:
-            os.path.isfile(path) and (since is None or last_activity(path) >= since) and write_view(Plan(path))
+            os.path.isfile(path) and (sid is None or os.path.isfile(session_marker(work, sid))) and write_view(Plan(path))
         except (SystemExit, Exception) as e:
             print(f"bees-status refresh: {path}: {e}", file=sys.stderr)
 
@@ -654,7 +667,7 @@ def main(argv):
     if a.cmd == "round-out":
         return print(round_out(a.role, a.unit, a.o)[1])
     if a.cmd == "refresh":
-        return cmd_refresh(a.root, None if sys.stdin.isatty() else hook_session_start(sys.stdin.read()))
+        return cmd_refresh(a.root, None if sys.stdin.isatty() else hook_session_id(sys.stdin.read()))
     a.plan or die("--plan <plan.md> (or BEES_PLAN) is required")
     if a.cmd == "init":
         return cmd_init(os.path.abspath(a.plan), a.repo)

@@ -12,6 +12,7 @@ _loader = importlib.machinery.SourceFileLoader("bees_status", TOOL)
 bs = importlib.util.module_from_spec(importlib.util.spec_from_loader("bees_status", _loader))
 _loader.exec_module(bs)
 
+os.environ.pop("CLAUDE_CODE_SESSION_ID", None)
 T = os.path.realpath(tempfile.mkdtemp(prefix="bees-view-"))
 atexit.register(shutil.rmtree, T, True)
 passed = 0
@@ -436,9 +437,10 @@ write(RF, plan_md([("V1", 1, ""), ("V2", 1, "")]))
 idle = os.path.join(PLANS, "docs/plans/2026-01-07-idle.md")
 write(idle, plan_md([("V1", 1, "")]))
 cell = lambda path, uid: bs.Plan(path).units[uid]["status"]
-refresh = lambda: subprocess.run([TOOL, "refresh"], input='{"hook_event_name":"Stop"}', capture_output=True, text=True,
-                                 env={**os.environ, "CLAUDE_PROJECT_DIR": PLANS})
-os.makedirs(RF[:-3] + ".work")
+refresh = lambda: subprocess.run([TOOL, "refresh"], input='{"hook_event_name":"Stop","session_id":"sess-view"}', capture_output=True,
+                                 text=True, env={**os.environ, "CLAUDE_PROJECT_DIR": PLANS})
+check(run("--plan", RF, "note", "decision: this session works on the plan", env={"CLAUDE_CODE_SESSION_ID": "sess-view"}).returncode == 0
+      and os.path.exists(os.path.join(RF[:-3] + ".work", ".sessions", "sess-view")), "a note records the session that wrote it")
 head_file = os.path.join(CODE, ".git", "HEAD")
 head_before = read(head_file)
 commit(CODE, "feat: v1\n\nBees-Unit: refresh/V1", 4000)
@@ -456,7 +458,7 @@ write(rw, "BEES: results=V2:blocked:-\n")
 os.utime(RF[:-3] + ".work", (dir_mtime, dir_mtime))
 refresh()
 check(cell(RF, "V2") == "🔴 blocked", "a rewritten out-file refreshes although the dir mtime did not move")
-write(os.path.join(PLANS, "docs/plans/2026-01-08-broken.work/x"), "")
+write(os.path.join(PLANS, "docs/plans/2026-01-08-broken.work/.sessions/sess-view"), "")
 write(os.path.join(PLANS, "docs/plans/2026-01-08-broken.md"), "# no checklist\n")
 r = refresh()
 check(r.returncode == 0 and "no '## Checklist'" in r.stderr and r.stdout == "", "a broken plan never fails the hook")
@@ -556,7 +558,7 @@ at(6400, out_m2 + ".usage")
 check(bs.status_cell(mview()["M2"]) == "🟡 done, trailer missing", "an unknown hash is still a missing trailer")
 
 
-# ---------- GAP-12: a hook refreshes only the plans active in its session ----------
+# ---------- GAP-12: a hook refreshes only the plans its own session touched ----------
 
 A_ = os.path.join(PLANS, "docs/plans/2026-01-11-active.md")
 Q_ = os.path.join(PLANS, "docs/plans/2026-01-12-quiet.md")
@@ -565,22 +567,21 @@ for path_, uid in ((A_, "S1"), (Q_, "S2")):
     rw_ = os.path.join(path_[:-3] + ".work", f"impl-{uid}-r1.txt")
     write(rw_, f"BEES: results={uid}:blocked:-\n")
     write(rw_ + ".usage", "{}")
-    write(os.path.join(path_[:-3] + ".work", "opencode-serve-4096.log"), "server keeps writing")
-    for f_ in (path_, rw_, rw_ + ".usage"):
-        at(1000, f_)
-transcript = os.path.join(T, "transcript.jsonl")
-write(transcript, "{}\n")
-at(time.time() + 5, os.path.join(A_[:-3] + ".work", "impl-S1-r1.txt.usage"))
-hook = lambda payload: subprocess.run([TOOL, "refresh"], input=payload, capture_output=True, text=True,
+hook = lambda payload: subprocess.run([TOOL, "refresh"], input=json.dumps(payload), capture_output=True, text=True,
                                       env={**os.environ, "CLAUDE_PROJECT_DIR": PLANS})
-r = hook(json.dumps({"hook_event_name": "Stop", "transcript_path": transcript}))
-check(r.returncode == 0 and cell(A_, "S1") == "🔴 blocked", f"a plan with a round from this session is refreshed: {r.stderr}")
-check(cell(Q_, "S2") == "☐", "a plan untouched since the session began is left alone, however stale its Status")
-write(Q_, read(Q_) + "\nreverted by hand\n")
-hook(json.dumps({"hook_event_name": "Stop", "transcript_path": transcript}))
-check(cell(Q_, "S2") == "☐", "editing or reverting the plan file alone does not activate it")
-hook(json.dumps({"hook_event_name": "Stop", "transcript_path": os.path.join(T, "missing.jsonl")}))
-check(cell(Q_, "S2") == "🔴 blocked", "an unreadable payload refreshes every plan")
+as_session = lambda sid: {"CLAUDE_CODE_SESSION_ID": sid}
+check(run("round-out", "--role", "impl", "-u", "S1", "-o", A_[:-3] + ".work", env=as_session("sess-a")).returncode == 0,
+      "a wrapper's round-out records its session")
+run("--plan", Q_, "note", "S2", "decision: a concurrent session works here", env=as_session("sess-b"))
+r = hook({"hook_event_name": "Stop", "session_id": "sess-a"})
+check(r.returncode == 0 and cell(A_, "S1") == "🔴 blocked", f"a plan this session touched is refreshed: {r.stderr}")
+check(cell(Q_, "S2") == "☐", "a plan only a concurrent session touched is left alone, however recent its notes")
+hook({"hook_event_name": "SubagentStop"})
+check(cell(Q_, "S2") == "☐", "a payload without a session id refreshes nothing")
+hook({"hook_event_name": "Stop", "session_id": "../sess-b"})
+check(cell(Q_, "S2") == "☐", "a session id that is not a plain name is ignored")
+hook({"hook_event_name": "Stop", "session_id": "sess-b"})
+check(cell(Q_, "S2") == "🔴 blocked", "the concurrent session's own hook refreshes its plan")
 
 
 # ---------- GAP-03: init converts an existing checklist ----------

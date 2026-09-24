@@ -525,8 +525,9 @@ review (its wrapper's `Blocked:` out-file, ending `BEES: results=<unit>:blocked:
 `review blocked` and never counts as a verdict.
 
 **Refresh is automatic.** Each wrapper's exit runs `show --write` for its plan; a bee's
-`SubagentStop` and every `Stop` (this skill's hooks) run it for each plan with a `.work/` dir whose
-notes or rounds changed since that session began — never for another session's plan
+`SubagentStop` and every `Stop` (this skill's hooks) run it for each plan this Claude session wrote
+a round, a capture or a note to (`.work/.sessions/<session id>`, from `CLAUDE_CODE_SESSION_ID`,
+which a bee's shell shares) — never for a plan only another session is working on
 (a `Stop` once rewrote a finished plan's rows after its repo's history was reset without
 trailers). Writes are serialised per plan by a lock on `.work/.lock`. An `accept:` note is final
 whatever git says later, so note it for every finished unit, and a squash or reset of a unit's
