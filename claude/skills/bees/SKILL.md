@@ -196,6 +196,10 @@ exists. Also name the other skill files nothing under the project loads for it
 (`~/.claude/skills/unity-cli/SKILL.md`, the project's `.claude/skills/unity-ui*/SKILL.md`, the
 sibling `CLAUDE.md`s). Take Claude instead of codex only when the unit needs judgment a batch run
 cannot settle (a screenshot read, a live Play-mode check) — **or codex is near its usage limit**.
+Routing for browser judgment first checks that this session has a browser tool connected that can
+reach the target: a private claude.ai artifact opens only in the owner's logged-in browser, not in
+Playwright. When it cannot, the live check is an owner step in the unit's acceptance from the
+start (STEP-06b, 2026-09-24, found this at the end of a 165k run).
 Before every codex unit (implementation or review) run `~/.claude/skills/bees/scripts/codex-usage`:
 it reads the usage windows from the newest snapshot codex wrote, names each by its length, and
 ends in a `ROUTE:` line. The plan has only a **weekly** window (no 5-hour limit since 2026-09-24);
@@ -366,7 +370,8 @@ directory for its whole life. Every repo it names must be inside the OpenCode fe
 preflight checks the plan's `Repo` column (§0), so list a sibling the unit only reads there too or
 run the preflight by hand. A **worktree** codex brief states it cannot run Unity and must
 report what it could not verify; an **in-place** codex brief instead names the `unity-cli` skill
-(§3) and requires it to verify in the live editor like any other agent.
+(§3) and requires it to verify in the live editor like any other agent. Every brief with a live
+check says: never substitute an emulation for it without saying so in `Outcome`.
 
 - Bad: "Investigate this and tell me what you think."
 - Bad: "Check the lock before running the suite and retry if another agent is using it."
