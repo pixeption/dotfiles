@@ -661,7 +661,8 @@ class H(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         with open(fixture + ".posts", "a") as f:
             f.write(urllib.parse.unquote(self.path) + "\\n")
-        self.send_response(200); self.end_headers(); self.wfile.write(b"true")
+        failing = any(p in self.path for p in json.load(open(fixture)).get("POST fail", []))
+        self.send_response(500 if failing else 200); self.end_headers(); self.wfile.write(b"false" if failing else b"true")
     def log_message(self, *a): pass
 http.server.HTTPServer(("127.0.0.1", port), H).serve_forever()
 """)
@@ -829,6 +830,23 @@ for tool in (OI, OR):
     check(r.returncode == 1 and body.startswith('Blocked: permission external_directory ["/elsewhere/*"]')
           and body.rstrip().endswith("BEES: results=V1:blocked:-"), f"{os.path.basename(tool)} rejects an ask waiting in its directory: {body!r}")
     check(os.path.exists(posts) and f"/permission/per_1/reply?directory={CODE}" in read(posts), f"{os.path.basename(tool)} posts the reject to the ask's directory")
+unreadable = {k: v for k, v in good.items() if k != "/permission"}
+for why, fixture, want in [
+        ("a /permission query that fails", unreadable, "Blocked: Could not read /permission for session ses_fake; session aborted."),
+        ("a reject that fails", {**good, f"/permission?directory={CODE}": ask, "POST fail": ["/reply"]},
+         'Blocked: permission external_directory ["/elsewhere/*"]'),
+        ("a failed reject whose abort fails too", {**good, f"/permission?directory={CODE}": ask, "POST fail": ["/reply", "/abort"]},
+         "Rejecting the ask failed; session ses_fake is still pending on the server — do not resume it.")]:
+    write(FIX, json.dumps(fixture))
+    posts = FIX + ".posts"
+    os.path.exists(posts) and os.remove(posts)
+    r = wrapper(OI, events({"type": "step_start"}), FAKE_RUN_HANG="1", OPENCODE_ROUND_POLL="1")
+    body = read(newest_out("impl")) if r.returncode != "timeout" else r.stderr
+    check(r.returncode == 1 and want in body.splitlines()[0] and body.rstrip().endswith("BEES: results=V1:blocked:-"),
+          f"{why} stops the run blocked: {body!r}")
+    aborted = "POST fail" not in fixture or "/abort" not in fixture["POST fail"]
+    check(os.path.exists(posts) and f"/session/ses_fake/abort?directory={CODE}" in read(posts)
+          and ("session aborted." in body.splitlines()[0]) == aborted, f"and {why} aborts the session or says it is pending: {body!r}")
 write(FIX, json.dumps(good))
 write(FIX, json.dumps(stale_catalogue))
 rounds_in = lambda: [n for n in listing(RF[:-3] + ".work") if ".txt" in n]

@@ -6,14 +6,16 @@
 #
 # While the run lives, a pending permission ask for its session in -C (both spellings; /permission
 # is scoped per directory) is rejected and the run stopped — with the fence loaded, nobody headless
-# can answer it. Afterwards: <out-file>.session, the out-file (the final assistant message, via
-# extract-opencode-final), then <out-file>.usage, written last because bees-watch reads it as
-# "finished". The round FAILED when an ask was rejected, the log has an `error` event, the run exited
-# non-zero, there is no final message, the final message's step did not finish with reason `stop`,
-# or (review) the answer does not end in APPROVE/CHANGES_REQUIRED. A failed out-file is
-# `Blocked: <reason>`, the partial answer without BEES lines, and `BEES: results=<unit>:blocked:-`
-# for every -u; bees-status reads that as a failed round (a review's is "review blocked", which
-# never counts as a verdict). Exit 0 finished · 1 failed (stderr says why) · 2 usage.
+# can answer it; a /permission query or a reject that fails stops the run and aborts its session
+# (or the Blocked line says it is still pending and must not be resumed). Afterwards:
+# <out-file>.session, the out-file (the final assistant message, via extract-opencode-final), then
+# <out-file>.usage, written last because bees-watch reads it as "finished". The round FAILED when an
+# ask was rejected or could not be checked, the log has an `error` event, the run exited non-zero,
+# there is no final message, the final message's step did not finish with reason `stop`, or (review)
+# the answer does not end in APPROVE/CHANGES_REQUIRED. A failed out-file is `Blocked: <reason>`, the
+# partial answer without BEES lines, and `BEES: results=<unit>:blocked:-` for every -u; bees-status
+# reads that as a failed round (a review's is "review blocked", which never counts as a verdict).
+# Exit 0 finished · 1 failed (stderr says why) · 2 usage.
 set -uo pipefail
 
 url=""; workdir=""; role=""; outfile=""; units=()
@@ -39,24 +41,38 @@ session_id() { jq -Rr 'fromjson? | select(.sessionID) | .sessionID' "$logfile" 2
 pending_ask() {
   for d in "${dirs[@]}"; do
     curl -sfG "${url}/permission" --data-urlencode "directory=$d" 2>/dev/null |
-      jq -c --arg s "$1" --arg d "$d" '.[] | select(.sessionID == $s) | . + {directory: $d}' 2>/dev/null
-  done | head -1
+      jq -c --arg s "$1" --arg d "$d" '.[] | select(.sessionID == $s) | . + {directory: $d}' 2>/dev/null || return 1
+  done
 }
+post_ok() { [ "$(curl -sf -X POST "$@" 2>/dev/null)" = true ]; }
 reject() {
-  curl -sf -X POST "${url}/permission/$(jq -r '"\(.id)/reply?directory=\(.directory | @uri)"' <<<"$1")" \
-    -H 'content-type: application/json' -d '{"reply":"reject","message":"headless run: outside the fence"}' >/dev/null 2>&1
+  post_ok "${url}/permission/$(jq -r '"\(.id)/reply?directory=\(.directory | @uri)"' <<<"$1")" \
+    -H 'content-type: application/json' -d '{"reply":"reject","message":"headless run: outside the fence"}'
+}
+abort_session() {
+  for d in "${dirs[@]}"; do post_ok -G "${url}/session/$1/abort" --data-urlencode "directory=$d" && return 0; done
+  return 1
 }
 
 "$@" < /dev/null > "$logfile" 2>&1 &
 runpid=$!
-blocked=""
+blocked=""; unsafe=""
 tick=0
 while kill -0 "$runpid" 2>/dev/null; do
   sleep 1; tick=$((tick + 1)); [ $((tick % ${OPENCODE_ROUND_POLL:-15})) = 0 ] || continue
   sid="$(session_id)"; [ -n "$sid" ] || continue
-  ask="$(pending_ask "$sid")"; [ -n "$ask" ] || continue
-  blocked="Blocked: permission $(jq -r .permission <<<"$ask") $(jq -c .patterns <<<"$ask") — outside the fence in ~/.config/opencode/opencode.jsonc; widen it or re-brief."
-  reject "$ask"
+  if ! ask="$(pending_ask "$sid")"; then
+    unsafe="Could not read /permission for session ${sid}"
+  else
+    [ -n "$ask" ] || continue
+    ask="${ask%%$'\n'*}"
+    blocked="Blocked: permission $(jq -r .permission <<<"$ask") $(jq -c .patterns <<<"$ask") — outside the fence in ~/.config/opencode/opencode.jsonc; widen it or re-brief."
+    reject "$ask" || unsafe="Rejecting the ask failed"
+  fi
+  if [ -n "$unsafe" ]; then
+    abort_session "$sid" && unsafe="$unsafe; session aborted" || unsafe="$unsafe; session ${sid} is still pending on the server — do not resume it"
+    blocked="${blocked:-Blocked:} $unsafe."
+  fi
   kill "$runpid" 2>/dev/null
 done
 wait "$runpid"; status=$?
