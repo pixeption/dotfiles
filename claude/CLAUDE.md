@@ -54,31 +54,11 @@ For a non-trivial plan (e.g. a refactor) before implementing, write it to a mark
 repo rather than presenting it only as chat text — better visibility, easier to review. Still
 summarize in chat too, but the file is the reviewable artifact. Check for an existing docs
 convention in the repo (e.g. `Assets/Docs/`) and follow it; otherwise pick a sensible location.
-Code/API snippets inside a plan doc use a language-tagged fence (` ```csharp `, ` ```ts `, etc.),
-never a bare fence.
 
 ## Structured review/audit docs
 
-For code audits, implementation plans, design reviews, or any markdown deliverable with
-enumerated items:
-
-- Header block right under the title: `**Date:**`, `**Scope:**`, `**Focus:**`, `**By:**` (agent +
-  reasoning effort, e.g. `**By:** claude-opus-5-5 · reasoning: high`; name the subagent too if one
-  was used), and `**Method:**` when real verification was done (compile check, call-site tracing,
-  an actual build/test run, etc.).
-- A triage/summary table immediately followed by a checklist table, **both at the top** of the
-  doc, right after the header block — never at the end, even if a project's own CLAUDE.md says to
-  end with a checklist; this preference wins.
-- Every checklist ID is a markdown anchor link to its section heading below
-  (`[BUG-01](#bug-01--title-slug)`), never plain text. Anchor targets are GitHub's auto-slug of
-  the heading (lowercase, spaces→`-`, most punctuation dropped, ` · ` and ` — ` each become `--`).
-- Stable, category-prefixed, sequential IDs (`BUG-01`, `PERF-01`, `STEP-01`, ...); each item is a
-  `### <ID> · <title>` heading. Keep IDs stable across re-runs — mark done items inline
-  (`✅` in the checklist + `**✅ Fixed/Done <date>**` on the heading) rather than renumbering; for
-  a re-run, add a compact "Resolved since previous" table.
-- Source references inside such docs should be clickable, relative-path markdown links landing on
-  the exact line, not bare inline-code paths: `[World.cs:92](relative/path/World.cs#L92)`, ranges
-  as `#L84-L112`.
+For any structured code audit, implementation plan, design review, or markdown deliverable with
+enumerated items, load the `plan` skill and follow its format rules.
 
 ## Browser automation
 
