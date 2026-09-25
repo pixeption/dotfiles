@@ -24,7 +24,7 @@ working immediately — no process-wait, no `ListAgents`, no `SendMessage` round
 2. **Run the script** (beside this skill), passing the message file (or stdin). **Name the tab after
    the work with `--task`** so it is self-describing in `ListAgents` and the kitty tab bar:
    ```bash
-   ~/.claude/skills/handoff/scripts/spawn-handoff.sh \
+   "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"/skills/handoff/scripts/spawn-handoff.sh \
      --cwd "$(pwd)" --task "fix pipeline-ui frictions" \
      --model 'claude-opus-5-5[1m]' /path/to/message.txt
    # or: printf '%s' "$msg" | .../spawn-handoff.sh --cwd "$(pwd)" --task "…"
@@ -41,7 +41,9 @@ working immediately — no process-wait, no `ListAgents`, no `SendMessage` round
    lands on the wrong model. Override either flag only when the user asks for a different model or
    effort for the new session. The script
    resolves the `claude` binary
-   (even off a non-login PATH), checks kitty remote control, opens a tab in `--cwd`, and launches
+   (even off a non-login PATH), checks kitty remote control, opens a tab in `--cwd` (forwarding
+   `CLAUDE_CONFIG_DIR` — kitty children get kitty's env, not yours, so a non-default config dir would
+   otherwise revert to `~/.claude`), and launches
    `claude --name <name> --settings '{"crossSessionInbound":"accept"}' "<message>"`. The message is
    expanded into a single argv element by the script's own shell, so kitty never tokenizes it —
    newlines, quotes, `$`, backticks in the handoff are all safe. It prints `NAME=<name>` and
@@ -73,12 +75,13 @@ script fails a precondition (kitty RC off, no `claude` binary), fall back to the
 3. **Spawn the new session in a kitty tab**, in the current repo, accepting inbound messages unattended so the handoff lands without an approval dialog:
    ```bash
    cwd="$(pwd)"
-   wid=$(kitty @ launch --type=tab --cwd="$cwd" --title="$name" \
+   wid=$(kitty @ launch --type=tab --env "CLAUDE_CONFIG_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}" \
+     --cwd="$cwd" --title="$name" \
      -- claude --name "$name" --model 'claude-opus-5-5[1m]' --effort "$CLAUDE_EFFORT" \
      --settings '{"crossSessionInbound":"accept"}')
    echo "spawned window=$wid name=$name"
    ```
-   Capture both `$name` and `$wid` — you need `$name` to message it, and `$wid` to close it later if the user asks. Use `--type=os-window` instead of `--type=tab` if the user prefers a separate window.
+   The `--env` forwards a non-default config dir; kitty doesn't inherit it. Capture both `$name` and `$wid` — you need `$name` to message it, and `$wid` to close it later if the user asks. Use `--type=os-window` instead of `--type=tab` if the user prefers a separate window.
 
 4. **Wait for it to register**, then confirm with `ListAgents`. A fresh session takes a few seconds to boot and bind its inbox socket:
    ```bash

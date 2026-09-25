@@ -56,6 +56,11 @@ done
 model_args=()
 [ -n "$model" ] && model_args=(--model "$model")
 
+# kitty launches the child with kitty's own environment, not ours, so a non-default config dir
+# (e.g. CLAUDE_CONFIG_DIR=~/.claude_work) would silently revert to ~/.claude. Forward it.
+env_args=()
+[ -n "${CLAUDE_CONFIG_DIR:-}" ] && env_args=(--env "CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR")
+
 case "$effort" in
   low|medium|high|xhigh|max) ;;
   *) echo "invalid --effort '$effort' (want low|medium|high|xhigh|max)" >&2; exit 2;;
@@ -86,10 +91,11 @@ if [ "$dry" -eq 1 ]; then
   echo "name:    $name"
   echo "model:   ${model:-<session default>}"
   echo "effort:  $effort"
+  echo "config:  ${CLAUDE_CONFIG_DIR:-<default ~/.claude>}"
   echo "cwd:     $cwd"
   echo "wtype:   $wtype"
   echo "message: $(wc -c < "$msgfile") bytes, $(wc -l < "$msgfile") lines"
-  echo "would run: kitty @ launch --type=$wtype --cwd=$cwd --title=$name -- $claude_bin --name $name ${model:+--model $model} --effort $effort --settings {\"crossSessionInbound\":\"accept\"} <message>"
+  echo "would run: kitty @ launch --type=$wtype ${CLAUDE_CONFIG_DIR:+--env CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR} --cwd=$cwd --title=$name -- $claude_bin --name $name ${model:+--model $model} --effort $effort --settings {\"crossSessionInbound\":\"accept\"} <message>"
   exit 0
 fi
 
@@ -99,7 +105,7 @@ kitty @ ls >/dev/null 2>&1 || { echo "kitty remote control is off; enable allow_
 # The message is expanded here by THIS shell into a single argv element, so kitty
 # never tokenizes it — newlines/quotes/$/backticks in the handoff are all safe. The
 # new session accepts inbound messages unattended so a follow-up needs no approval.
-wid="$(kitty @ launch --type="$wtype" --cwd="$cwd" --title="$name" -- \
+wid="$(kitty @ launch --type="$wtype" ${env_args[@]+"${env_args[@]}"} --cwd="$cwd" --title="$name" -- \
   "$claude_bin" --name "$name" ${model_args[@]+"${model_args[@]}"} --effort "$effort" \
   --settings '{"crossSessionInbound":"accept"}' "$(cat "$msgfile")")"
 
