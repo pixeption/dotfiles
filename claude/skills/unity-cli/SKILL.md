@@ -33,6 +33,14 @@ Common verbs: `status`, `list`, `open`, `close`, `recompile`, `test`, `command` 
 For version-matched API docs, run `unity docs GameObject --url` from the project; use `--manual`,
 `--search`, or `--editor-version <version>` as needed.
 
+Reading the Editor console: `unity command console --project-path <dir> --level error --tail 50`
+(`--level log|warn|error`, `--since <cursor> --since_session <session>` to follow; a cursor it
+can't honor returns the tail with `reset`/`dropped` true). `counts` describes the buffer and
+`groundTruth` the Editor's counts and compile state; compile errors from before capture started are
+backfilled. `console_status` gives those counts without pulling entries; `clear_console` clears both
+buffers. There is no `read_console` or `get_console_logs`, and guessing either one returns
+`400 Command Not Found`.
+
 Helper scripts live beside this file in `scripts/`: `unity-editor`, `unity-test`, `unity-suite`,
 `unity-wait`, `_common.sh`. Prefer them over hand-rolling a poll loop — the pitfalls
 below are exactly what they exist to paper over.
@@ -403,10 +411,6 @@ working in it, so stopping Play to get work done is correct, not disruptive.
   into Safe Mode with six `CS0122` errors on that upgrade. If you need the descriptor's fields,
   read the JSON file directly (`port`/`evalToken` are stable, documented) rather than referencing
   those model types.
-- **0.7 removed `get_console_logs`** — use `console`. Pair `since` with `since_session`; a cursor
-  it cannot honor returns the tail with `reset: true` / `dropped: true`. Entries include `logType`
-  and `seeded`; `counts` describes the buffer, `groundTruth` the Editor's counts/compile state.
-  Compile errors predating capture are backfilled; `clear_console` clears both buffers.
 - **0.7 runtime builds:** `[CodeReload]`/`[OnCodeReload]` live in `Unity.Pipeline.Attributes`;
   asmdefs using them must reference it. Runtime Pipeline/Roslyn are excluded from non-development
   builds unless `ENABLE_RUNTIME_PIPELINE` is defined; attributes remain usable with no reload effect.
