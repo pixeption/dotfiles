@@ -6,13 +6,13 @@ The server reads ~/.config/opencode/opencode.jsonc and fetches its model catalog
 only, so a long-running server can lack the fence, lack a newly allowed directory, or name no
 model the wrapper asks for (a stale catalogue: `ProviderModelNotFoundError`, 2026-09-24).
 
-  opencode-preflight -m <provider/model> -C <dir> [--plan <plan.md>] [--url http://127.0.0.1:4096]
+  opencode-preflight -m <provider/model> -C <dir> [--repo <dir>]... [--url http://127.0.0.1:4096]
                      [--port 4096] [--serverlog <file>] [--no-restart]
 
 Checks, against the live server:
   fence  /config has a permission.external_directory block
-  paths  the plan's repo and every checklist Repo outside -C is allowed by that block, both as
-         given and symlink-resolved (-C itself is the session's own directory)
+  paths  every --repo outside -C is allowed by that block, both as given and symlink-resolved
+         (-C itself is the session's own directory)
   model  -m is listed by /config/providers
 A server that is down is started. A failed check restarts it only when no `opencode run`/`attach`
 process names its port and no session in any directory is busy, then checks again; a busy server,
@@ -25,7 +25,7 @@ fromConfig): a leading `~/` or `$HOME` becomes the home dir, `*` matches any run
 A file's ask is `<its directory>/*`, from the given path on some tool paths and the canonical one on
 others, so a repo passes only when both spellings are allowed.
 """
-import argparse, importlib.machinery, importlib.util, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
+import argparse, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 
 
 def say(msg):
@@ -62,15 +62,6 @@ def allowed(fence, path):
     probes = {os.path.join(os.path.abspath(path), "*"), os.path.join(os.path.realpath(path), "*")}
     last_match = lambda probe: next((fence[p] for p in reversed(list(fence)) if wildcard(p, probe)), "ask")
     return all(last_match(probe) == "allow" for probe in probes)
-
-
-def plan_repos(plan):
-    loader = importlib.machinery.SourceFileLoader(
-        "bees_status", os.path.expanduser("~/.claude/skills/bees/scripts/bees-status"))
-    bs = importlib.util.module_from_spec(importlib.util.spec_from_loader("bees_status", loader))
-    loader.exec_module(bs)
-    p = bs.Plan(plan)
-    return {p.root} | {path for u in p.units.values() for path in u["repo_paths"]}
 
 
 def outside(workdir, repos):
@@ -140,7 +131,7 @@ def main():
     a = argparse.ArgumentParser(prog="opencode-preflight")
     a.add_argument("-m", "--model", required=True)
     a.add_argument("-C", "--dir", required=True)
-    a.add_argument("--plan")
+    a.add_argument("--repo", action="append", default=[])
     a.add_argument("--url")
     a.add_argument("--port", default="4096")
     a.add_argument("--serverlog")
@@ -148,9 +139,9 @@ def main():
     a = a.parse_args()
     url = a.url or f"http://127.0.0.1:{a.port}"
     workdir = os.path.realpath(a.dir)
-    repos = plan_repos(a.plan) if a.plan else set()
+    repos = set(a.repo)
     checked = " ".join(outside(workdir, repos)) or "no repo outside -C"
-    ok = lambda server: say(f"ok · {url} {server} · model {a.model} listed · fence allows {checked}" + ("" if a.plan else " (no --plan)"))
+    ok = lambda server: say(f"ok · {url} {server} · model {a.model} listed · fence allows {checked}")
     server = "running"
     if get(url, "/config") is None:
         start(url, a.port, a.serverlog)

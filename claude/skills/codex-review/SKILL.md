@@ -37,28 +37,29 @@ and usage.
 ```bash
 # round 1 — write the prompt to a file first (see "Prompt shape")
 ~/.claude/skills/codex-review/scripts/opencode-review \
-  -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o docs/plans/<plan>.work/   # → review-<unit>-r1.txt; default openai/gpt-6-sol / medium
+  -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o "$W/review-<unit>-r1.txt"   # default openai/gpt-6-sol / medium
 # follow-up — same session, any time; --no-subagents = the `review-followup` agent, which denies
 # the task tool as well as edits (the wrapper refuses if the running server has not loaded it)
 ~/.claude/skills/codex-review/scripts/opencode-review \
-    -C <repo> -p "$T/r2-prompt.txt" -u <unit> -o docs/plans/<plan>.work/ -s "$(cat "$W/review-<unit>-r1.txt.session")" --no-subagents
+    -C <repo> -p "$T/r2-prompt.txt" -u <unit> -o "$W/review-<unit>-r2.txt" -s "$(cat "$W/review-<unit>-r1.txt.session")" --no-subagents
 # final pass — same session, same flag
 ~/.claude/skills/codex-review/scripts/opencode-review \
-    -C <repo> -p "$T/final-prompt.txt" -u <unit> -o docs/plans/<plan>.work/ -s "$(cat "$W/review-<unit>-r1.txt.session")" --no-subagents
+    -C <repo> -p "$T/final-prompt.txt" -u <unit> -o "$W/review-<unit>-r3.txt" -s "$(cat "$W/review-<unit>-r1.txt.session")" --no-subagents
 # harder review: -e high
 ```
 
 - Run via the **Bash tool with `run_in_background: true`**; reviews take minutes. `$T` (prompts)
-  is your scratchpad, never `/tmp`. Every round belongs to a plan unit: `-u <unit>` (repeatable)
-  and `-o docs/plans/<plan>.work/` (`$W` above), which the wrapper turns into
-  `review-<unit>[+<unit>…]-r<N>.txt`; without them it fails before writing. The out-files outlive
-  the session, and the wrapper's exit refreshes the plan's `Status` column (bees skill §9).
+  is your scratchpad, never `/tmp`. `-o` is taken verbatim and refused if it already holds a
+  round; under bees it is `$W/review-<unit>-r<N>.txt` with `$W` = `docs/plans/<plan>.work`
+  (bees-watch relies on that `-r<N>` naming), and without a plan any path works. `-u <unit>` is
+  optional: it labels the failed-round `BEES: results=` line. `--repo <dir>` (repeatable) names a
+  sibling repo the review reads, so preflight checks the fence allows it.
 - The out-file holds **only the final answer** — the last message's text (findings, suggestions,
   verdict); earlier steps' narration stays in the `.log`. The round runs through codex-implementor's
   `opencode-round`, so a permission ask is rejected and the run stopped as for an implementor. A
   failed round (that ask, an `error` event, a non-zero exit, no answer, an unfinished final step, or
   an answer not ending in `APPROVE`/`CHANGES_REQUIRED`) gets an out-file starting `Blocked: <reason>`
-  and ending `BEES: results=<unit>:blocked:-`, which the board shows as `review blocked` and never
+  and ending `BEES: results=<unit>:blocked:-`, `bees-watch` flags as `failed`; it never
   counts as a verdict, and exit 1. The `.log` is a
   liveness aid only — never read it into context. Under the ChatGPT oauth credential `.usage`
   `cost` reads 0; report tokens.
@@ -91,8 +92,8 @@ session's rollout file under `~/.codex/sessions`: the last `token_count` event's
 the current context).
 
 ```bash
-~/.claude/skills/codex-review/scripts/codex-review -p "$T/r1-prompt.txt" -u <unit> -o docs/plans/<plan>.work/ -e medium
-~/.claude/skills/codex-review/scripts/codex-review -p "$T/r2-prompt.txt" -u <unit> -o docs/plans/<plan>.work/ -r "$(cat "$W/review-<unit>-r1.txt.session")"
+~/.claude/skills/codex-review/scripts/codex-review -p "$T/r1-prompt.txt" -o "$W/review-<unit>-r1.txt" -e medium
+~/.claude/skills/codex-review/scripts/codex-review -p "$T/r2-prompt.txt" -o "$W/review-<unit>-r2.txt" -r "$(cat "$W/review-<unit>-r1.txt.session")"
 ```
 
 **The stdin trap**: `codex exec` (and `resume`) appends stdin as a `<stdin>` block even with a

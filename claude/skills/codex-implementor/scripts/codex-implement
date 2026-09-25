@@ -29,14 +29,12 @@
 # project.
 #
 # Usage:
-#   codex-implement -C <workdir> -p <prompt-file> -u <unit>... -o <plan>.work/<out-file> \
+#   codex-implement -C <workdir> -p <prompt-file> -o <out-file> \
 #                   [-m gpt-6-luna|gpt-6-sol] [-e low|medium|high|xhigh|max|ultra] \
 #                   [-t fast|standard] [-s workspace-write|read-only|danger-full-access] [-r <session-id>]
 #
-#   -u  a unit of the plan this round serves (repeatable, at least one). -o must be a file inside
-#       docs/plans/<plan>.work/ named impl-<unit>[+<unit>…]-r<N>.txt, or the .work dir itself
-#       (the next free r<N> is taken). Anything else fails before a file is written.
-#       Every exit after that refreshes the plan's Status column (bees-status show --write).
+#   -o  the out-file, taken verbatim (its directory is created); refused if it already holds a round.
+#       Under bees: docs/plans/<plan>.work/impl-<unit>-r<N>.txt.
 #   -C  the directory codex runs in and may write to (create a git worktree first:
 #         git worktree add -b <arm> <path> HEAD   — DO NOT rely on any auto-worktree basing on the
 #         branch tip; base it explicitly on HEAD).
@@ -67,7 +65,6 @@ workdir=""
 promptfile=""
 outfile=""
 session=""
-units=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -77,7 +74,6 @@ while [ $# -gt 0 ]; do
     -C|--cd)          workdir="$2"; shift 2 ;;
     -p|--prompt-file) promptfile="$2"; shift 2 ;;
     -o|--out)         outfile="$2"; shift 2 ;;
-    -u|--unit)        units+=(-u "$2"); shift 2 ;;
     -s|--sandbox)     sandbox="$2"; shift 2 ;;
     -r|--resume)      session="$2"; shift 2 ;;
     -h|--help)
@@ -111,9 +107,8 @@ if [ -n "$session" ]; then
   }
 fi
 
-# Nothing is written before this point: an invalid invocation must not activate a plan.
-outfile="$("$HOME/.claude/skills/bees/scripts/bees-status" round-out --role impl "${units[@]}" -o "$outfile")" || exit 2
-plan="${outfile%.work/*}.md"
+outfile="$(mkdir -p "$(dirname "$outfile")" && cd "$(dirname "$outfile")" && pwd -P)/$(basename "$outfile")"
+[ ! -e "$outfile" ] && [ ! -e "$outfile.log" ] || { echo "codex-implement: $outfile already holds a round; pick a new -o" >&2; exit 2; }
 claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
 preamble="Before acting, read ~/.claude/CLAUDE.md, then every CLAUDE.md in this repository (root first, nearer ones apply to their subtree):
 $claude_docs
@@ -128,7 +123,6 @@ logfile="${outfile}.log"
 sessionfile="${outfile}.session"
 usagefile="${outfile}.usage"
 
-trap '"$HOME/.claude/skills/bees/scripts/bees-status" --plan "$plan" show --write >/dev/null 2>&1 || true' EXIT
 (cd "$workdir" && pwd -P) > "${outfile}.cwd"
 echo $$ > "${outfile}.pid"
 # < /dev/null is the whole point — never remove it.

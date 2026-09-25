@@ -2,7 +2,7 @@
 # Run one `opencode run --attach` round for opencode-implement and opencode-review, watch it, and
 # finish its files. Shared so both wrappers fail a round the same way.
 #
-#   opencode-round --url <url> -C <dir> --role impl|review -o <out-file> -u <unit>... -- <opencode run …>
+#   opencode-round --url <url> -C <dir> --role impl|review -o <out-file> [-u <unit>]... -- <opencode run …>
 #
 # While the run lives, a pending permission ask for its session in -C (both spellings; /permission
 # is scoped per directory) is rejected and the run stopped — with the fence loaded, nobody headless
@@ -13,8 +13,8 @@
 # ask was rejected or could not be checked, the log has an `error` event, the run exited non-zero,
 # there is no final message, the final message's step did not finish with reason `stop`, or (review)
 # the answer does not end in APPROVE/CHANGES_REQUIRED. A failed out-file is `Blocked: <reason>`, the
-# partial answer without BEES lines, and `BEES: results=<unit>:blocked:-` for every -u; bees-status
-# reads that as a failed round (a review's is "review blocked", which never counts as a verdict).
+# partial answer without BEES lines, and `BEES: results=<unit>:blocked:-` for every -u (none without
+# -u), so a failed review never reads as a verdict.
 # Exit 0 finished · 1 failed (stderr says why) · 2 usage.
 set -uo pipefail
 
@@ -30,7 +30,7 @@ while [ $# -gt 0 ]; do
     *) echo "opencode-round: unknown arg '$1'" >&2; exit 2 ;;
   esac
 done
-[ -n "$url" ] && [ -d "$workdir" ] && [ -n "$outfile" ] && [ "${#units[@]}" -gt 0 ] && [ $# -gt 0 ] &&
+[ -n "$url" ] && [ -d "$workdir" ] && [ -n "$outfile" ] && [ $# -gt 0 ] &&
   { [ "$role" = impl ] || [ "$role" = review ]; } || { echo "opencode-round: usage: see the header" >&2; exit 2; }
 
 here="$(dirname "$0")"
@@ -97,9 +97,9 @@ ends_in_verdict() { grep -v '^[[:space:]]*$' "$outfile" | tail -n 1 | grep -qE '
 [ -z "$blocked" ] && [ "$role" = review ] && ! ends_in_verdict && blocked="Blocked: the answer does not end in APPROVE or CHANGES_REQUIRED (truncated?)"
 if [ -n "$blocked" ]; then
   blocked="$blocked (log: ${logfile})"
-  results="$(printf '%s:blocked:-;' "${units[@]}")"
+  results=""; [ "${#units[@]}" = 0 ] || results="$(printf '%s:blocked:-;' "${units[@]}")"
   partial="$(grep -v '^BEES:' "$outfile")"
-  printf '%s\n\n%s%sBEES: results=%s\n' "$blocked" "$partial" "${partial:+$'\n\n'}" "${results%;}" > "$outfile"
+  printf '%s\n\n%s%s\n' "$blocked" "$partial" "${results:+${partial:+$'\n\n'}BEES: results=${results%;}}" > "$outfile"
   echo "opencode-round: $blocked" >&2
 fi
 "$here/extract-opencode-usage" "$logfile" "$sid" > "${outfile}.usage"

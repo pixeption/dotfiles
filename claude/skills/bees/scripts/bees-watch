@@ -12,13 +12,14 @@
 # scoped per directory), or a live wrapper whose last log event is inside a step; an ask waiting is
 # read from /permission for that directory too.
 # In --dir mode a failed or DEAD round is history, not flagged, once its unit has a newer round of
-# the same role or an `accept:` note in <plan>.notes.md.
+# the same role or a `[<unit>] accept:` line in <plan>.log.md. --dir reads only round logs named
+# impl-<units>-r<N>.txt.log / review-<units>-r<N>.txt.log, never opencode-serve-<port>.log.
 # Exit 0 when every round is live or finished, 1 when any is STALE, DEAD, failed or has an ask waiting.
 set -uo pipefail
 url="http://127.0.0.1:4096"; stale=20; files=(); dir=""; all=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dir) dir="${2%/}"; for l in "$dir"/*.log; do f="${l%.log}"; [ -e "$f" ] || [ -e "$l" ] && files+=("$f"); done; shift 2 ;;
+    --dir) dir="${2%/}"; for l in "$dir"/{impl,review}-*-r[0-9]*.txt.log; do f="${l%.log}"; [ -e "$f" ] || [ -e "$l" ] && files+=("$f"); done; shift 2 ;;
     --all) all=1; shift ;;
     --stale-min) stale="$2"; shift 2 ;;
     --url) url="$2"; shift 2 ;;
@@ -42,7 +43,7 @@ history() {
     [[ "$m" =~ ^[0-9]+$ ]] && [ "$m" -gt "$n" ] && return 0
   done
   units="${stem#*-}"
-  for u in ${units//+/ }; do grep -qF "[$u] accept:" "${dir%.work}.notes.md" 2>/dev/null || return 1; done
+  for u in ${units//+/ }; do grep -qF "[$u] accept:" "${dir%.work}.log.md" 2>/dev/null || return 1; done
 }
 mid_step() { case "$(tail -n 50 "$1" | jq -Rr 'fromjson? | .type // empty' 2>/dev/null | tail -1)" in
   step_start|tool_use|text|reasoning) return 0 ;; *) return 1 ;; esac; }

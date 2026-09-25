@@ -31,7 +31,7 @@
 #    flags it — `context_tokens` is the real post-compaction size, but history before it is now
 #    a summary, not the original detail (see extract-opencode-usage for the event shape).
 # 6. Runs `opencode-preflight` before any round file is written: the live server must carry the
-#    fence, allow the plan's repos outside -C, and list -m in /config/providers. The server reads
+#    fence, allow every --repo outside -C, and list -m in /config/providers. The server reads
 #    opencode.jsonc and its model catalogue at STARTUP only — a server older than the fence makes
 #    every external path an "ask" nobody answers (a round waited a whole night, 2026-09-20), and a
 #    stale catalogue fails the round's first step (2026-09-24). An idle server is restarted.
@@ -41,7 +41,7 @@
 # 8. A round that did not finish — a permission ask, an `error` event, a non-zero `opencode run`
 #    exit, no final message, or a final step that did not stop — gets `Blocked: <reason>` and
 #    `BEES: results=<unit>:blocked:-` for each unit in its out-file, and the wrapper exits 1, so
-#    neither the board nor the notification reads it as done.
+#    the notification never reads it as done.
 #
 # A NEW session (no -s) gets a preamble prepended: read ~/.claude/CLAUDE.md and every CLAUDE.md in
 # the worktree, and the skills folders — so opencode loads the same guidance a Claude/codex session
@@ -51,13 +51,13 @@
 # In place it drives the live editor through the `unity` CLI and verifies itself.
 #
 # Usage:
-#   opencode-implement -C <worktree|real checkout> -p <prompt-file> -u <unit>... -o <plan>.work/<out-file>
+#   opencode-implement -C <worktree|real checkout> -p <prompt-file> -o <out-file> [-u <unit>]... [--repo <dir>]...
 #                      [-m openai/gpt-6-luna] [-e max] [-s <session-id>]
 #                      [--port 4096] [--url http://127.0.0.1:4096] [--title <unit>]
-#   -u  a unit of the plan this round serves (repeatable, at least one). -o must be a file inside
-#       docs/plans/<plan>.work/ named impl-<unit>[+<unit>…]-r<N>.txt, or the .work dir itself
-#       (the next free r<N> is taken). Anything else fails before a file is written.
-#       Every exit after that refreshes the plan's Status column (bees-status show --write).
+#   -o  the out-file, taken verbatim (its directory is created); refused if it already holds a round.
+#       Under bees: docs/plans/<plan>.work/impl-<unit>-r<N>.txt.
+#   -u  optional unit label(s) for the failed-round `BEES: results=` line (repeatable).
+#   --repo  a sibling repo the unit touches outside -C; preflight checks the fence allows it (repeatable).
 #   -m  provider/model (default openai/gpt-6-luna). sol: openai/gpt-6-sol.
 #   -e  reasoning effort -> opencode --variant (minimal|low|medium|high|max). Default: max.
 #   -s  resume a session id (from a previous <out-file>.session). Same -C as the session's
@@ -76,6 +76,7 @@ port="4096"
 url=""
 title=""
 units=()
+repos=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -85,6 +86,7 @@ while [ $# -gt 0 ]; do
     -p|--prompt-file) promptfile="$2"; shift 2 ;;
     -o|--out)         outfile="$2"; shift 2 ;;
     -u|--unit)        units+=(-u "$2"); shift 2 ;;
+    --repo)           repos+=(--repo "$2"); shift 2 ;;
     -s|--session)     session="$2"; shift 2 ;;
     --port)           port="$2"; shift 2 ;;
     --url)            url="$2"; shift 2 ;;
@@ -113,17 +115,16 @@ if [ -n "$session" ]; then
     exit 1
   }
 fi
-outfile="$("$HOME/.claude/skills/bees/scripts/bees-status" round-out --role impl "${units[@]}" -o "$outfile")" || exit 2
-plan="${outfile%.work/*}.md"
+outfile="$(mkdir -p "$(dirname "$outfile")" && cd "$(dirname "$outfile")" && pwd -P)/$(basename "$outfile")"
+[ ! -e "$outfile" ] && [ ! -e "$outfile.log" ] || { echo "opencode-implement: $outfile already holds a round; pick a new -o" >&2; exit 2; }
 [ -n "$title" ] || title="$(basename "$outfile")"
 
 # One server on the port, started headless if down; it survives this process so the owner can keep
 # an `opencode attach` TUI open across rounds. Fence, repos and model are checked before any file
 # of the round is written.
-"$(dirname "$0")/opencode-preflight" --url "$url" --port "$port" -m "$model" -C "$workdir" --plan "$plan" \
+"$(dirname "$0")/opencode-preflight" --url "$url" --port "$port" -m "$model" -C "$workdir" "${repos[@]}" \
   --serverlog "${outfile%/*}/opencode-serve-${port}.log" || exit 1
 
-trap '"$HOME/.claude/skills/bees/scripts/bees-status" --plan "$plan" show --write >/dev/null 2>&1 || true' EXIT
 echo $$ > "${outfile}.pid"
 echo "opencode-implement: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
 
