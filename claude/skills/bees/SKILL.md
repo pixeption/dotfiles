@@ -1,7 +1,7 @@
 ---
 name: bees
 description: >-
-  Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work (1 2 3 5 8 13), route each unit to a cost bucket (codex luna / Sonnet ≤ 3, codex sol / Opus 5.5 at 5, codex sol high / Opus 5.5 for 8–13), pair it with the cross-vendor reviewer, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
+  Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work (1 2 3 5 8 13), route each unit to a cost bucket (codex sol medium / Sonnet ≤ 3, codex sol xhigh / Opus 5.5 at 5, codex astra medium / Opus 5.5 for 8–13), pair it with the cross-vendor reviewer, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
 hooks:
   PostToolUse:
     - hooks:
@@ -22,8 +22,8 @@ execute and bring evidence. Measured over seven rollouts (~150 agents, ~2.8G tok
   sub-agent (`Agent` tool) for **5 minutes**; a codex session (OpenCode or CLI) for **30 minutes**.
   A turn after the clock has run out re-writes the whole context at 1.25× base price instead of
   reading it at 0.1× — one miss on a 116k reviewer cost as much as 12 of its normal turns.
-- **Capability is bought per unit, not per plan.** Most units are bounded and luna handles
-  them. Pay for Opus or sol only when the unit is large enough that the model changes the outcome.
+- **Capability is bought per unit, not per plan.** Most units are bounded and sol at medium handles
+  them. Pay for Opus, sol xhigh or astra only when the unit is large enough that the model changes the outcome.
 - **A spawn is not free, and neither is a resume.** A fresh agent re-reads the code the last one
   understood (~40–60k of onboarding). A resumed agent re-reads its whole session on every step.
   Below ~120k the resume wins; past ~200k the spawn wins on any round longer than a recheck (§3).
@@ -56,7 +56,7 @@ answers in Setup (light mode: in your first status line):
 
 | question | default |
 |---|---|
-| Implementor routing | **buckets** (§3): score 1–3 → low bucket, 5 → mid (codex sol, Opus 5.5 on the Claude side), 8–13 → high bucket, codex preferred inside each bucket unless the unit must drive an editor. Codex runs **via OpenCode by default** (`opencode-implement` — server-held session, attachable, pinned to one directory); the `codex` CLI is the fallback (§3, `codex-implementor` skill). |
+| Implementor routing | **buckets** (§3): score 1–3 → low bucket, 5 → mid (codex sol xhigh, Opus 5.5 on the Claude side), 8–13 → high bucket (codex astra medium), codex preferred inside each bucket unless the unit must drive an editor. Codex runs **via OpenCode by default** (`opencode-implement` — server-held session, attachable, pinned to one directory); the `codex` CLI is the fallback (§3, `codex-implementor` skill). |
 | Review pairing | **cross-vendor** (§8): a Claude implementor is reviewed by codex sol medium; a codex implementor is reviewed by `bee-reviewer` (Opus 5.5 medium). |
 | Review cadence | **per unit** or **at the end of the plan** (one diff review of the whole plan). |
 
@@ -151,7 +151,7 @@ Choosing "full" for a small plan is the error, not the safe default.
 Score each acceptance item on the `plan` skill's scale (1 2 3 5 8 13, by the work it implies, not
 its wording). Typical cost per unit: 1 → 1–3M, 2 → 3–6M, 3 → 6–12M, 5 → 12–25M, 8 → 25–40M,
 13 → 40–60M. Anything above 13 is split; do not brief it. An item whose score you cannot name is a
-**diagnosis** unit (read-only, ≤ 3 pts, low bucket — Sonnet or codex luna, because it judges
+**diagnosis** unit (read-only, ≤ 3 pts, low bucket — Sonnet or codex sol medium, because it judges
 causes and usually needs a run) that returns the split and the real scores. A **scout** is not a
 diagnosis: `bee-scout` (Haiku) answers one enumerable question (callers, writers, call path,
 tests, owners, sites, evidence in a log) with no points, no scores and no judgment. The test: if
@@ -165,9 +165,9 @@ the **high** bucket regardless of its points.
 
 | bucket | scores | codex (preferred) | Claude (when the unit must drive an editor / hold a resource) |
 |---|---|---|---|
-| low | 1 2 3 | `codex-implementor` (OpenCode default: `openai/gpt-6-luna`, max) | `bee-mechanical` (Sonnet, high) — fallback |
-| mid | 5 | `codex-implementor` (OpenCode default: `openai/gpt-6-sol`, medium) | `bee-implementor` (Opus 5.5, medium) |
-| high | 8 13 | `codex-implementor` (`openai/gpt-6-sol`, **high** — pass `-e high`) | `bee-implementor` (Opus 5.5, medium) |
+| low | 1 2 3 | `codex-implementor` (`openai/gpt-6-sol`, medium — pass `-m openai/gpt-6-sol -e medium`) | `bee-mechanical` (Sonnet, high) — fallback |
+| mid | 5 | `codex-implementor` (`openai/gpt-6-sol`, **xhigh** — pass `-m openai/gpt-6-sol -e xhigh`) | `bee-implementor` (Opus 5.5, medium) |
+| high | 8 13 | `codex-implementor` (`openai/gpt-6-astra`, medium — pass `-m openai/gpt-6-astra -e medium`) | `bee-implementor` (Opus 5.5, medium) |
 
 Codex runs through **`opencode-implement`** by default (server-held session, `opencode attach` for
 the owner to watch live), for worktree and in-place units alike; the **`codex-implement` CLI is
@@ -422,7 +422,7 @@ something the model can't crack.
 
 **Orchestrator escalates a capped-out blocker to a higher bucket.** When an agent returns
 `Blocked` after its two attempts, that is a signal the unit was under-bucketed, not that the agent
-failed. Re-route it **up one bucket / a stronger model** — codex luna → codex sol, or a low-bucket
+failed. Re-route it **up one bucket / a stronger model** — codex sol medium → sol xhigh → astra, or a low-bucket
 Claude → `bee-implementor` (Opus 5.5) — with a fresh agent whose brief carries the blocked agent's
 `Discovered` and `Tried` so the stronger model starts where the weaker one stopped, not from
 scratch. If the top bucket is already blocked twice, it becomes an **owner decision** (options with
@@ -435,7 +435,7 @@ The reviewer is the **other vendor** from the implementor, so no model checks it
 | implementor | reviewer | slot |
 |---|---|---|
 | Claude (`bee-mechanical`, `bee-implementor`) | codex gpt-6-sol, medium, via `codex-review` (OpenCode `opencode-review` by default, CLI fallback; `-e medium`) | none (background) |
-| codex (luna or sol) | `bee-reviewer` (Opus 5.5, medium) | one Claude slot |
+| codex (sol or astra) | `bee-reviewer` (Opus 5.5, medium) | one Claude slot |
 
 Cadence is what the owner chose in setup: per unit, or one diff review of the whole plan at the
 end (then the reviewer is chosen by the vendor that implemented **most points**). A reviewer is
@@ -556,7 +556,7 @@ sentences.
 
 Should read like:
 
-> G1 (3 · low · codex luna) round 3 landed at `3b73b3a`: one projected-basis helper replaces two
+> G1 (3 · low · codex sol) round 3 landed at `3b73b3a`: one projected-basis helper replaces two
 > walk fallbacks, closes CX-03/04 with fail-before tests. bee-reviewer recheck running in slot 1.
 > Slot 2 is at 110k with the area loaded, so it continues into B4 (8 · high) rather than a fresh
 > spawn.
