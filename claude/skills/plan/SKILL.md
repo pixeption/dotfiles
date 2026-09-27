@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >-
-  Format rules for any structured markdown deliverable with enumerated items — implementation plans, code audits, design reviews, review reports. Covers the header block, the triage and checklist tables at the top, stable anchored IDs, the scoring scale and phases, source links, and the status/log files that travel with a plan. Load it before writing or restructuring one of those documents, and whenever the bees skill runs a plan.
+  Format rules for any structured markdown deliverable with enumerated items — implementation plans, code audits, design reviews, review reports. Covers the header block, the triage and checklist tables at the top, stable anchored IDs, the scoring scale and phases, source links, and the status/log files that travel with a plan (and are deleted with it). Load it before writing, restructuring or deleting one of those documents, and whenever the bees skill runs a plan.
 ---
 
 # Plan and audit format
@@ -124,3 +124,10 @@ Beside `<plan>.md`, committed with it:
 
 Take times from `date '+%F %H:%M'`, never from memory. `[<ID>] accept:` is the shape `bees-watch`
 greps to hide superseded rounds.
+
+## Deleting a plan
+
+"Delete a plan" means the plan **and every file that travels with it**: everything named
+`<plan>.*` beside it — `.status.md`, `.log.md`, `.handoff.md`, `.notes.md`, the gitignored
+`.work/` — without asking about each one. List what you deleted and say that `.work/` is not
+recoverable, since it is gitignored.
