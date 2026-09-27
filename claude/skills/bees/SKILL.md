@@ -187,15 +187,15 @@ recompile`/`run_tests`/`status`); without it named, codex has no way to know the
 exists. Also name the other skill files nothing under the project loads for it
 (`~/.claude/skills/unity-cli/SKILL.md`, the project's `.claude/skills/unity-ui*/SKILL.md`, the
 sibling `CLAUDE.md`s). Take Claude instead of codex only when the unit needs judgment a batch run
-cannot settle (a screenshot read, a live Play-mode check) — **or codex is near its usage limit**.
+cannot settle (a screenshot read, a live Play-mode check) — **or codex is out of usage**.
 Before routing for browser judgment, verify that the assigned bee can use a browser tool to open
 the target; otherwise make the live check an owner acceptance step (STEP-06b, 2026-09-24, found
 this at the end of a 165k run).
 Before every codex unit (implementation or review) run `~/.claude/skills/bees/scripts/codex-usage`:
 it reads the usage windows from the newest snapshot codex wrote, names each by its length, and
 ends in a `ROUTE:` line. The plan has only a **weekly** window (no 5-hour limit since 2026-09-24);
-a 5-hour window is still read if a plan reports one. Exit 1 when the weekly window is ≥ 90% (a
-5-hour one ≥ 80%; thresholds are flags) → the unit goes to the Claude column of its bucket, same
+a 5-hour window is still read if a plan reports one. There is no early cap: exit 1 only when a
+window is used up (100%) or codex reports its limit reached (thresholds are flags) → the unit goes to the Claude column of its bucket, same
 score, and its review goes to `bee-reviewer` since codex is unavailable for that too; a log line
 records the reading. The snapshot is from the last codex turn; a window whose reset has passed
 reads as 0%. **A STALE reading is not a reading**: it said "ok" once while the real window was at
@@ -203,7 +203,7 @@ reads as 0%. **A STALE reading is not a reading**: it said "ok" once while the r
 prints `ROUTE: unknown` and exits 2, as does no snapshot: spend one cheap codex turn
 (`codex exec --skip-git-repo-check --sandbox read-only "reply ok" < /dev/null` — OpenCode rounds
 write no snapshot) and re-run. Log the reading on the unit
-(`[G1] decision: codex weekly window 92% → bee-mechanical`) when it changed the routing. OpenCode reports `cost: 0` for every round — the plan is metered by the
+(`[G1] decision: codex weekly window 100% → bee-mechanical`) when it changed the routing. OpenCode reports `cost: 0` for every round — the plan is metered by the
 usage windows, and the token figures are for the budget rule only.
 
 Everything that can be done blind in a worktree and validated afterward goes to codex. Model and

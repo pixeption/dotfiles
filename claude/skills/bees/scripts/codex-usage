@@ -10,15 +10,15 @@ snapshot; it is from the last codex turn, not a live query.
 Exit 0 = ROUTE: codex ok · 1 = over a threshold or limit reached (route to Claude) ·
 2 = no usable reading (no snapshot, or a STALE one — refresh with one cheap codex turn).
 
-  codex-usage [--five-hour 80] [--weekly 90] [--max-age-min 120]
+  codex-usage [--five-hour 100] [--weekly 100] [--max-age-min 120]
 """
 import argparse, calendar, glob, json, os, sys, time
 
 WEEK_MIN = 7 * 24 * 60
 
 p = argparse.ArgumentParser()
-p.add_argument("--five-hour", type=float, default=80, help="max used%% of a window shorter than a week")
-p.add_argument("--weekly", type=float, default=90, help="max used%% of the weekly window")
+p.add_argument("--five-hour", type=float, default=100, help="max used%% of a window shorter than a week")
+p.add_argument("--weekly", type=float, default=100, help="max used%% of the weekly window")
 p.add_argument("--max-age-min", type=float, default=120, help="older snapshots are STALE: no route")
 a = p.parse_args()
 
