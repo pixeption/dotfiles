@@ -30,7 +30,7 @@
 #
 # Usage:
 #   codex-implement -C <workdir> -p <prompt-file> -o <out-file> \
-#                   [-m gpt-6-luna|gpt-6-sol] [-e low|medium|high|xhigh|max|ultra] \
+#                   [-m gpt-6-luna|gpt-5.6-sol] [-e low|medium|high|xhigh|max|ultra] \
 #                   [-t fast|standard] [-s workspace-write|read-only|danger-full-access] [-r <session-id>]
 #
 #   -o  the out-file, taken verbatim (its directory is created); refused if it already holds a round.
@@ -38,7 +38,7 @@
 #   -C  the directory codex runs in and may write to (create a git worktree first:
 #         git worktree add -b <arm> <path> HEAD   — DO NOT rely on any auto-worktree basing on the
 #         branch tip; base it explicitly on HEAD).
-#   -m  model (default gpt-6-luna). Reserve gpt-6-sol for tasks hard enough that capability
+#   -m  model (default gpt-6-luna). Reserve gpt-5.6-sol for tasks hard enough that capability
 #       changes the outcome.
 #   -e  reasoning effort (default max).
 #   -t  service tier: fast (codex "priority" tier, 1.5x speed, more usage) or standard. Default:

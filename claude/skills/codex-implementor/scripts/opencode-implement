@@ -58,7 +58,7 @@
 #       Under bees: docs/plans/<plan>.work/impl-<unit>-r<N>.txt.
 #   -u  optional unit label(s) for the failed-round `BEES: results=` line (repeatable).
 #   --repo  a sibling repo the unit touches outside -C; preflight checks the fence allows it (repeatable).
-#   -m  provider/model (default openai/gpt-6-luna). sol: openai/gpt-6-sol.
+#   -m  provider/model (default openai/gpt-6-luna). sol: openai/gpt-5.6-sol.
 #   -e  reasoning effort -> opencode --variant (minimal|low|medium|high|max). Default: max.
 #   -s  resume a session id (from a previous <out-file>.session). Same -C as the session's
 #       directory only; cache warm 30 min, one cold turn after that.

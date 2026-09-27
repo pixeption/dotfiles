@@ -47,7 +47,7 @@ than trust a pre-compaction claim (see `extract-opencode-usage` for the event th
 | model | id (opencode / codex) | default effort |
 |---|---|---|
 | luna **(default)** | `openai/gpt-6-luna` / `gpt-6-luna` | **max** |
-| sol | `openai/gpt-6-sol` / `gpt-6-sol` | medium |
+| sol | `openai/gpt-5.6-sol` / `gpt-5.6-sol` | medium |
 
 **Default to luna; use sol only when capability changes the outcome.** Effort → codex `-e` / opencode
 `--variant`: `minimal|low|medium|high|max` (codex also `xhigh|ultra`). Under the ChatGPT oauth
@@ -97,7 +97,7 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
 # follow-up round, same session, same -C, context < 200k (warm inside 30 min)
 ... -p "$T/r2.md" -u <unit> -o "$W/impl-<unit>-r2.txt" -s "$(cat "$W/impl-<unit>-r1.txt.session")"
 # harder unit
-... -m openai/gpt-6-sol -e high
+... -m openai/gpt-5.6-sol -e high
 ```
 
 - Run via the **Bash tool with `run_in_background: true`**; you are notified on completion.
@@ -144,7 +144,7 @@ final message, records session id and usage, and **refuses a resume older than 3
 
 ```bash
 ~/.claude/skills/codex-implementor/scripts/codex-implement \
-  -C <dir> -p "$T/brief.md" -o "$W/impl-<unit>-r1.txt" [-m gpt-6-sol -e high] [-t fast|standard]
+  -C <dir> -p "$T/brief.md" -o "$W/impl-<unit>-r1.txt" [-m gpt-5.6-sol -e high] [-t fast|standard]
 # in place with the editor: -s danger-full-access ; follow-up within 30 min: -r "$(cat "$W/impl-<unit>-r1.txt.session")"
 ```
 

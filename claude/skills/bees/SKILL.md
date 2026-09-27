@@ -72,7 +72,7 @@ could reach the sibling repos), and a stale catalogue fails a round's first step
 that exists.
 
 ```sh
-~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-6-sol -C <repo the unit edits> --repo <each other repo the unit reads or edits>...
+~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-5.6-sol -C <repo the unit edits> --repo <each other repo the unit reads or edits>...
 ```
 
 Exit 0 = the server is up, carries the fence, lists the model, and every `--repo` outside `-C`
@@ -165,8 +165,8 @@ the **high** bucket regardless of its points.
 
 | bucket | scores | codex (preferred) | Claude (when the unit must drive an editor / hold a resource) |
 |---|---|---|---|
-| low | 1 2 3 | `codex-implementor` (`openai/gpt-6-sol`, medium — pass `-m openai/gpt-6-sol -e medium`) | `bee-mechanical` (Sonnet, high) — fallback |
-| mid | 5 | `codex-implementor` (`openai/gpt-6-sol`, **xhigh** — pass `-m openai/gpt-6-sol -e xhigh`) | `bee-implementor` (Opus 5.5, medium) |
+| low | 1 2 3 | `codex-implementor` (`openai/gpt-5.6-sol`, medium — pass `-m openai/gpt-5.6-sol -e medium`) | `bee-mechanical` (Sonnet, high) — fallback |
+| mid | 5 | `codex-implementor` (`openai/gpt-5.6-sol`, **xhigh** — pass `-m openai/gpt-5.6-sol -e xhigh`) | `bee-implementor` (Opus 5.5, medium) |
 | high | 8 13 | `codex-implementor` (`openai/gpt-6-astra`, medium — pass `-m openai/gpt-6-astra -e medium`) | `bee-implementor` (Opus 5.5, medium) |
 
 Codex runs through **`opencode-implement`** by default (server-held session, `opencode attach` for
@@ -434,7 +434,7 @@ The reviewer is the **other vendor** from the implementor, so no model checks it
 
 | implementor | reviewer | slot |
 |---|---|---|
-| Claude (`bee-mechanical`, `bee-implementor`) | codex gpt-6-sol, medium, via `codex-review` (OpenCode `opencode-review` by default, CLI fallback; `-e medium`) | none (background) |
+| Claude (`bee-mechanical`, `bee-implementor`) | codex gpt-5.6-sol, medium, via `codex-review` (OpenCode `opencode-review` by default, CLI fallback; `-e medium`) | none (background) |
 | codex (sol or astra) | `bee-reviewer` (Opus 5.5, medium) | one Claude slot |
 
 Cadence is what the owner chose in setup: per unit, or one diff review of the whole plan at the
