@@ -50,3 +50,4 @@ case ":${PATH}:" in
   *:"$HOME/.local/bin":*) ;;
   *) export PATH="$HOME/.local/bin:$PATH" ;;
 esac
+export PATH="$PATH:/Users/vbnn2/.unity/bin"
