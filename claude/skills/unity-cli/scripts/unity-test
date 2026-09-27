@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # unity-test <filter> [--type name|assembly|category] [--mode editmode|playmode] [--project-path <dir>]
-#                     [--deadline <seconds>]
-# EditMode runs detach (`--detach` + `unity job wait`, survives the domain reload a compile causes).
+#                     [--deadline <seconds>] [--start-deadline <seconds>]
+# EditMode runs detach (`--detach` + `unity job wait`): the result survives the CLI request timeout, not a domain reload.
 # PlayMode cannot detach — entering Play mode drops the request — so it runs --async_tests and polls
 # test_status. Exit 0 all passed, 1 failures / no tests matched / filter mismatch, 2 could not run.
 set -uo pipefail
@@ -9,7 +9,9 @@ source "$(dirname "$0")/_common.sh"
 DIE_CODE=2
 
 FILTER=""; TYPE=testName; MODE=EditMode; PROJECT_ARG="${UNITY_PROJECT_PATH:-.}"; DEADLINE=900
+START_DEADLINE=120
 while [[ $# -gt 0 ]]; do case "$1" in
+  --start-deadline) START_DEADLINE=$2; shift 2;;
   --type) TYPE=$([[ $2 == name ]] && echo testName || echo "$2"); shift 2;;
   --mode) MODE=$([[ ${2,,} == playmode ]] && echo PlayMode || echo EditMode); shift 2;;
   --project-path) PROJECT_ARG=$2; shift 2;;
@@ -20,6 +22,8 @@ esac; done
 [[ -n "$FILTER" ]] || die "a test filter is required — an empty one runs the WHOLE suite"
 PROJECT=$(resolve_project "$PROJECT_ARG") || exit 2
 editor_open "$PROJECT" || die "no live editor for $PROJECT — unity-editor up '$PROJECT'"
+UNITY_PROJECT_PATH="$PROJECT" "$(dirname "$0")/unity-wait" ready 180 >/dev/null \
+  || die "editor not ready: editor_status silent for 180s (a stuck command holds the exec gate?) - unity-editor ensure '$PROJECT'"
 
 PM=$(result_json "$PROJECT" editor_status | field playMode)
 [[ "$MODE" == PlayMode || -z "$PM" || "$PM" == stopped ]] \
@@ -27,11 +31,31 @@ PM=$(result_json "$PROJECT" editor_status | field playMode)
 
 unity command clear_console --project-path "$PROJECT" --format json >/dev/null 2>&1
 
-run_tests() { unity command run_tests --project-path "$PROJECT" --mode "$MODE" --filter "$FILTER" --filter_type "$TYPE" --format json "$@"; }
+# The tool's own --timeout (after the bare --; before it, --timeout is the CLI's request timeout) is
+# load-bearing: its default is 300 s, and when it fires Pipeline 0.7 cancels the collector but never
+# completes the command, which then holds the one-command exec gate until the editor restarts.
+run_tests() { unity command run_tests --project-path "$PROJECT" --mode "$MODE" --filter "$FILTER" --filter_type "$TYPE" --format json "$@" -- --timeout "$DEADLINE"; }
 
 if [[ "$MODE" == EditMode ]]; then
+  LOG=$(editor_log)
+  LOG_FROM=$(( $(wc -c <"$LOG") + 1 ))
   JOB=$(run_tests --detach | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["jobId"])') \
     || die "run did not start (editor busy or compiling?)"
+  run_started() { tail -c +"$LOG_FROM" "$LOG" | grep -q '^\[TestResultCollector\] Run started'; }
+  job_done() { unity job status "$JOB" --project-path "$PROJECT" --format json 2>/dev/null | python3 -c '
+import sys, json
+try: sys.exit(0 if json.load(sys.stdin)["data"]["state"] in ("completed", "failed", "canceled") else 1)
+except Exception: sys.exit(1)'; }
+  started_or_done() { run_started || job_done; }
+  # Pipeline can accept run_tests, log "Running N tests" and never start the TestRunnerApi run: the
+  # job stays `running`, holds the one-command exec gate (editor_status times out) and ignores
+  # `job cancel`. Nothing will ever arrive, so fail within START_DEADLINE instead of the full DEADLINE.
+  wait_for "$START_DEADLINE" started_or_done 2>/dev/null || {
+    unity job cancel "$JOB" --project-path "$PROJECT" --format json >/dev/null 2>&1
+    die "run_tests job $JOB: no '[TestResultCollector] Run started' in $LOG and no terminal job state
+within ${START_DEADLINE}s; cancellation requested. A queued job or unreadable status does not prove
+the exec gate is stuck: check \`unity job status $JOB\` and /api/progress first. If the gate is
+stuck (every command times out), run \`unity-editor restart '$PROJECT'\` once, then re-run."; }
   RESULT=$(unity job wait "$JOB" --project-path "$PROJECT" --timeout "$DEADLINE" --format json \
            | python3 -c 'import sys,json; print(json.dumps(json.load(sys.stdin)["data"]["result"]))') \
     || die "job wait failed for $JOB"

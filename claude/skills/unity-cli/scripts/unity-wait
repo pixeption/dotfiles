@@ -7,6 +7,8 @@
 #
 #   unity-wait recompile [deadline_seconds]   trigger a recompile, wait, report errors
 #   unity-wait job <job-id> [deadline]        wait on a ui_* job record on disk
+#   Prefix any mode with --project-path <dir> (default: $UNITY_PROJECT_PATH, else the cwd).
+#
 #   unity-wait ready [deadline]               wait until the editor answers at all; exit 1 fast
 #                                             if it opened into Safe Mode (prints the compile errors)
 #
@@ -16,6 +18,7 @@
 set -uo pipefail
 source "$(dirname "$0")/_common.sh"
 
+[[ "${1:-}" == --project-path ]] && { UNITY_PROJECT_PATH=$2; shift 2; }
 MODE="${1:-}"
 DEADLINE_DEFAULT=300
 
@@ -41,7 +44,7 @@ case "$MODE" in
         compile_errors >&2
         exit 1
       fi
-      not_running && die "editor process for $PROJECT exited before answering - see $EDITOR_LOG"
+      not_running && die "editor process for $PROJECT exited before answering - see $(editor_log)"
       sleep 3
     done
     echo "timed out after ${DEADLINE}s" >&2

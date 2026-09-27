@@ -1,25 +1,32 @@
 #!/usr/bin/env bash
-# unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode]
+# unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <seconds>]
+#             [--filter <A|B>] [--assemblies <A;B>]
 #
 # Game/CLAUDE.md's clean-suite rule: a Play-mode session poisons a live editor, so the full suite
 # must run in a fresh batch editor with nothing holding the project lock. This closes any live
 # editor first, runs `unity test`, reopens the editor if one was open, then reports pass/fail by
 # parsing the NUnit XML report — `unity test`'s exit code collapses every failure into a plain 6,
 # so it only tells you the run started, never why it ended.
-# Exit 0 all passed, 1 some failed, 2 the run never produced a report.
+# Exit 0 all passed, 1 some failed, 2 the run never produced a report or ran 0 tests.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/_common.sh"
 DIE_CODE=2
 
-ARG="."; MODE=EditMode; REPORT=""
+ARG="."; MODE=EditMode; REPORT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""
 while [[ $# -gt 0 ]]; do case "$1" in
   --failed-only) REPORT=$2; shift 2;;
   --mode) MODE=$2; shift 2;;
-  -*) die "usage: unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode]";;
+  --timeout) TIMEOUT=$2; shift 2;;
+  --filter) FILTER=$2; shift 2;;
+  --assemblies) ASSEMBLIES=$2; shift 2;;
+  -*) die "usage: unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>]";;
   *) ARG=$1; shift;;
 esac; done
 PROJECT=$(resolve_project "$ARG") || exit 2
+
+# Unity reads neither list with commas: the run matches 0 tests and still exits 0.
+[[ "$FILTER$ASSEMBLIES" == *,* ]] && die "no commas: --filter joins names with |, --assemblies with ;"
 
 # --rerun-failed reads the *previous* run's report from wherever --output points (there is no
 # separate "report to rerun" flag) — so rerunning failures means pointing --output at that same file.
@@ -40,7 +47,9 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
   "$HERE/unity-editor" down "$PROJECT" || die "could not close the live editor — refusing to run a suite that would get poisoned"
 fi
 
-TEST_JSON=$(unity test --mode "$MODE" "$PROJECT" --output "$REPORT" $RERUN --format json)
+# `unity test --timeout` is disabled by default, so a hung batch editor would wait forever.
+TEST_JSON=$(unity test --mode "$MODE" "$PROJECT" --output "$REPORT" --timeout "$TIMEOUT" $RERUN \
+  ${FILTER:+--filter "$FILTER"} --format json ${ASSEMBLIES:+-- -assemblyNames "$ASSEMBLIES"})
 TEST_RC=$?
 
 # A compile error aborts the batch run in seconds with no report; reopening the editor would only
@@ -71,6 +80,9 @@ attrs = run.attrib if run is not None else root.attrib
 total, passed = attrs.get("total", "?"), attrs.get("passed", "?")
 failed, skipped = attrs.get("failed", "0"), attrs.get("skipped", "0")
 print(f"{passed}/{total} passed, {failed} failed, {skipped} skipped")
+if total == "0":
+    print("0 tests ran: the filter or assembly list matched nothing", file=sys.stderr)
+    sys.exit(2)
 
 bad = [tc for tc in root.iter("test-case") if tc.get("result") not in ("Passed", "Skipped", "Warning")]
 for tc in bad:

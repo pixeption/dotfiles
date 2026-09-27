@@ -6,8 +6,8 @@
 #
 # ensure: an editor that answers nothing for the deadline is hung (a modal dialog, a main-thread
 # deadlock - "/api/exec ... Main thread operation timed out"), and no further command will get
-# through; force-close and relaunch it rather than retrying. Long work never trips this: tests
-# detach (unity-test), compiles poll (unity-wait recompile), so editor_status keeps answering.
+# through; force-close and relaunch it rather than retrying. Rule out active work first: a
+# detached test run still holds the exec gate, so editor_status can go quiet while it works.
 #
 # up: skips `unity open` if the project already has a live editor (checked via `unity status`,
 # never assumed from a prior run), waits for it with unity-wait, enables autotick (an unfocused
