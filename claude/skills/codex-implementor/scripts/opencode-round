@@ -61,7 +61,7 @@ abort_session() {
 
 poll="${OPENCODE_ROUND_POLL:-15}"; stall_min="${OPENCODE_ROUND_STALL_MIN:-15}"
 activity=""; still=0
-session_status() { curl -sfG "${url}/session/status" --data-urlencode "directory=${dirs[0]}" 2>/dev/null |
+session_status() { curl -sfG -m 10 "${url}/session/status" --data-urlencode "directory=${dirs[0]}" 2>/dev/null |
   jq -r --arg s "$1" '.[$s].type // empty' 2>/dev/null; }
 stalled() {
   local now=""
