@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# What an OpenCode session's latest message is doing, so a stalled model stream can be told apart
+# from a long tool call — the run's log and /session/status look the same for both.
+#
+#   opencode-activity <url> <directory> <session>
+#
+# Prints `tool` while a tool call is running, otherwise `stream <n>`: the size of the latest
+# message's parts, which changes whenever the model streams anything. The same `stream <n>` twice,
+# minutes apart, is a stall. Exits non-zero when the server cannot answer.
+set -uo pipefail
+[ $# = 3 ] || { echo "opencode-activity: usage: <url> <directory> <session>" >&2; exit 2; }
+curl -sfG "$1/session/$3/message" --data-urlencode "directory=$2" --data-urlencode limit=1 2>/dev/null |
+  jq -er 'last.parts as $p |
+    if any($p[]; .state.status? == "running") then "tool" else "stream \($p | tojson | length)" end'

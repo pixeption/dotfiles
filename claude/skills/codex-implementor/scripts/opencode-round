@@ -7,12 +7,15 @@
 # While the run lives, a pending permission ask for its session in -C (both spellings; /permission
 # is scoped per directory) is rejected and the run stopped — with the fence loaded, nobody headless
 # can answer it; a /permission query or a reject that fails stops the run and aborts its session
-# (or the Blocked line says it is still pending and must not be resumed). Afterwards:
+# (or the Blocked line says it is still pending and must not be resumed). A model stream that
+# produces nothing for OPENCODE_ROUND_STALL_MIN minutes (default 15) with no tool running is aborted
+# and the round fails — the provider can hold the connection open indefinitely without tripping
+# OpenCode's own chunkTimeout (2026-09-28: 107 min on one reasoning line). Afterwards:
 # <out-file>.session, the out-file (the final assistant message, via extract-opencode-final), then
 # <out-file>.usage, written last because bees-watch reads it as "finished". The round FAILED when an
-# ask was rejected or could not be checked, the log has an `error` event, the run exited non-zero,
-# there is no final message, the final message's step did not finish with reason `stop`, or (review)
-# the answer does not end in APPROVE/CHANGES_REQUIRED. A failed out-file is `Blocked: <reason>`, the
+# ask was rejected or could not be checked, the stream stalled, the log has an `error` event, the
+# run exited non-zero, there is no final message, the final message's step did not finish with
+# reason `stop`, or (review) the answer does not end in APPROVE/CHANGES_REQUIRED. A failed out-file is `Blocked: <reason>`, the
 # partial answer without BEES lines, and `BEES: results=<unit>:blocked:-` for every -u (none without
 # -u), so a failed review never reads as a verdict.
 # Exit 0 finished · 1 failed (stderr says why) · 2 usage.
@@ -55,20 +58,32 @@ abort_session() {
   return 1
 }
 
+poll="${OPENCODE_ROUND_POLL:-15}"; stall_min="${OPENCODE_ROUND_STALL_MIN:-15}"
+activity=""; still=0
+stalled() {
+  local now; now="$("$here/opencode-activity" "$url" "${dirs[0]}" "$1")" || return 1
+  if [ "$now" = tool ] || [ "$now" != "$activity" ]; then activity="$now"; still=0; return 1; fi
+  still=$((still + poll)); [ "$still" -ge $((stall_min * 60)) ]
+}
+
 "$@" < /dev/null > "$logfile" 2>&1 &
 runpid=$!
 blocked=""; unsafe=""
 tick=0
 while kill -0 "$runpid" 2>/dev/null; do
-  sleep 1; tick=$((tick + 1)); [ $((tick % ${OPENCODE_ROUND_POLL:-15})) = 0 ] || continue
+  sleep 1; tick=$((tick + 1)); [ $((tick % poll)) = 0 ] || continue
   sid="$(session_id)"; [ -n "$sid" ] || continue
   if ! ask="$(pending_ask "$sid")"; then
     unsafe="Could not read /permission for session ${sid}"
-  else
-    [ -n "$ask" ] || continue
+  elif [ -n "$ask" ]; then
     ask="${ask%%$'\n'*}"
     blocked="Blocked: permission $(jq -r .permission <<<"$ask") $(jq -c .patterns <<<"$ask") — outside the fence in ~/.config/opencode/opencode.jsonc; widen it or re-brief."
     reject "$ask" || unsafe="Rejecting the ask failed"
+  elif stalled "$sid"; then
+    blocked="Blocked: the model stream stalled — no output and no tool running for ${stall_min} min."
+    abort_session "$sid" && blocked="$blocked Session aborted; resume it with -s." || unsafe="Aborting the stalled stream failed"
+  else
+    continue
   fi
   if [ -n "$unsafe" ]; then
     abort_session "$sid" && unsafe="$unsafe; session aborted" || unsafe="$unsafe; session ${sid} is still pending on the server — do not resume it"

@@ -294,8 +294,14 @@ Rules of continuation:
     if the pattern is inside the fence's allowlist; otherwise kill the run and re-brief. Then fix
     the cause: the server predates the fence (§0), or the session was resumed for a directory it
     is not pinned to (rule 4).
-  - `STALE` — no log growth in 20 minutes and not BUSY: the run died. `quiet but BUSY` is a long
-    tool call (a Unity suite can legitimately be silent for 20 minutes) and is left alone.
+  - `STALE` — no log growth in 20 minutes and not BUSY: the run died. `quiet but BUSY (tool
+    running)` is a long tool call (a Unity suite can legitimately be silent for 20 minutes) and is
+    left alone.
+  - `STALLED` — quiet, BUSY, and no tool running: the provider is holding a model stream open with
+    no output, which OpenCode's own `chunkTimeout` does not catch (r4 of a review sat 107 min on one
+    reasoning line, 2026-09-28). `opencode-round` aborts such a stream itself after
+    `OPENCODE_ROUND_STALL_MIN` (15) and fails the round; seen by hand, POST
+    `/session/<id>/abort?directory=<.cwd>` and resume the session with the same prompt.
   - `failed (…)` — the wrapper finished but the out-file is empty or carries its `Blocked:` line
     (an `error` event, a rejected permission ask, a non-zero `opencode run` exit, no final message,
     a final step that did not stop, a review without a verdict; the wrapper also exited 1).
