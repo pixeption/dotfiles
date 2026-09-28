@@ -14,10 +14,10 @@
 # In --dir mode a failed or DEAD round is history, not flagged, once its unit has a newer round of
 # the same role or a `[<unit>] accept:` line in <plan>.log.md. --dir reads only round logs named
 # impl-<units>-r<N>.txt.log / review-<units>-r<N>.txt.log, never opencode-serve-<port>.log.
-# A quiet BUSY round is a long tool call only while opencode-activity sees a tool running; otherwise
-# it is STALLED — a model stream the provider holds open without output (opencode-round aborts
-# those itself after OPENCODE_ROUND_STALL_MIN).
-# Exit 0 when every round is live or finished, 1 when any is STALE, STALLED, DEAD, failed or has an ask waiting.
+# A quiet BUSY round says whether opencode-activity sees a tool or a model stream; one sample cannot
+# tell a slow stream from a stalled one, so stalls are opencode-round's call (it compares samples).
+# Exit 0 when every round is live or finished, 1 when any is STALE, DEAD, failed, has an ask waiting,
+# or its activity cannot be read.
 set -uo pipefail
 url="http://127.0.0.1:4096"; stale=20; files=(); dir=""; all=0
 while [ $# -gt 0 ]; do
@@ -78,8 +78,13 @@ for f in "${files[@]}"; do
   elif [ "$failed" = 1 ]; then bad=1; fi
   if [ "$ask" != "0" ]; then flag=" · ASK WAITING"; bad=1
   elif [ "$state" = running ] && [ "$age" -ge "$stale" ] && [ "$b" = idle ]; then flag=" · STALE"; bad=1
-  elif [ "$state" = running ] && [ "$age" -ge "$stale" ] && [ "$(activity "$f" "$sid")" = tool ]; then flag=" · quiet but BUSY (tool running)"
-  elif [ "$state" = running ] && [ "$age" -ge "$stale" ]; then flag=" · STALLED (BUSY, no tool running — abort the session)"; bad=1; fi
+  elif [ "$state" = running ] && [ "$age" -ge "$stale" ]; then
+    case "$(activity "$f" "$sid")" in
+      tool) flag=" · quiet but BUSY (tool running)" ;;
+      stream\ *) flag=" · quiet but BUSY (model stream; opencode-round aborts a stall)" ;;
+      *) flag=" · ACTIVITY UNKNOWN"; bad=1 ;;
+    esac
+  fi
   if [ -n "$dir" ] && [ "$all" = 0 ] && [ "$state" != running ] && [ "$failed" = 0 ] && [ "$ask" = "0" ]; then hidden=$((hidden + 1)); continue; fi
   echo "$name: $state · log grew ${age}m ago · $b · ctx ${ctx:-?} · session ${sid:-?}$flag"
 done

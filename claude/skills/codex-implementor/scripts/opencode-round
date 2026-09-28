@@ -7,10 +7,11 @@
 # While the run lives, a pending permission ask for its session in -C (both spellings; /permission
 # is scoped per directory) is rejected and the run stopped — with the fence loaded, nobody headless
 # can answer it; a /permission query or a reject that fails stops the run and aborts its session
-# (or the Blocked line says it is still pending and must not be resumed). A model stream that
-# produces nothing for OPENCODE_ROUND_STALL_MIN minutes (default 15) with no tool running is aborted
-# and the round fails — the provider can hold the connection open indefinitely without tripping
-# OpenCode's own chunkTimeout (2026-09-28: 107 min on one reasoning line). Afterwards:
+# (or the Blocked line says it is still pending and must not be resumed). A busy session whose model
+# stream produces nothing for OPENCODE_ROUND_STALL_MIN minutes (default 15) with no tool being formed
+# or run is aborted and the round fails; a provider retry (status `retry`) or a failed probe restarts
+# the count. The provider can hold a stream open indefinitely without tripping OpenCode's own
+# chunkTimeout (2026-09-28: 107 min on one reasoning line). Afterwards:
 # <out-file>.session, the out-file (the final assistant message, via extract-opencode-final), then
 # <out-file>.usage, written last because bees-watch reads it as "finished". The round FAILED when an
 # ask was rejected or could not be checked, the stream stalled, the log has an `error` event, the
@@ -60,9 +61,12 @@ abort_session() {
 
 poll="${OPENCODE_ROUND_POLL:-15}"; stall_min="${OPENCODE_ROUND_STALL_MIN:-15}"
 activity=""; still=0
+session_status() { curl -sfG "${url}/session/status" --data-urlencode "directory=${dirs[0]}" 2>/dev/null |
+  jq -r --arg s "$1" '.[$s].type // empty' 2>/dev/null; }
 stalled() {
-  local now; now="$("$here/opencode-activity" "$url" "${dirs[0]}" "$1")" || return 1
-  if [ "$now" = tool ] || [ "$now" != "$activity" ]; then activity="$now"; still=0; return 1; fi
+  local now=""
+  [ "$(session_status "$1")" = busy ] && now="$("$here/opencode-activity" "$url" "${dirs[0]}" "$1")"
+  if [ -z "$now" ] || [ "$now" = tool ] || [ "$now" != "$activity" ]; then activity="$now"; still=0; return 1; fi
   still=$((still + poll)); [ "$still" -ge $((stall_min * 60)) ]
 }
 

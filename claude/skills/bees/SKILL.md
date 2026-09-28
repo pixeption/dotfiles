@@ -296,12 +296,11 @@ Rules of continuation:
     is not pinned to (rule 4).
   - `STALE` — no log growth in 20 minutes and not BUSY: the run died. `quiet but BUSY (tool
     running)` is a long tool call (a Unity suite can legitimately be silent for 20 minutes) and is
-    left alone.
-  - `STALLED` — quiet, BUSY, and no tool running: the provider is holding a model stream open with
-    no output, which OpenCode's own `chunkTimeout` does not catch (r4 of a review sat 107 min on one
-    reasoning line, 2026-09-28). `opencode-round` aborts such a stream itself after
-    `OPENCODE_ROUND_STALL_MIN` (15) and fails the round; seen by hand, POST
-    `/session/<id>/abort?directory=<.cwd>` and resume the session with the same prompt.
+    left alone; `quiet but BUSY (model stream …)` is left alone too — a provider can hold a stream
+    open with no output past OpenCode's own `chunkTimeout` (a review sat 107 min on one reasoning
+    line, 2026-09-28), and `opencode-round` fails such a round itself (`Blocked: the model stream
+    stalled`) after `OPENCODE_ROUND_STALL_MIN` (15) minutes unchanged; resume it with `-s` and the
+    same prompt. `ACTIVITY UNKNOWN` — the server did not answer for the session: check it.
   - `failed (…)` — the wrapper finished but the out-file is empty or carries its `Blocked:` line
     (an `error` event, a rejected permission ask, a non-zero `opencode run` exit, no final message,
     a final step that did not stop, a review without a verdict; the wrapper also exited 1).

@@ -116,9 +116,10 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
   server auto-summarized the session (see "Resume or fresh" above). Spend over the round is the
   sum of the `.log`'s `step_finish` events.
 - **A quiet round is inspected, not waited on.** Run `~/.claude/skills/bees/scripts/bees-watch
-  <out-file>` (`quiet but BUSY (tool running)` = a long tool call, e.g. a Unity suite; `STALLED` =
-  BUSY with no tool running, a model stream held open without output — `opencode-round` aborts it
-  after `OPENCODE_ROUND_STALL_MIN`, 15 min; `DEAD` = the wrapper exited without `.usage`; `STALE` =
+  <out-file>` (`quiet but BUSY (tool running)` = a long tool call, e.g. a Unity suite; `quiet but
+  BUSY (model stream …)` = the model is streaming or stalled — `opencode-round` fails the round with
+  `Blocked: the model stream stalled` after `OPENCODE_ROUND_STALL_MIN` (15) minutes unchanged, and it
+  is resumed with `-s`; `DEAD` = the wrapper exited without `.usage`; `STALE` =
   no log growth and not BUSY → `pkill -f "opencode run"`, resume the session).
   `scripts/opencode-activity` prints what a session's latest message is doing (`tool` or
   `stream <n>`) when checking by hand.
