@@ -284,6 +284,10 @@ Rules of continuation:
 - **Naming rounds.** The wrappers take `-o` verbatim, so name every out-file
   `docs/plans/<plan>.work/impl-<unit>[+<unit>…]-r<N>.txt` or `review-…-r<N>.txt`, N counting up per
   unit and role; `bees-watch --dir` reads only files named that way.
+- **Launching a codex round.** Run the wrapper (`opencode-implement`, `opencode-review`, the CLI
+  fallbacks) as its own Bash call with `run_in_background: true`, never with a trailing `&`: the
+  harness then re-invokes you when the round exits. A `&`-detached round is invisible to it, and
+  its finish goes unnoticed until someone checks (STEP-12g sat idle, 2026-09-28).
 - **Watching a codex round.** Never tail or Read the wrapper's `.log`. Run
   `~/.claude/skills/bees/scripts/bees-watch <out-file>...` (or `--dir docs/plans/<plan>.work`, which
   lists only running or flagged rounds, `--all` every one): one line per round — running/finished,
