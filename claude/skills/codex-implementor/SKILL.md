@@ -1,6 +1,6 @@
 ---
 name: codex-implementor
-description: Delegate a bounded, well-specified implementation unit to a codex-family model (openai/gpt-6-luna default, sol for hard units) with the same powers a Claude sub-agent has — including driving a live Unity editor and running suites IN PLACE in the real checkout — as a multi-round conversation you review and accept. DEFAULT channel is OpenCode (`opencode-implement`) — persistent, attachable, session pinned to one directory, worktree or in place. FALLBACK is the `codex` CLI (`codex-implement`) only when the OpenCode server won't start or an OS sandbox is required. Use whenever the user asks to "have codex implement/build/write" something, or delegate a unit to codex. For a read-only second opinion use codex-review instead.
+description: Delegate a bounded, well-specified implementation unit to a codex-family model (openai/gpt-6.1-sol at medium by default, higher effort for hard units) with the same powers a Claude sub-agent has — including driving a live Unity editor and running suites IN PLACE in the real checkout — as a multi-round conversation you review and accept. DEFAULT channel is OpenCode (`opencode-implement`) — persistent, attachable, session pinned to one directory, worktree or in place. FALLBACK is the `codex` CLI (`codex-implement`) only when the OpenCode server won't start or an OS sandbox is required. Use whenever the user asks to "have codex implement/build/write" something, or delegate a unit to codex. For a read-only second opinion use codex-review instead.
 ---
 
 # Codex implementor
@@ -46,11 +46,11 @@ than trust a pre-compaction claim (see `extract-opencode-usage` for the event th
 
 | model | id (opencode / codex) | default effort |
 |---|---|---|
-| luna **(default)** | `openai/gpt-6-luna` / `gpt-6-luna` | **max** |
-| sol | `openai/gpt-5.6-sol` / `gpt-5.6-sol` | medium |
+| sol **(default)** | `openai/gpt-6.1-sol` / `gpt-6.1-sol` | **medium** |
+| luna | `openai/gpt-6-luna` / `gpt-6-luna` | max |
 
-**Default to luna; use sol only when capability changes the outcome.** Effort → codex `-e` / opencode
-`--variant`: `minimal|low|medium|high|max` (codex also `xhigh|ultra`). Under the ChatGPT oauth
+**Default to sol at medium; raise `-e` when capability changes the outcome.** Effort → codex `-e` / opencode
+`--variant`: `low|medium|high|xhigh|max` (codex also `ultra`). Under the ChatGPT oauth
 credential `.usage` `cost` reads 0 — spend is against the subscription; report tokens. Check
 `~/.claude/skills/bees/scripts/codex-usage` before a unit; a STALE reading prints `ROUTE: unknown`
 and exits 2 — it is not a reading.
@@ -97,7 +97,7 @@ git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
 # follow-up round, same session, same -C, context < 200k (warm inside 30 min)
 ... -p "$T/r2.md" -u <unit> -o "$W/impl-<unit>-r2.txt" -s "$(cat "$W/impl-<unit>-r1.txt.session")"
 # harder unit
-... -m openai/gpt-5.6-sol -e high
+... -e high
 ```
 
 - Run via the **Bash tool with `run_in_background: true`**; you are notified on completion.
@@ -149,7 +149,7 @@ final message, records session id and usage, and **refuses a resume older than 3
 
 ```bash
 ~/.claude/skills/codex-implementor/scripts/codex-implement \
-  -C <dir> -p "$T/brief.md" -o "$W/impl-<unit>-r1.txt" [-m gpt-5.6-sol -e high] [-t fast|standard]
+  -C <dir> -p "$T/brief.md" -o "$W/impl-<unit>-r1.txt" [-e high] [-t fast|standard]
 # in place with the editor: -s danger-full-access ; follow-up within 30 min: -r "$(cat "$W/impl-<unit>-r1.txt.session")"
 ```
 
@@ -204,8 +204,8 @@ that produced it. Never send transcripts or source dumps.
 ## Accept on evidence, then a review
 
 After each round: read the report, read the diff, and **re-run the acceptance suite once
-yourself** (or hand it to a mechanical agent holding the resource) — a worktree diff is unverified
+yourself** (or hand it to a `bee-sonnet-medium` holding the resource) — a worktree diff is unverified
 until compiled on the real project; an in-place report is checked, not trusted. Findings go back as
-the next round's prompt in the same session (`-s`). Bees pairs a codex implementor with a
-`bee-reviewer` (cross-vendor). When it is right: worktree → apply its commits/diff and
+the next round's prompt in the same session (`-s`). Bees pairs a codex implementor with
+`bee-reviewer` for scores 1–5 or `bee-reviewer-high` for 8–13 (cross-vendor). When it is right: worktree → apply its commits/diff and
 `git worktree remove`; in place → its commits are already on the branch.

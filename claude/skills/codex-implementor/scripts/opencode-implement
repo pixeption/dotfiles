@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Safe runner for an OpenCode IMPLEMENTATION session (opencode edits files), with a persistent,
 # HUMAN-ATTACHABLE server and session reuse. Same codex-family MODELS as codex-implement
-# (openai/gpt-6-luna, sol, ...) but a different harness: the session lives on a long-running
+# (openai/gpt-6.1-sol, ...) but a different harness: the session lives on a long-running
 # `opencode serve`, so the orchestrator drives it round after round with NO 30-min resume cliff,
 # and the owner can watch/steer the SAME session live in a TUI.
 #
@@ -52,22 +52,22 @@
 #
 # Usage:
 #   opencode-implement -C <worktree|real checkout> -p <prompt-file> -o <out-file> [-u <unit>]... [--repo <dir>]...
-#                      [-m openai/gpt-6-luna] [-e max] [-s <session-id>]
+#                      [-m openai/gpt-6.1-sol] [-e medium] [-s <session-id>]
 #                      [--port 4096] [--url http://127.0.0.1:4096] [--title <unit>]
 #   -o  the out-file, taken verbatim (its directory is created); refused if it already holds a round.
 #       Under bees: docs/plans/<plan>.work/impl-<unit>-r<N>.txt.
 #   -u  optional unit label(s) for the failed-round `BEES: results=` line (repeatable).
 #   --repo  a sibling repo the unit touches outside -C; preflight checks the fence allows it (repeatable).
-#   -m  provider/model (default openai/gpt-6-luna). sol: openai/gpt-5.6-sol.
-#   -e  reasoning effort -> opencode --variant (minimal|low|medium|high|max). Default: max.
+#   -m  provider/model (default openai/gpt-6.1-sol).
+#   -e  reasoning effort -> opencode --variant (low|medium|high|xhigh|max). Default: medium.
 #   -s  resume a session id (from a previous <out-file>.session). Same -C as the session's
 #       directory only; cache warm 30 min, one cold turn after that.
 #   --port  server port (default 4096). --url overrides the full base URL.
 #   --title session title shown in the attach TUI (default: out-file basename).
 set -euo pipefail
 
-model="openai/gpt-6-luna"
-effort="max"
+model="openai/gpt-6.1-sol"
+effort="medium"
 workdir=""
 promptfile=""
 outfile=""

@@ -45,7 +45,7 @@ history() {
     base="${f2##*/}"; m="${base##*-r}"; m="${m%.txt}"
     [[ "$m" =~ ^[0-9]+$ ]] && [ "$m" -gt "$n" ] && return 0
   done
-  units="${stem#*-}"
+  units="${stem#*-}"; units="${units%-consult}"
   for u in ${units//+/ }; do grep -qF "[$u] accept:" "${dir%.work}.log.md" 2>/dev/null || return 1; done
 }
 activity() { "$(dirname "$0")/../../codex-implementor/scripts/opencode-activity" "$url" "$(cat "$1.cwd" 2>/dev/null)" "$2" 2>/dev/null; }

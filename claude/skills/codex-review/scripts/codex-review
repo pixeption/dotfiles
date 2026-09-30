@@ -27,18 +27,20 @@
 # It reads the prompt from a FILE, not a shell argument, to avoid quoting traps.
 #
 # Usage:
-#   codex-review -p <prompt-file> -o <out-file> [-e medium|high|low] [-s read-only] [-r <session-id>]
+#   codex-review -p <prompt-file> -o <out-file> [-m gpt-6.1-sol] [-e medium|high|low] [-s read-only] [-r <session-id>]
 #
 #   -o  the out-file, taken verbatim (its directory is created); refused if it already holds a round.
 #       Under bees: docs/plans/<plan>.work/review-<unit>-r<N>.txt.
+#   -m  model (default gpt-6.1-sol; applied on every round).
 #   -r  resume this codex session id (a UUID — the content of a previous round's
-#       <out-file>.session). Omit on the first round. The sandbox/effort are carried
-#       over by codex from the original session; -s is ignored on resume.
+#       <out-file>.session). Omit on the first round. Repeat the chosen -m and -e
+#       on every round; -s is ignored on resume.
 #
 # Run it via the Bash tool with run_in_background:true (reviews take minutes), then
 # read the out-file (the clean final answer). Progress/liveness = <out-file>.log grows.
 set -euo pipefail
 
+model="gpt-6.1-sol"
 effort="medium"
 sandbox="read-only"
 promptfile=""
@@ -47,6 +49,7 @@ session=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
+    -m|--model)       model="$2"; shift 2 ;;
     -e|--effort)      effort="$2"; shift 2 ;;
     -p|--prompt-file) promptfile="$2"; shift 2 ;;
     -o|--out)         outfile="$2"; shift 2 ;;
@@ -88,12 +91,12 @@ echo $$ > "${outfile}.pid"
 # < /dev/null is the whole point — never remove it.
 if [ -n "$session" ]; then
   codex exec resume "$session" \
-    -c model_reasoning_effort="$effort" \
+    -m "$model" -c model_reasoning_effort="$effort" \
     --skip-git-repo-check --json \
     --output-last-message "$outfile" \
     "$prompt" < /dev/null > "$logfile" 2>&1 || true
 else
-  codex exec \
+  codex exec -m "$model" \
     -c model_reasoning_effort="$effort" \
     --sandbox "$sandbox" \
     --skip-git-repo-check --json \

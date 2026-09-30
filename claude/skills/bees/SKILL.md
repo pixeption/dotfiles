@@ -1,7 +1,7 @@
 ---
 name: bees
 description: >-
-  Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work (1 2 3 5 8 13), route each unit to a cost bucket (codex sol medium / Sonnet ≤ 3, codex sol xhigh / Opus 5.5 at 5, codex astra medium / Opus 5.5 for 8–13), pair it with the cross-vendor reviewer, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
+  Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work (1 2 3 5 8 13), route each unit to a cost bucket (codex gpt-6.1-sol medium ≤ 3 / high at 5 / xhigh 8–13; Opus 5.5 low 1–2 / medium 3 / high 5–8 / xhigh 13; Sonnet for support work), pair it with the cross-vendor reviewer, consult astra or Fable on a blocker, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
 hooks:
   PostToolUse:
     - hooks:
@@ -23,7 +23,8 @@ execute and bring evidence. Measured over seven rollouts (~150 agents, ~2.8G tok
   A turn after the clock has run out re-writes the whole context at 1.25× base price instead of
   reading it at 0.1× — one miss on a 116k reviewer cost as much as 12 of its normal turns.
 - **Capability is bought per unit, not per plan.** Most units are bounded and sol at medium handles
-  them. Pay for Opus, sol xhigh or astra only when the unit is large enough that the model changes the outcome.
+  them. Pay for higher effort only when the unit is large enough that it changes the outcome, and
+  for astra or Fable only as a consultant on a blocker (§7).
 - **A spawn is not free, and neither is a resume.** A fresh agent re-reads the code the last one
   understood (~40–60k of onboarding). A resumed agent re-reads its whole session on every step.
   Below ~120k the resume wins; past ~200k the spawn wins on any round longer than a recheck (§3).
@@ -56,8 +57,8 @@ answers in Setup (light mode: in your first status line):
 
 | question | default |
 |---|---|
-| Implementor routing | **buckets** (§3): score 1–3 → low bucket, 5 → mid (codex sol xhigh, Opus 5.5 on the Claude side), 8–13 → high bucket (codex astra medium), codex preferred inside each bucket unless the unit must drive an editor. Codex runs **via OpenCode by default** (`opencode-implement` — server-held session, attachable, pinned to one directory); the `codex` CLI is the fallback (§3, `codex-implementor` skill). |
-| Review pairing | **cross-vendor** (§8): a Claude implementor is reviewed by codex sol medium; a codex implementor is reviewed by `bee-reviewer` (Opus 5.5 medium). |
+| Implementor routing | **buckets** (§3): the score picks the effort — codex gpt-6.1-sol medium / high / xhigh, Opus 5.5 low / medium / high / xhigh — codex preferred unless the unit must drive an editor. Codex runs **via OpenCode by default** (`opencode-implement` — server-held session, attachable, pinned to one directory); the `codex` CLI is the fallback (§3, `codex-implementor` skill). |
+| Review pairing | **cross-vendor** (§8): a Claude implementor is reviewed by codex gpt-6.1-sol medium; a codex implementor by `bee-reviewer` (Opus 5.5 medium, ≤ 5) or `bee-reviewer-high` (8–13). |
 | Review cadence | **per unit** or **at the end of the plan** (one diff review of the whole plan). |
 
 Do not start a unit until the answers are in. They hold for the whole plan; a later change is an
@@ -72,7 +73,7 @@ could reach the sibling repos), and a stale catalogue fails a round's first step
 that exists.
 
 ```sh
-~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-5.6-sol -C <repo the unit edits> --repo <each other repo the unit reads or edits>...
+~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-6.1-sol -C <repo the unit edits> --repo <each other repo the unit reads or edits>...
 ```
 
 Exit 0 = the server is up, carries the fence, lists the model, and every `--repo` outside `-C`
@@ -102,8 +103,9 @@ Choosing "full" for a small plan is the error, not the safe default.
 2. **Two concurrent Claude agents, hard cap.** A `bee-reviewer` counts. Codex sessions
    (implementor via OpenCode or the CLI fallback, or reviewer) are background processes and take no
    slot, but **only one codex session runs at a time**. Briefs say "do not spawn sub-agents". A
-   third unit is queued. The user may lower the cap; never raise it. A `bee-scout` counts too;
-   it is short, so it runs in a free slot **before** the implementors start, never queued behind one.
+   third unit is queued. The user may lower the cap; never raise it. A `bee-scout`,
+   `bee-sonnet-medium` or `bee-consultant` counts too; a scout is short, so it runs in a free slot
+   **before** the implementors start, never queued behind one.
 3. **One driver per exclusive resource, named in the brief.** A Unity project is one resource
    across editor, batch test host, project lock *and every source it compiles* (`file:` packages
    included): driving `nono4u/Game` locks `game-core` and `game-build` sources. The second slot
@@ -121,7 +123,7 @@ Choosing "full" for a small plan is the error, not the safe default.
    fence instead of running. Check the figure before every SendMessage or `-s` resume.
 5. **Evidence, not claims.** Completion is a suite count, a real run, a byte-identity check.
    Codex **in a blind worktree** cannot run Unity or your build — that diff is unverified until you
-   (or a mechanical agent holding the resource) have compiled and tested it. Codex **in place with
+   (or a `bee-sonnet-medium` holding the resource) have compiled and tested it. Codex **in place with
    the resource slot and the `unity-cli` skill named in its brief** can drive the live editor and
    verify itself (§3, editor-drive case); require the same evidence from it as from any agent.
    **No report, no commit**: every brief states that if the Acceptance suite produced no XML in
@@ -151,23 +153,30 @@ Choosing "full" for a small plan is the error, not the safe default.
 Score each acceptance item on the `plan` skill's scale (1 2 3 5 8 13, by the work it implies, not
 its wording). Typical cost per unit: 1 → 1–3M, 2 → 3–6M, 3 → 6–12M, 5 → 12–25M, 8 → 25–40M,
 13 → 40–60M. Anything above 13 is split; do not brief it. An item whose score you cannot name is a
-**diagnosis** unit (read-only, ≤ 3 pts, low bucket — Sonnet or codex sol medium, because it judges
-causes and usually needs a run) that returns the split and the real scores. A **scout** is not a
+**diagnosis** unit (read-only, because it judges causes and usually needs a run) that returns
+the split and the real scores. One that stays in one area is unscored support work for
+`bee-sonnet-medium`; a broader one is a scored unit (≤ 3 pts) for `bee-opus-medium` or codex sol
+medium. A **scout** is not a
 diagnosis: `bee-scout` (Haiku) answers one enumerable question (callers, writers, call path,
 tests, owners, sites, evidence in a log) with no points, no scores and no judgment. The test: if
 you can write the report's headings before spawning, scout; if the answer needs *why* or
 *which*, diagnosis — which may start with a scout to shrink its brief. Measured: diagnoses ran to
 228k and 276k of context and found defects through dry-runs; Haiku's window is 200k and it
-cannot run anything, so it never diagnoses. A fix round that spans more than one area goes to
-the **high** bucket regardless of its points.
+cannot run anything, so it never diagnoses. A scout question that needs a run goes to
+`bee-sonnet-medium`. A fix round that spans more than one area is routed at its
+score or 8, whichever is higher.
 
-**Buckets** — the score picks the bucket; inside the bucket, codex is preferred:
+**Buckets** — the score picks the row; inside it, codex is preferred. Codex is always
+`codex-implementor` with `-m openai/gpt-6.1-sol` and the row's `-e`:
 
-| bucket | scores | codex (preferred) | Claude (when the unit must drive an editor / hold a resource) |
-|---|---|---|---|
-| low | 1 2 3 | `codex-implementor` (`openai/gpt-5.6-sol`, medium — pass `-m openai/gpt-5.6-sol -e medium`) | `bee-mechanical` (Sonnet, high) — fallback |
-| mid | 5 | `codex-implementor` (`openai/gpt-5.6-sol`, **xhigh** — pass `-m openai/gpt-5.6-sol -e xhigh`) | `bee-implementor` (Opus 5.5, medium) |
-| high | 8 13 | `codex-implementor` (`openai/gpt-6-astra`, medium — pass `-m openai/gpt-6-astra -e medium`) | `bee-implementor` (Opus 5.5, medium) |
+| scores | codex (preferred) | Claude (when the unit must drive an editor / hold a resource) |
+|---|---|---|
+| 1 2 | `-e medium` | `bee-opus-low` |
+| 3 | `-e medium` | `bee-opus-medium` |
+| 5 | `-e high` | `bee-opus-high` |
+| 8 | `-e xhigh` | `bee-opus-high` |
+| 13 | `-e xhigh` | `bee-opus-xhigh` |
+| support, no points | — | `bee-sonnet-medium`: a baseline, a suite run, validating a codex diff against the real project, a scout that needs a run, a one-area diagnosis |
 
 Codex runs through **`opencode-implement`** by default (server-held session, `opencode attach` for
 the owner to watch live), for worktree and in-place units alike; the **`codex-implement` CLI is
@@ -196,14 +205,14 @@ it reads the usage windows from the newest snapshot codex wrote, names each by i
 ends in a `ROUTE:` line. The plan has only a **weekly** window (no 5-hour limit since 2026-09-24);
 a 5-hour window is still read if a plan reports one. There is no early cap: exit 1 only when a
 window is used up (100%) or codex reports its limit reached (thresholds are flags) → the unit goes to the Claude column of its bucket, same
-score, and its review goes to `bee-reviewer` since codex is unavailable for that too; a log line
+score, and its review goes to the Claude reviewer (§8) since codex is unavailable for that too; a log line
 records the reading. The snapshot is from the last codex turn; a window whose reset has passed
 reads as 0%. **A STALE reading is not a reading**: it said "ok" once while the real window was at
 100% and three reviews came back truncated or empty (429). So a snapshot older than two hours
 prints `ROUTE: unknown` and exits 2, as does no snapshot: spend one cheap codex turn
 (`codex exec --skip-git-repo-check --sandbox read-only "reply ok" < /dev/null` — OpenCode rounds
 write no snapshot) and re-run. Log the reading on the unit
-(`[G1] decision: codex weekly window 100% → bee-mechanical`) when it changed the routing. OpenCode reports `cost: 0` for every round — the plan is metered by the
+(`[G1] decision: codex weekly window 100% → bee-opus-medium`) when it changed the routing. OpenCode reports `cost: 0` for every round — the plan is metered by the
 usage windows, and the token figures are for the budget rule only.
 
 Everything that can be done blind in a worktree and validated afterward goes to codex. Model and
@@ -212,16 +221,16 @@ effort live in the agent files under `~/.claude/agents/` and in the `codex-imple
 
 **Per-agent session budget** — one rule for both vendors (rule 4), plus each vendor's clock:
 
-| | `bee-mechanical` | `bee-implementor` | `bee-reviewer` | `bee-scout` | codex session |
-|---|---|---|---|---|---|
-| points per brief | ≤ 8 | ≤ 13 (one unit) | one unit's diff | none (one question) | one unit |
-| points per session | ≤ 16 | ≤ 26 | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
-| continue freely below | 120k | 120k | 120k | never continued | 120k (`.usage` `context_tokens`) |
-| finish / one recheck below | 200k | 200k | 200k | — | 200k |
-| **no new brief at or past** | **200k** | **200k** | **200k** | any — spawn a new scout | **200k**, or any other directory |
-| **cache warm for** | **5 min** idle | **5 min** idle | **5 min** idle | irrelevant | **30 min** idle |
-| resumable after the cache | one cold turn | one cold turn | one cold turn | — | OpenCode: any time, same `--dir`, one cold turn · CLI: never |
-| **agent self-pauses at** | **350k** | **350k** | 350k | reports `Needs diagnosis` at ~120k | — |
+| | `bee-opus-*`, `bee-sonnet-medium` | `bee-reviewer*`, `bee-consultant` | `bee-scout` | codex session |
+|---|---|---|---|---|
+| points per brief | ≤ 13 (one unit) | one unit's diff / blocker | none (one question) | one unit |
+| points per session | ≤ 26 | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
+| continue freely below | 120k | 120k | never continued | 120k (`.usage` `context_tokens`) |
+| finish / one recheck below | 200k | 200k | — | 200k |
+| **no new brief at or past** | **200k** | **200k** | any — spawn a new scout | **200k**, or any other directory |
+| **cache warm for** | **5 min** idle | **5 min** idle | irrelevant | **30 min** idle |
+| resumable after the cache | one cold turn | one cold turn | — | OpenCode: any time, same `--dir`, one cold turn · CLI: never |
+| **agent self-pauses at** | **350k** | 350k | reports `Needs diagnosis` at ~120k | — |
 
 A single complex unit may legitimately need 300–400k, so the agent itself pauses at 350k (safe
 point, handover, `Outcome: Paused`); a brief sent to an agent already past 200k is a bug in the
@@ -234,8 +243,9 @@ Break-even sits near 120–150k for anything longer than a recheck.
 
 Rules of continuation:
 
-- After a report, if an agent is under the continuation line and the next queued unit is in the
-  **same bucket** and touches the same area/resource, **continue it** — SendMessage to a Claude
+- After a report, if an agent is under the continuation line and the next queued unit routes to
+  the **same agent** (a Claude bee of the same name; any codex session, since `-e` is per round)
+  and touches the same area/resource, **continue it** — SendMessage to a Claude
   agent, `-s <session>` to a codex session — instead of spawning. Briefs to a continued agent are
   shorter: the delta only, and the unit's acceptance items.
 - **Re-brief inside the clock or not at all.** A report starts the agent's cache clock: 5 minutes
@@ -243,7 +253,7 @@ Rules of continuation:
   re-writes the whole context once — on a 200k agent that one cold turn costs more than a fresh
   spawn's onboarding. So when an agent reports, decide and answer in the same turn; do not park
   a reply. Past the clock, continue only an agent under ~100k; otherwise spawn.
-- Spawn fresh when: context at or past 200k, different bucket, area, resource or repo, a review
+- Spawn fresh when: context at or past 200k, different Claude agent, area, resource or repo, a review
   of that agent's own work, or the cache is cold and the context is over ~100k.
 - Read context from every report: codex's lands in `.usage` by itself; a Claude bee's is the
   `<subagent_tokens>` on its **final** `completed` notification — the last turn's context, not a
@@ -323,7 +333,7 @@ Rules of continuation:
 - Pausing: "stop at the next safe point (tree compiling, editor not in Play, isolation restored),
   report in five lines, then wait." A paused agent is warm for its cache clock (5 min Claude,
   30 min codex) and worth continuing under ~100k after it; past that, spawn from its handover.
-- A `bee-reviewer` waiting > ~30 min for a fix is retired; a fresh one rechecks from the findings
+- A Claude reviewer waiting > ~30 min for a fix is retired; a fresh one rechecks from the findings
   list and the fix diff. A codex reviewer's recheck resumes the same OpenCode session at any time
   (no TTL); only the CLI fallback has the 30-minute cliff, after which a fresh session with the
   findings list and the fix diff in the brief is cheaper than the cold re-read.
@@ -332,14 +342,14 @@ Rules of continuation:
 
 - Routing is whatever the setup phase fixed. Default: bucket by score, codex preferred, Claude for
   editor-bound units, cross-vendor review. Orchestrator: Opus medium/high or Fable low.
-- Diagnosis before implementation when the score is unknown: a read-only diagnosis unit (low
-  bucket) sets the scope, the split and the bucket. A **scout** (`bee-scout`, Haiku) before a
+- Diagnosis before implementation when the score is unknown: a read-only diagnosis unit (§3)
+  sets the scope, the split and the bucket. A **scout** (`bee-scout`, Haiku) before a
   diagnosis or a brief when you need a fact — callers, path, tests, owner — not a verdict. The
   saving is not Haiku's price (2× under Sonnet on cache reads); it is that the evidence lands in
   your context once, compact, instead of the files landing forever.
 - A codex unit's validation (compile, filtered tests, full suite once) is part of the unit's cost;
-  do it yourself when the diff is small, otherwise hand it to `bee-mechanical` holding the
-  resource.
+  do it yourself when the diff is small, otherwise hand it to `bee-sonnet-medium` holding the
+  resource. The same agent records a baseline before a unit whose acceptance compares against one.
 - Filtered tests in the loop, the full suite once per unit. A 1-cell smoke asserting
   preconditions (capture size, stack, viewport) before any multi-cell or live run.
 - Fold confirmations into the next real brief; a confirmation alone is never a turn. But a brief
@@ -408,6 +418,57 @@ Need from orchestrator: only if a decision is required.
 BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]
 ```
 
+**Standing rules.** The bee agent files carry only model and effort; every Claude brief pastes
+the block for its role verbatim.
+
+Implementor (`bee-opus-*`, `bee-sonnet-medium`):
+
+```
+Standing rules: Do only the listed acceptance items; hold only the resources named as held, never
+touch those named off-limits; never spawn sub-agents. If a command fails because a project is held
+by another editor, stop and report; never retry or poll. Classify every failure (introduced /
+pre-existing with evidence / unknown), add tests, no opportunistic refactors. Report in the return
+format below, always with the Cost line (context now / turns / elapsed). Past 350k of context,
+finish the current step at a safe point (tree compiling, editor not in Play, isolation restored),
+write what a successor needs (suite command and last green count, uncommitted files, half-done
+work, editor and Play-mode state), report `Outcome: Paused`, end with
+`BEES: results=<unit>:paused:-[;…]` and start nothing else. Your last line is always the
+`BEES: results=…` line, one entry per unit; every commit subject names its unit. Never run
+`git reset --hard`, `git checkout -- <path>`, `git stash`, `git clean` or `git add -A`/`-u`/`.` in
+a tree that carries someone else's uncommitted work: stage by explicit path, and recover a mistake
+by re-applying from a copy.
+```
+
+Reviewer (`bee-reviewer`, `bee-reviewer-high`) — §8's rules, as:
+
+```
+Standing rules: Never edit, never run anything that writes to a project, never spawn sub-agents.
+Review exactly the diff or commit named, against its acceptance criteria, related tests and
+surrounding code; state the hash reviewed. Findings one line each with a stable id
+(`MAJ-02 — sentence — file:line`), severity Critical / Major / Minor / Nit, and the fix as exact
+code or text; only Critical/Major block. Reopen the source before every file:line; never cite
+from memory. On a recheck, work from the named fix diff: verify each listed finding from it and
+the finding's rationale, review the delta and its dependencies, re-read nothing else; return
+Fixed / Partial / Open / Regressed id lists, then new findings continuing the id sequence. A clean
+review is valid. The Cost line (context now / turns / elapsed) goes above
+`BEES: reviews=<unit>:<open Critical/Major ids|->[;…]`, which sits directly above the last line,
+`APPROVE` or `CHANGES_REQUIRED`.
+```
+
+Consultant (`bee-consultant`; the astra consult takes the same text):
+
+```
+Standing rules: Read-only: never edit, never run anything that writes to a project, never spawn
+sub-agents. The blocked agent's STOP report below is evidence, not a conclusion — reopen the code
+it cites. Return: Root cause (with file:line or a command's output), Way through (one approach,
+as concrete steps an implementor can follow without re-deriving it), Why the tried attempts
+failed, Risks, and `Needs owner` if no way through exists without a decision. Then the Cost line,
+and `CHANGES_REQUIRED` as the last line.
+```
+
+The terminal `CHANGES_REQUIRED` is there because `opencode-review` fails an answer without a
+verdict; it carries no meaning in a consult.
+
 **The last line is a contract, codex and bee alike.** Every implementor brief ends with: *"Your
 final message's last line is exactly `BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]`"*
 — one entry per unit the round serves (the wrapper's `-u` list), hashes comma-separated, `-` for
@@ -429,13 +490,23 @@ resource. A brief that says "keep trying" or "retry until it works" is forbidden
 cap is stated in every brief. This bounds the *context × turns* cost of an agent spinning on
 something the model can't crack.
 
-**Orchestrator escalates a capped-out blocker to a higher bucket.** When an agent returns
-`Blocked` after its two attempts, that is a signal the unit was under-bucketed, not that the agent
-failed. Re-route it **up one bucket / a stronger model** — codex sol medium → sol xhigh → astra, or a low-bucket
-Claude → `bee-implementor` (Opus 5.5) — with a fresh agent whose brief carries the blocked agent's
-`Discovered` and `Tried` so the stronger model starts where the weaker one stopped, not from
-scratch. If the top bucket is already blocked twice, it becomes an **owner decision** (options with
-cost), never a third silent attempt.
+**Orchestrator consults a stronger model on a capped-out blocker.** When an agent returns
+`Blocked` after its two attempts, send its STOP report to a **read-only consultant** one tier up,
+same vendor, with the consultant standing rules (above):
+
+| blocked implementor | consultant |
+|---|---|
+| codex gpt-6.1-sol | `opencode-review -m openai/gpt-6-astra -e high` (read-only channel, background) |
+| `bee-opus-*`, `bee-sonnet-medium` | `bee-consultant` (Fable 5.1, medium; one Claude slot) |
+
+Name an astra consult's out-file `review-<unit>-consult-r<N>.txt` and run it with
+`--no-subagents` in a fresh session (never `-s` into the implementor or review loop), so
+`bees-watch --dir` still sees it and its history stays out of both. The consultant returns a root cause and a way through, not a diff. Re-brief the implementor with
+that answer — continue the blocked agent if it is under the continuation line (§3), otherwise a
+fresh one in the same bucket whose brief carries the STOP report and the consultant's answer. A
+unit blocked again after a consultant's way through, or a `Needs owner` answer, is an **owner
+decision** (options with cost), never a third silent attempt. Log the consult on the unit
+(`[G1] consult: astra — root cause …`).
 
 ## 8. Review
 
@@ -443,11 +514,15 @@ The reviewer is the **other vendor** from the implementor, so no model checks it
 
 | implementor | reviewer | slot |
 |---|---|---|
-| Claude (`bee-mechanical`, `bee-implementor`) | codex gpt-5.6-sol, medium, via `codex-review` (OpenCode `opencode-review` by default, CLI fallback; `-e medium`) | none (background) |
-| codex (sol or astra) | `bee-reviewer` (Opus 5.5, medium) | one Claude slot |
+| Claude (`bee-opus-*`, `bee-sonnet-medium`) | codex gpt-6.1-sol, medium, via `codex-review` (OpenCode `opencode-review` by default, CLI fallback; `-m openai/gpt-6.1-sol -e medium`) | none (background) |
+| codex, unit scored 1–5 | `bee-reviewer` (Opus 5.5, medium) | one Claude slot |
+| codex, unit scored 8–13 | `bee-reviewer-high` (Opus 5.5, high) | one Claude slot |
+
+Every Claude review brief carries the reviewer standing rules (§7).
 
 Cadence is what the owner chose in setup: per unit, or one diff review of the whole plan at the
-end (then the reviewer is chosen by the vendor that implemented **most points**). A reviewer is
+end (then the reviewer is chosen by the vendor that implemented **most points**, and a Claude
+reviewer is `bee-reviewer-high` when the plan holds any unit routed at 8–13). A reviewer is
 fresh, read-only, holds no resource, never edits, never the implementor of the unit. The review
 covers a **quiescent tree** and states the commit or diff hash reviewed; never while another agent
 edits the same domain. Input: changed files, surrounding code, acceptance criteria, related tests.
@@ -461,12 +536,12 @@ fix introduced or exposed, and re-reads nothing else. It returns four id lists �
 `Fixed / Partial / Open / Regressed` — plus new findings continuing the id sequence. No sub-agents
 in a recheck; a codex recheck runs `opencode-review --no-subagents`. There is no round cap. For
 codex, a clean recheck advances to the required holistic final pass, whose `APPROVE` closes the
-loop; for `bee-reviewer`, a clean recheck closes it. The **churn check** ends either loop early: a
+loop; for a Claude reviewer, a clean recheck closes it. The **churn check** ends either loop early: a
 finding regressed twice, or new findings outnumbering closed ones two rounds running, is a
 structural problem — stop, report, and re-plan the unit rather than queue another fix round. A
 clean review is valid. Acceptance of a new document key, command or config surface includes an
 **end-to-end fixture through the real path** (apply/export/run), not only a helper's unit tests.
-When codex is out (usage limit, 429), the review goes to `bee-reviewer` and a log line says so.
+When codex is out (usage limit, 429), the review goes to the Claude reviewer for its score and a log line says so.
 
 ## 9. Status: three committed files (full mode)
 
@@ -488,7 +563,7 @@ gitignored and never the only place a fact lives: a session id worth resuming go
 2. Log: `- <date '+%F %H:%M'> [<unit>] accept: <evidence — suite count, review verdict, commit>`.
 3. Status: rewrite Now and Next; update Resources if a repo, session or editor state changed.
 
-Also log each round as it finishes (`[<unit>] round: impl r2 codex sol, done, ctx 96k,
+Also log each round as it finishes (`[<unit>] round: impl r2 codex sol high, done, ctx 96k,
 impl-<unit>-r2.txt`), each review verdict, each owner decision (`decision: …`, and in Keep in
 mind while it still applies), each gap in the tooling (`gap: …`). A log entry that needs more than
 one line is a checklist row or a plan section instead.
@@ -565,7 +640,7 @@ sentences.
 
 Should read like:
 
-> G1 (3 · low · codex sol) round 3 landed at `3b73b3a`: one projected-basis helper replaces two
+> G1 (3 · codex sol medium) round 3 landed at `3b73b3a`: one projected-basis helper replaces two
 > walk fallbacks, closes CX-03/04 with fail-before tests. bee-reviewer recheck running in slot 1.
-> Slot 2 is at 110k with the area loaded, so it continues into B4 (8 · high) rather than a fresh
+> Slot 2 (`bee-opus-high`) is at 110k with the area loaded, so it continues into B4 (8) rather than a fresh
 > spawn.
