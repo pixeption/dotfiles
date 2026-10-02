@@ -26,12 +26,11 @@
         "external_directory": {
             "*": "deny",
             "~/code/**": "allow",
-            "~/.config/claude/**": "allow",
+            "~/.config/**": "allow",
             "~/pixeption/**": "allow",
             "~/.claude/**": "allow",
             "~/.unity/**": "allow",
             "~/.codex/**": "allow",
-            "~/.config/opencode/**": "allow",
             "~/Library/Logs/Unity/**": "allow",
             "/tmp/**": "allow",
             "/private/tmp/**": "allow",

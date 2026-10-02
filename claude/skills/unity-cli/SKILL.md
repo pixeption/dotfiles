@@ -1,6 +1,7 @@
 ---
 name: unity-cli
-description: Reference for the Unity CLI (the `unity` binary) and Unity Pipeline package (`com.unity.pipeline`) — installing/managing Unity editors, batch-mode test/build, and driving a live Editor over its local HTTP API via `unity command` through an iterative code → author → test → fix loop. Load this when scripting `unity command`/`unity recompile`/`unity test`/`unity status`/`unity job`, upgrading the CLI, iterating on a live Unity editor session, or debugging Unity CLI exit codes.
+description: >-
+  Drives Unity through the `unity` CLI, the Unity Pipeline package (`com.unity.pipeline`) and a live editor's HTTP API (`unity command`, `recompile`, `test`, `status`, `job`) and the helpers `unity-editor`, `unity-test`, `unity-suite`, `unity-wait` for an edit → recompile → test loop. Use when scripting or iterating on a live Unity editor, running batch tests or builds, managing or upgrading editors and the CLI, or debugging its exit codes.
 ---
 
 # Unity CLI + Unity Pipeline
@@ -28,9 +29,29 @@ Everyday verbs: `status`, `list`, `open`, `close`, `recompile`, `test`, `run`, `
 Version-matched API docs: `unity docs GameObject --url` from the project (`--manual`, `--search`,
 `--editor-version <v>`).
 
-Helper scripts live beside this file in `scripts/`: `unity-editor`, `unity-test`, `unity-suite`,
-`unity-wait`, `_common.sh`. Prefer them over a hand-rolled poll loop; the pitfalls below are
-exactly what they exist to absorb. Offline tests for them are in `tests/`.
+Run the helpers in `~/.claude/skills/unity-cli/scripts/` by absolute path: `unity-editor`,
+`unity-test`, `unity-suite`, `unity-wait` (`_common.sh` is the helper library they source). Prefer
+them over a hand-rolled poll loop; the pitfalls below are exactly what they exist to absorb. Invoke
+them in normal use; read their source only to maintain or debug them. Offline tests for them are in
+`tests/`.
+
+## The loop
+
+```bash
+S=~/.claude/skills/unity-cli/scripts P=<project>
+$S/unity-editor up "$P"                            # once: open or reuse the live editor
+# edit sources
+$S/unity-wait --project-path "$P" recompile        # exit 1 prints the compile errors: fix, repeat
+$S/unity-test <filter> --project-path "$P"         # exit 1 lists the failing tests: fix, repeat
+```
+
+Accept a run only when `unity-test` reported no `FILTER MISMATCH` and `passed/total` is the count you
+expect: a filter that matches fewer tests than you meant still goes green. The full suite runs once
+at the end, through `unity-suite`.
+
+**Project flag**: live-editor commands (`unity command`, `recompile`, `job`, `list`) take
+`--project-path <dir>`; `unity assets` takes `--project <dir>`; `unity test`, `open`, `close` and
+`run` take the project as a positional argument.
 
 ## One driver per project (read this first)
 
@@ -127,10 +148,14 @@ make no progress).
 
 The `testName` filter is a case-insensitive **substring of the full test name**
 (`Namespace.Class.Method(args)`), so a bare class name and a namespace-qualified one both work, and
-the bare one also matches any class whose name contains it. It is **one** substring: `A|B` and
-`A,B` are literal and match nothing (the script exits 1). To cover several unrelated classes, pick a
-shared substring, pass `--type assembly <Name>`, or run them in batch (`unity-suite --filter`).
-Check the printed `passed/total` is the count you expect.
+the bare one also matches any class whose name contains it. To cover several unrelated classes, pick
+a shared substring, pass `--type assembly <Name>`, or run them in batch (`unity-suite --filter`).
+
+| | `unity-test <filter>` (live editor) | `unity test --filter` / `unity-suite --filter` (batch) |
+|---|---|---|
+| match | one case-insensitive substring of the full name | a pattern over the full name |
+| several classes | `A\|B` is literal and matches nothing | `A\|B\|C` runs all three |
+| 0 tests matched | exits 1 | `unity test` exits 0 (`total` 0); `unity-suite` exits 2 |
 
 `run_tests` params must be **named flags**, never a JSON blob: `--json` is the *output-format*
 flag, so a `--json '{...}'` positional is silently dropped and the run falls back to the whole
@@ -219,9 +244,8 @@ unity test --mode EditMode <project> --filter <filter> --output /abs/path/report
   honoured but nothing echoes it; `… -- --output x.xml` is swallowed by NUnit. Category-only
   filtering (no `--filter`) hits an exit-2 CLI bug that still writes a real report; always
   combine it with `--filter`.
-- **`--filter` is a pattern over the full test name**, unlike the live `unity-test` substring:
-  `UIParity` matches `UIParityDiffTests` and `UIParityTrackingTests`, and `A|B|C` runs all three
-  classes in one run. `--type class <BareName>` matches 0 tests. Take names from
+- **`--filter`** (see the filter table above): `UIParity` matches `UIParityDiffTests` and
+  `UIParityTrackingTests`. `--type class <BareName>` matches 0 tests. Take names from
   `grep -rl 'class .*Tests'`.
 - **Pick assemblies with `-- -assemblyNames "A;B"`**; `unity test` has no assembly flag of its own.
   The list is semicolon-separated.
@@ -263,166 +287,17 @@ defensively (`_common.sh`'s `result_json` handles both shapes).
 For headless diagnostics: `unity run <project> --command <name> --log-file /abs/path/editor.log
 --timeout 120 -- <tool flags>` writes and streams a per-run log (`--no-tail` to write only).
 
-## `unity command` parameter binding
+## Reference
 
-Prefer **named parameters**: `unity command ui_new --name SettingsPopup --project-path <dir>`.
-Inspect the schema (`unity list`) before relying on positionals. Two collisions:
+Read the one you need when the task reaches it:
 
-- A tool parameter named `format` collides with the CLI's global `--format`. Pass the tool's own
-  flag after a bare `--`: `unity command get_serialized_fields --target X --format json -- --format value`.
-- `--timeout <seconds>` before the `--` bounds the CLI request (default 30 s). `run_tests` has its
-  own `timeout` (default 300 s), and it matters even under `--detach`: a run that outlives it is
-  cancelled but the command **never completes**, which holds the editor's one-command exec gate
-  forever (every later command times out, `job wait` never returns, `/api/progress` reads
-  `active: true`; only `unity-editor restart` clears it). Pass it after the bare `--`
-  (`… --detach -- --timeout 1500`); `unity-test` does, from its `--deadline`.
-
-## Reading the console
-
-`unity command console --project-path <dir> --level error --tail 50` (`--level log|warn|error`;
-`--since <cursor> --since_session <session>` to follow, and a cursor it can't honour returns the
-tail with `reset`/`dropped` true). `counts` describes the buffer, `groundTruth` the Editor's own
-counts and compile state; compile errors from before capture started are backfilled.
-`console_status` gives counts without entries; `clear_console` clears both buffers. There is no
-`read_console` or `get_console_logs`; guessing returns `400 Command Not Found`.
-
-To browse the live command catalog by area, `GET /api/commands?detail=tags` (see Direct HTTP)
-returns one row per tag with a count, then `?tag=<tag>` lists that area. No `unity list` flag
-surfaces it.
-
-## `eval` / `eval_file` / `run_script`
-
-- `eval --code` takes **statements, not a bare expression** (wrapped in a method body):
-  `return Foo.Bar;`, not `Foo.Bar`.
-- **No `using` directives**: they parse as `using (...)` statements and fail with a wall of
-  `CS1001`. Fully qualify every type (`UnityEditor.PrefabUtility...`) and call extension methods
-  statically (`Core.UISystemExt.PushScreen(ui, type, null)`).
-- **Quoting is the hazard from a shell.** A format string like `String.Format("{0}", x)` gets
-  mangled by shell/JSON escaping. Prefer a quote-free expression or `eval_file --file`.
-- For a real file with `using`s and structured diagnostics, `run_script --file X --entry
-  Type.Method`: compiles in memory, no domain reload; `entry` may be `async Task`; `--dry_run
-  true` compiles without running.
-- For a registered `[ConsoleCommand]`, `unity command devconsole --input 'g.level.mockupParity'`
-  (`com.pixeption.devconsole`), not an `eval` that calls `Core.ConsoleCommands.Execute`.
-
-**Check the structured tools before writing an `eval`**: `find_gameobjects` (filters `--name`,
-`--tag`, `--type`, `--hierarchy_path`, `--include_inactive`; returns identities), `get_component_properties --target <hierarchyPath> --type T`,
-`get_serialized_fields` (`-- --format value`, per the collision above), `set_serialized_field`
-(writes immediately, no `dry_run`), `menu` for any `ExecuteMenuItem`. Project commands:
-`assetdb_update` rebuilds the AssetMap so a freshly created prefab resolves; `ui_stacks` (Play Mode) returns `mainView`/`views`/
-`popups`.
-
-**Check `wait_for` before polling from the client**: a server-side wait on a member condition
-(`--condition '{"member":"UnityEditor.EditorApplication.isPlaying","value":true}'`, ops
-`equals|notEquals|greaterThan|lessThan|contains|changed`, `findType`/`target` for instance
-members, `on_met.capture` to screenshot the frame it fires). Synchronous `wait_for` holds the exec
-queue for its whole duration, so use it only for a short wait that nothing you still have to send
-can satisfy; otherwise `--async true` and poll `wait_status`. Async waits don't survive a domain
-reload.
-
-## Assets
-
-- `.unitypackage`: `unity assets inspect <file>` before import; `unity assets import <file>
-  --project <dir>`; `unity assets export Assets/Art --output /abs/art.unitypackage --project <dir>`
-  (dependencies included unless `--no-dependencies`). These spawn batch Editors: honour project
-  ownership.
-- `find_assets --type` matches the **main** asset type: a sprite-mode texture is `Texture2D`, not
-  `Sprite`. Use `--type Texture2D`, or `search --query "t:Sprite ..."`, which resolves sub-assets.
-- `find_assets --label` is an `AssetDatabase` label (`.meta`), **not** an Addressables label, so
-  it cannot answer "is this registered in AssetDB".
-- `get_import_settings --asset <path> [--platform]` reads the importer; `set_import_settings
-  --settings '{...}' --dry_run true` previews the write.
-
-## `batch`
-
-Up to 200 ordered operations, transactional, one Undo step; `dry_run: true` preflights the whole
-sequence. Project `ui_*` ops run inline (`ui_export` → `ui_check` verified synchronous;
-`ui_apply`/`ui_render` untested inside a batch). Op shape:
-
-```json
-[{"id":"a","command":"ui_export","params":{"target":"<prefab>"}}]
-```
-
-`ui_export`'s default document path is `<documentRoot>/<PrefabName>-<guid6>/ui.yaml`, not
-`<PrefabName>/ui.yaml`; a wrong guess fails `UI104 MALFORMED_DOCUMENT` naming the real path.
-
-## Conventions
-
-- Destructive/overwriting tools take `confirm`/`dry_run`; `dry_run` previews and **wins even if
-  `confirm` is also set**; without `confirm: true` the call is refused, not defaulted.
-- Asset/settings/package writes are **not** undoable (only scene/object mutations are, in one Undo
-  step): validate before writing.
-- Object-reference parameters (`target`, `parent`, `material`, …) accept a plain `hierarchyPath`,
-  an asset path, or a bare `instanceId`.
-- `save_all` after any scene-authoring sequence: `unity close` never saves, so a dirty scene is
-  silently discarded.
-- `set_selection --paths <asset>` / `editor_focus` after a change so a human co-working the editor
-  sees it in the Inspector; `get_selection` to check what they're looking at first.
-- **Play Mode is a scoped borrow.** `editor_stop` as soon as the observation that needed it is
-  done; don't carry a playing editor across an edit round or leave one running at the end of a
-  turn. A human looking at the editor is inspecting, not working in it, so stopping Play to get
-  work done is correct.
-
-## Direct HTTP escape hatch
-
-The editor writes a `0600` descriptor at `<project>/Library/Pipeline/.unity-pipeline-port`:
-`port`, `evalToken`, `pid`, `projectPath`, `unityVersion`, `mode`, `startedAt`, `lastHeartbeat`,
-and an `info` field carrying the not-automated warning when opened without `-automated`. Every
-request needs `Authorization: Bearer <evalToken>`. **Dial `127.0.0.1`, never `localhost`**: the
-listener binds only the IPv4 loopback and checks the `Host` header itself, so anything but
-`127.0.0.1:<port>` gets a `400` naming the expected host. The token survives a domain reload but
-regenerates on editor restart, so never cache a descriptor indefinitely. A descriptor whose PID was
-recycled by another process is recognised as stale.
-
-## Code reload
-
-`[CodeReload]`/`[OnCodeReload]` live in namespace `Unity.Pipeline.CodeReload`, assembly
-`Unity.Pipeline.Attributes`; `CodeReloadRegistry`, `codereload_status`, `cleanup_codereload`.
-`reload_file --filename <file>` applies edited method bodies without a domain reload. Tag target
-methods with `[CodeReload]` before compiling; public or non-public, instance or static, block-bodied,
-returning **void or `IEnumerator`**. The compiled backend may access only public host members;
-`reload_file_editor_interpreter` reaches private members via its supported C# subset. No methods
-applied is a failure; unchanged bodies report explicit up-to-date success. Inspect per-method
-results for partial applies, not just top-level success.
-
-A structural change (new entry point, new `[CliArg]`, new field) needs the full recompile flow
-under Compiles above; it is deferred during Play.
-
-## Capturing what you built
-
-`capture_game_view` defaults to `--source screen`: the composited backbuffer including Screen
-Space Overlay canvases, in Edit Mode and Play Mode alike. `--source camera` captures a camera
-target only and misses overlays; passing `--camera` without `--source` also selects camera capture. `--save_path <path>` for a path-only result;
-`--include_inline_image true` also returns image data. A plain `screenshot` is not a substitute for
-composited screen capture.
-
-For `Core.View` UI, use `unity-ui` (`ui_render`/`ui_validate`) or `unity-ui-live` in Play Mode,
-including their rule to export again before applying after direct prefab edits.
-
-## Package assemblies and upgrades
-
-- **`[CliCommand]`/`[CliArg]`, `[CodeReload]`/`[OnCodeReload]` live in `Unity.Pipeline.Attributes`**
-  (namespaces unchanged: `Unity.Pipeline.Commands`, `Unity.Pipeline.CodeReload`). Any asmdef that
-  declares Pipeline commands must reference that assembly explicitly; referencing
-  `Unity.Pipeline`/`Unity.Pipeline.Editor` does not pull it in, and the miss is a `CS0246` that
-  opens the editor into Safe Mode on resolve. Loose `Assets/` scripts with no asmdef are
-  unaffected (it is `autoReferenced`).
-- `InstanceDescriptor`/`RuntimeInstanceDescriptor` and several internals are `internal`. Read the
-  descriptor JSON directly (`port`/`evalToken` are stable) rather than referencing those types.
-- Runtime Pipeline/Roslyn are excluded from non-development builds unless
-  `ENABLE_RUNTIME_PIPELINE` is defined; the attributes remain usable with no reload effect.
-- Upgrade the CLI with plain `unity self-update`, then `unity --version` / `unity self-update
-  --changelog` (`--check`, `--rollback`). `unity pipeline upgrade --project-path <dir>` updates the
-  package separately and needs an Editor restart to resolve. After either, recheck the affected
-  sections here against `--help` and the package
-  [changelog](https://docs.unity3d.com/Packages/com.unity.pipeline@0.8/changelog/CHANGELOG.html),
-  and update the version line at the top.
-- **Never run `unity skill install claude-code`**: it writes the CLI's embedded skill to
-  `~/.claude/skills/unity-cli/` and overwrites this file. `unity skill show` prints that embedded
-  skill to stdout; it describes the CLI binary, not the project's Pipeline package, so read it
-  after a CLI upgrade and read the resolved package's `Documentation~`/CHANGELOG after a package
-  upgrade.
-- `unity open --wait` (macOS/Linux) blocks until the editor exits and reports a crash or licensing
-  failure as exit 6: for CI, not a live session.
-- `unity mcp` survives recompiles (the auth token persists across domain reloads); editor restarts
-  need fresh discovery.
+- [`reference/command-tools.md`](reference/command-tools.md) — before passing `unity command`
+  parameters, reading the console, writing an `eval`/`run_script`, or polling from the client
+  (`wait_for`).
+- [`reference/assets-batch.md`](reference/assets-batch.md) — importing/exporting
+  `.unitypackage`s, `find_assets`, import settings, or a transactional `batch`.
+- [`reference/editor-api.md`](reference/editor-api.md) — before a destructive or non-undoable
+  tool (`confirm`/`dry_run`, `save_all`, Play Mode as a scoped borrow), the direct HTTP API, code
+  reload without a domain reload, or capturing the game view.
+- [`reference/upgrades.md`](reference/upgrades.md) — before or after `unity self-update` or
+  `unity pipeline upgrade`, or when an asmdef declares Pipeline commands.

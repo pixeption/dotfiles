@@ -1,0 +1,13 @@
+## Fix verification
+- F24 — Fixed — why, from the updated artifact and established facts
+- F26 — Partial — what remains and the required correction
+## New findings
+### F27 — Med
+Claim / Evidence / Impact / Fix (exact text)
+(or: No new findings introduced or exposed by the current changes.)
+## Source revisited
+- `File.cs:100-130` — reopened because <reason>   (or: None. Existing repository facts sufficed.)
+## Review state
+<open findings only, compact form; settled ones as id + status>
+BEES: reviews=<unit>:<open-ids|->[;…]
+CHANGES_REQUIRED | APPROVE

@@ -17,7 +17,7 @@
 # A quiet BUSY round says whether opencode-activity sees a tool or a model stream; one sample cannot
 # tell a slow stream from a stalled one, so stalls are opencode-round's call (it compares samples).
 # Exit 0 when every round is live or finished, 1 when any is STALE, DEAD, failed, has an ask waiting,
-# or its activity cannot be read.
+# or its activity cannot be read. Exit 2 on bad usage or a missing opencode-activity (codex-implementor).
 set -uo pipefail
 url="http://127.0.0.1:4096"; stale=20; files=(); dir=""; all=0
 while [ $# -gt 0 ]; do
@@ -48,7 +48,9 @@ history() {
   units="${stem#*-}"; units="${units%-consult}"
   for u in ${units//+/ }; do grep -qF "[$u] accept:" "${dir%.work}.log.md" 2>/dev/null || return 1; done
 }
-activity() { "$(dirname "$0")/../../codex-implementor/scripts/opencode-activity" "$url" "$(cat "$1.cwd" 2>/dev/null)" "$2" 2>/dev/null; }
+activity_bin="$(dirname "$0")/../../codex-implementor/scripts/opencode-activity"
+[ -x "$activity_bin" ] || { echo "bees-watch: missing dependency $activity_bin — install the codex-implementor skill beside bees" >&2; exit 2; }
+activity() { "$activity_bin" "$url" "$(cat "$1.cwd" 2>/dev/null)" "$2" 2>/dev/null; }
 mid_step() { case "$(tail -n 50 "$1" | jq -Rr 'fromjson? | .type // empty' 2>/dev/null | tail -1)" in
   step_start|tool_use|text|reasoning) return 0 ;; *) return 1 ;; esac; }
 bad=0; hidden=0; now=$(date +%s)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Check the live OpenCode server before a round is allocated; restart it when that fixes it and
-no session is busy. Shared by opencode-implement and opencode-review, and bees §0's setup check.
+no session is busy. Shared by opencode-implement and opencode-review, and bees "Setup"'s check.
 
 The server reads ~/.config/opencode/opencode.jsonc and fetches its model catalogue at STARTUP
 only, so a long-running server can lack the fence, lack a newly allowed directory, or name no

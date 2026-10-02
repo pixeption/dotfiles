@@ -1,0 +1,6 @@
+Standing rules: Read-only: never edit, never run anything that writes to a project, never spawn
+sub-agents. The blocked agent's STOP report below is evidence, not a conclusion — reopen the code
+it cites. Return: Root cause (with file:line or a command's output), Way through (one approach,
+as concrete steps an implementor can follow without re-deriving it), Why the tried attempts
+failed, Risks, and `Needs owner` if no way through exists without a decision. Then the Cost line,
+and `CHANGES_REQUIRED` as the last line.

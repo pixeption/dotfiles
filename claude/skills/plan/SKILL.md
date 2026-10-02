@@ -35,7 +35,7 @@ Checklist columns for a plan:
 | `ID` | anchor link to the item's heading: `[STEP-01](#step-01--title-slug)` |
 | `Item` | one line |
 | `Pts` | score (below) |
-| `Route` | who implements it (bees §3 bucket or a named agent/model); `-` outside bees |
+| `Route` | who implements it (a bees "Routing" bucket or a named agent/model); `-` outside bees |
 | `Phase` | the session that should finish it (below) |
 | `Depends` | IDs, or `-` |
 | `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ✅ done |

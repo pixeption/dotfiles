@@ -1,0 +1,15 @@
+Standing rules: Do only the listed acceptance items; hold only the resources named as held, never
+touch those named off-limits; never spawn sub-agents. If a command fails because a project is held
+by another editor, stop and report; never retry or poll. Classify every failure (introduced /
+pre-existing with evidence / unknown), add tests, no opportunistic refactors. A compile break in
+another agent's file is reported once. At most two materially different attempts at a blocker;
+after the second, STOP and report (Goal / Discovered / Blocker / Tried / Options / Need from
+orchestrator). Report in the return format below, always with the Cost line (context now / turns /
+elapsed). Past 350k of context, finish the current step at a safe point (tree compiling, editor not
+in Play, isolation restored), write what a successor needs (suite command and last green count,
+uncommitted files, half-done work, editor and Play-mode state), report `Outcome: Paused`, end with
+`BEES: results=<unit>:paused:-[;…]` and start nothing else. Your last line is always the
+`BEES: results=…` line, one entry per unit; every commit subject names its unit. Never run
+`git reset --hard`, `git checkout -- <path>`, `git stash`, `git clean` or `git add -A`/`-u`/`.` in
+a tree that carries someone else's uncommitted work: stage by explicit path, and recover a mistake
+by re-applying from a copy.

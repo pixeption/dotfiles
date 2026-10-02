@@ -1,0 +1,3 @@
+Continue <plan path>, phase <N>.
+Read <plan>.status.md first, then the plan's checklist and any log entries it links.
+Load the bees skill; you are the orchestrator for this phase.

@@ -13,6 +13,8 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/_common.sh"
 DIE_CODE=2
 
+# TIMEOUT: 30 min is many times a full suite (Pipeline.UI runs ~2 min) yet still ends a hung batch
+# editor, which `unity test` alone would wait on forever.
 ARG="."; MODE=EditMode; REPORT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""
 while [[ $# -gt 0 ]]; do case "$1" in
   --failed-only) REPORT=$2; shift 2;;

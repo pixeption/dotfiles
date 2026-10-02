@@ -8,7 +8,12 @@ set -uo pipefail
 source "$(dirname "$0")/_common.sh"
 DIE_CODE=2
 
-FILTER=""; TYPE=testName; MODE=EditMode; PROJECT_ARG="${UNITY_PROJECT_PATH:-.}"; DEADLINE=900
+FILTER=""; TYPE=testName; MODE=EditMode; PROJECT_ARG="${UNITY_PROJECT_PATH:-.}"
+# DEADLINE bounds the whole run and is passed on as run_tests' own timeout: 15 min is far above a
+# filtered run, and it must outlast the run or the tool's timeout wedges the exec gate (below).
+DEADLINE=900
+# A healthy run logs "Run started" within seconds; 2 min allows a busy editor yet ends the silent
+# hang long before DEADLINE.
 START_DEADLINE=120
 while [[ $# -gt 0 ]]; do case "$1" in
   --start-deadline) START_DEADLINE=$2; shift 2;;

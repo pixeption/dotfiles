@@ -26,6 +26,8 @@ home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
 files = sorted(glob.glob(os.path.join(home, "sessions", "**", "*.jsonl"), recursive=True),
                key=os.path.getmtime, reverse=True)
 snap = None
+# Newest first, stopping at the first snapshot: 20 rollouts bounds the scan on a large history, and
+# OpenCode rounds write none, so a run of them must not hide the last CLI turn's snapshot.
 for f in files[:20]:
     with open(f, errors="replace") as fh:
         for line in fh:

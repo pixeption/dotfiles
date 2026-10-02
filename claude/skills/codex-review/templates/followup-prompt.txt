@@ -1,0 +1,12 @@
+Continue in the existing review session. Repo at <sha>, unchanged since round <n>
+[or: changed — <what>]. The artifact changed as follows: <diff or section list>.
+Perform this round directly, without spawning sub-agents.
+1. Verify each listed Open/Partial finding against the updated artifact: Fixed, Partial, Open or Regressed.
+2. Review the artifact delta and affected dependencies for new problems introduced, exposed or
+   made relevant by these changes. Do not perform a fresh whole-artifact audit in this round.
+Reuse established repository facts; do not re-read unchanged source or rescan the repository by
+default. Reopen only the specific source needed to verify an uncertain implementation fact or to
+support a new finding, and always before an exact file:line citation.
+For each finding give the exact replacement text or a diff for the artifact.
+Continue finding IDs from F<N>. End with the output contract: the BEES: reviews= line, then
+APPROVE or CHANGES_REQUIRED as the last line.

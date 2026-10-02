@@ -64,6 +64,28 @@ unrelated concerns into separate atomic commits, each with its own type.
 - For any plan, audit, design review or other markdown deliverable with enumerated items, load the
   `plan` skill and follow its format.
 
+## Skills
+
+Rules for writing or editing a skill, after Anthropic's
+[skill authoring best practices](https://platform.claude.com/docs/en/agents-and-tools/agent-skills/best-practices):
+
+- **Description**: third person, *what* it does, then *Use when…* with the user's trigger phrases.
+  No model ids, versions, dates or internal mechanics. ≤ ~400 chars (the hard limit is 1,024).
+- **Body** ≤ 500 lines. Detail goes in `reference/<topic>.md`, linked **directly** from SKILL.md
+  with when to read it — never doc → doc. A reference over 100 lines opens with `## Contents`, so
+  a partial read still shows everything it covers.
+- **Rules** carry a one-clause why, never a dated incident, commit hash, quota snapshot, machine
+  or pinned model id — git history keeps those. State each rule once, in the skill that owns it;
+  others link there. Maintainer notes go to the package's contributor docs, not the agent's skill.
+  Fragile sequences stay exact, however long.
+- **Verbatim text** (briefs, standing rules, prompts) lives in `templates/` and is `cat`-ed, not
+  retyped.
+- **Scripts**: entry points are run by absolute path and the skill says "run"; sourced helpers and
+  algorithm references are labelled as such. Every non-obvious default carries a one-line reason
+  in the script. A missing dependency fails loudly, naming it and the fix.
+- **Cross-skill links** name a heading (bees "Routing"), never a `§3`-style number.
+- **Workflows** end with a checkable "Done when" and put the verify → fix loop up front.
+
 ## Browser automation
 
 - Drive **Chrome** (claude-in-chrome). **Arc is off-limits** — its extension instance hangs. If

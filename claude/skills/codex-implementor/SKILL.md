@@ -1,46 +1,29 @@
 ---
 name: codex-implementor
-description: Delegate a bounded, well-specified implementation unit to a codex-family model (openai/gpt-6.1-sol at medium by default, higher effort for hard units) with the same powers a Claude sub-agent has — including driving a live Unity editor and running suites IN PLACE in the real checkout — as a multi-round conversation you review and accept. DEFAULT channel is OpenCode (`opencode-implement`) — persistent, attachable, session pinned to one directory, worktree or in place. FALLBACK is the `codex` CLI (`codex-implement`) only when the OpenCode server won't start or an OS sandbox is required. Use whenever the user asks to "have codex implement/build/write" something, or delegate a unit to codex. For a read-only second opinion use codex-review instead.
+description: >-
+  Delegates a bounded, well-specified implementation unit to a codex-family model over OpenCode (codex CLI fallback), in a worktree or in place with a live Unity editor, as reviewed rounds. Use when the user asks to have codex implement, build or write something, or to delegate a unit to codex. For a read-only review use codex-review.
 ---
 
 # Codex implementor
 
-Delegate a **bounded, well-specified** unit to a **codex-family model**. It is an engineer with the
-same reach as a Claude sub-agent: it edits, compiles, runs suites and drives the live Unity editor
-through the `unity` CLI. **You are the lead; it executes and brings evidence.** You accept on a
-suite count or a real run, never on its claim. Verified against `opencode 1.18.31`,
-`codex-cli 0.155.0`; in-place editor drive verified 2026-09-20 on two projects.
+Delegate a **bounded, well-specified** unit to a **codex-family model**. It has the same reach as
+a Claude sub-agent: it edits, compiles, runs suites and drives the live Unity editor through the
+`unity` CLI. **You are the lead; it executes and brings evidence.** Accept on a suite count or a
+real run, never on its claim. Verified against `opencode 1.18.31`, `codex-cli 0.155.0`.
 
-## Two channels, same models
+## Channel
 
-| | **Default — OpenCode** (`opencode-implement`) | **Fallback — codex CLI** (`codex-implement`) |
-|---|---|---|
-| how | `opencode run` against one persistent `opencode serve` | `codex exec` background process |
-| where it runs | `-C <any directory>`: a worktree **or the real checkout** | same, plus `--sandbox` tiers |
-| session | server-held; resume with `-s` **in the same `-C` only** (pinned to its directory); cache warm **30 min**, one cold turn after | prompt cache **30 min**; the wrapper refuses a resume older than that |
-| live view | owner attaches a TUI to the very session (`opencode-sessions --attach`) | read-only tail of the JSONL `.log` |
-| isolation | none built in; the fence is the `permission` block in `~/.config/opencode/opencode.jsonc`, loaded (with the model catalogue) at server **startup** | OS seatbelt (`workspace-write` / `danger-full-access`) |
-| use when | every unit | server won't start, or the unit must run under an OS sandbox |
+**OpenCode by default** (`scripts/opencode-implement`): a server-held session that survives idle
+gaps, that the owner can attach to and steer, in a worktree or in place. **Read
+[`reference/opencode-channel.md`](reference/opencode-channel.md) before the session's first
+round** — preflight, the fence, flags and files, failed rounds, compaction, watching, usage
+gating. The **codex CLI** (`scripts/codex-implement`) is the fallback, only when the server won't
+start or the unit must run under an OS sandbox: [`reference/codex-cli.md`](reference/codex-cli.md).
 
-**Prefer the default.** The session survives idle gaps (a cold resume costs one full re-read, not a
-fresh session), the owner watches and can steer, and it runs in place as well as in a worktree. The
-CLI's only extra is the seatbelt — a restriction, not a capability. (Until 2026-09-20 this skill
-claimed in-place drive needed the CLI; it does not.)
-
-**Resume or fresh — one rule, both vendors (bees §3).** Read `context_tokens` from `.usage`: it is
-the session's context size, re-read on every step. Below 120k resume freely; 120–200k only for a
-short recheck in the same files; at 200k, or for **any other directory**, start a new session. A
-codex session is pinned to the directory it was created in — a brief for another repo trips the
-external-directory fence and asks a human who is not there (a round waited from 23:18 to morning
-on exactly that, 2026-09-20). The wrapper now refuses such a resume up front.
-
-**A resumed OpenCode session can be auto-compacted mid-round** (observed trigger ~270k tokens):
-the server replaces the older tail with a summary, so the next `context_tokens` reading legitimately
-drops — real, not a bug. When that happened, `.usage` carries a `compacted` object
-(`auto`/`overflow`/`tail_start_id`/`at`) and the wrapper's final stderr line says `COMPACTED`.
-Resume/fresh math still uses the post-compaction `context_tokens`, but treat the session's recall
-of anything before the compaction as a summary, not the original detail — reopen source rather
-than trust a pre-compaction claim (see `extract-opencode-usage` for the event this reads).
+**Resume or fresh** (bees "Rules", the session budget): read `context_tokens` from `.usage`. Below
+120k resume freely; 120–200k only for a short recheck in the same files; at 200k, or for **any
+other directory**, start a new session — a session is pinned to the directory it was created in,
+and a brief for another repo trips the fence instead of running.
 
 ## Models and effort
 
@@ -49,11 +32,8 @@ than trust a pre-compaction claim (see `extract-opencode-usage` for the event th
 | sol **(default)** | `openai/gpt-6.1-sol` / `gpt-6.1-sol` | **medium** |
 | luna | `openai/gpt-6-luna` / `gpt-6-luna` | max |
 
-**Default to sol at medium; raise `-e` when capability changes the outcome.** Effort → codex `-e` / opencode
-`--variant`: `low|medium|high|xhigh|max` (codex also `ultra`). Under the ChatGPT oauth
-credential `.usage` `cost` reads 0 — spend is against the subscription; report tokens. Check
-`~/.claude/skills/bees/scripts/codex-usage` before a unit; a STALE reading prints `ROUTE: unknown`
-and exits 2 — it is not a reading.
+Default to sol at medium; raise `-e` only when capability changes the outcome. Effort → codex `-e`
+/ opencode `--variant`: `low|medium|high|xhigh|max` (codex also `ultra`).
 
 ## Worktree or in place — pick by what the unit must verify
 
@@ -62,30 +42,13 @@ and exits 2 — it is not a reading.
 | a diff only (pure C#, docs, data, a tool with its own tests) | **worktree**: `git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD` | you compile/test the diff on the real project afterward — a worktree has no `Library`, so Unity cannot run there |
 | Unity: compile, a suite, the live editor, a prefab/scene, a screenshot | **in place**: `-C ~/code/<project>` | the implementor verifies itself in the editor and reports counts; you re-run once |
 
-An in-place unit **holds that Unity project** exactly like a Claude agent would: one driver per
-compile domain (nono4u/Game compiles game-core and game-build sources through `file:` packages, so
-those three are one domain). Before launching, check nothing else drives the domain — another
-agent's uncommitted edits show up as a Safe-Mode compile error in your run (trial 2, 2026-09-20).
-Edits land on the real branch; the fence and the brief carry the git discipline.
+An in-place unit **holds that Unity project** like a Claude agent would: one driver per compile
+domain (nono4u/Game compiles game-core and game-build sources through `file:` packages, so those
+three are one domain). Before launching, check nothing else drives the domain — another agent's
+uncommitted edits surface as a Safe-Mode compile error in your run. Edits land on the real branch;
+the fence and the brief carry the git discipline.
 
-## Run it — OpenCode
-
-`scripts/opencode-implement` refuses a `-s` resume whose session is pinned to another directory,
-then runs **`scripts/opencode-preflight`** before any round file is written: one `opencode serve`
-is up (started headless if absent), it carries the fence, the plan's repos outside `-C` are inside
-the fence's allows, and `-m` is in `/config/providers`. The server reads its config and model
-catalogue at startup only, so a failed check restarts it when idle (no busy session, no `opencode
-run --attach`/`attach` client) and is refused when busy — a stale catalogue once failed a round's
-first step with `ProviderModelNotFoundError` for an id that existed (2026-09-24). The wrapper then
-runs one round via `--dir` with `--auto`, watches it, and records the final message, session id,
-usage and its own PID (`.pid`). The round runs through `scripts/opencode-round` (shared with
-`opencode-review`), which polls the server's pending-permission list for the session's directory
-every 15 s (local HTTP, no tokens; the list is scoped per directory): an ask for this session means
-the unit reached outside the fence, so it rejects it and stops the run. **A round that did not
-finish** — that ask, an `error` event in the log, a non-zero `opencode run` exit, no final message,
-or a final step that did not end with reason `stop` — gets `Blocked: <reason>` plus
-`BEES: results=<unit>:blocked:-` in its out-file and the wrapper exits 1. Widen the fence or re-brief; never answer an ask by hand in the
-TUI and carry on.
+## Run it
 
 ```bash
 # in place (editor-drive) — the common Unity case
@@ -94,118 +57,46 @@ TUI and carry on.
 # worktree (pure diff)
 git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
 ~/.claude/skills/codex-implementor/scripts/opencode-implement -C "$T/wt-<unit>" -p "$T/brief.md" -u <unit> -o "$W/impl-<unit>-r1.txt"
-# follow-up round, same session, same -C, context < 200k (warm inside 30 min)
-... -p "$T/r2.md" -u <unit> -o "$W/impl-<unit>-r2.txt" -s "$(cat "$W/impl-<unit>-r1.txt.session")"
-# harder unit
-... -e high
+# follow-up round: same session, same -C, context < 200k
+~/.claude/skills/codex-implementor/scripts/opencode-implement -C <same dir> -p "$T/r2.md" -u <unit> \
+  -o "$W/impl-<unit>-r2.txt" -s "$(cat "$W/impl-<unit>-r1.txt.session")"
+# harder unit: add -e high
 ```
 
-- Run via the **Bash tool with `run_in_background: true`**; you are notified on completion.
-  `$T` (briefs, worktrees) is your scratchpad, never `/tmp`. `-o` is taken verbatim and refused if
-  it already holds a round; under bees it is `$W/impl-<unit>-r<N>.txt` with `$W` = `docs/plans/<plan>.work`
-  (bees-watch relies on that `-r<N>` naming). `-u <unit>` is optional: it labels the failed-round
-  `BEES: results=` line. `--repo <dir>` (repeatable) names a sibling repo the unit touches, so
-  preflight checks the fence allows it.
-- Read **`<out-file>`** — only the last message's text, the report ending in the `BEES:` line
-  (`scripts/extract-opencode-final`; earlier steps' narration stays in the `.log`) — and the change (`git -C <dir> diff`, or the commits it
-  reports). The `.log` is a liveness aid only — never read it into context. `.usage` is written
-  by `scripts/extract-opencode-usage` (this channel) or `codex-review`'s
-  `scripts/extract-codex-cli-usage` (CLI fallback) — the single source of truth for this shared
-  by both this skill's wrappers and codex-review's; its `context_tokens` field is the same
-  budget figure regardless of channel, and (OpenCode channel only) a `compacted` field when the
-  server auto-summarized the session (see "Resume or fresh" above). Spend over the round is the
-  sum of the `.log`'s `step_finish` events.
-- **A quiet round is inspected, not waited on.** Run `~/.claude/skills/bees/scripts/bees-watch
-  <out-file>` (`quiet but BUSY (tool running)` = a long tool call, e.g. a Unity suite; `quiet but
-  BUSY (model stream …)` = the model is streaming or stalled — `opencode-round` fails the round with
-  `Blocked: the model stream stalled` after `OPENCODE_ROUND_STALL_MIN` (15) minutes unchanged, and it
-  is resumed with `-s`; `DEAD` = the wrapper exited without `.usage`; `STALE` =
-  no log growth and not BUSY → `pkill -f "opencode run"`, resume the session).
-  `scripts/opencode-activity` prints what a session's latest message is doing (`tool` or
-  `stream <n>`) when checking by hand.
-  `/session/status` is scoped per directory — pass `?directory=<the round's .cwd>` when querying
-  it by hand; without it a busy session in another directory reads as idle.
-- **Watching**: one server serves every repo; the TUI's `/sessions` shows only one directory —
-  the server's start directory unless `--dir` is given, whatever folder you attach from — and
-  never shows child sessions. Use `scripts/opencode-sessions` (cross-repo list, BUSY flag) or
-  `scripts/opencode-sessions --attach` (fzf picker → attach). The wrapper prints the exact
-  `opencode attach <url> --dir <dir> --session <id>` too.
-- Leave `opencode serve` running across rounds and units; the wrapper reuses a live one.
+Then read the out-file (the report ending in its `BEES:` line) and the change (`git -C <dir> diff`,
+or the commits it reports).
 
-**The fence** (`~/.config/opencode/opencode.jsonc`): `--auto` approves every "ask"; only `deny`
-holds. `external_directory` is deny-by-default with `~/code/**`, `~/pixeption/**`, `~/.claude/**`,
-`~/.unity/**`, `~/Library/Logs/Unity/**` and the temp dirs allowed; bash denies `git reset --hard`,
-`git checkout -- <path>`, `git stash`, `git clean`, force push, `rm -rf` on root/home. If a unit
-reports a denied path it legitimately needed, the owner widens the fence; the unit never works
-around it. **The server reads this file once, at startup**: after editing it, `pkill -f "opencode
-serve"` when no session is busy — `opencode-preflight` does this itself when the live server lacks
-the fence, a `--repo` or the model and nothing is busy. Check by hand with
-`scripts/opencode-preflight --no-restart -m <model> -C <dir> [--repo <dir>]...` (exit 0 = ready).
+## What the session loads, and what it doesn't
 
-## Run it — codex CLI fallback
-
-`scripts/codex-implement` hardcodes `< /dev/null`, reads the prompt from a file, writes only the
-final message, records session id and usage, and **refuses a resume older than 30 minutes**.
-
-```bash
-~/.claude/skills/codex-implementor/scripts/codex-implement \
-  -C <dir> -p "$T/brief.md" -o "$W/impl-<unit>-r1.txt" [-e high] [-t fast|standard]
-# in place with the editor: -s danger-full-access ; follow-up within 30 min: -r "$(cat "$W/impl-<unit>-r1.txt.session")"
-```
-
-**The stdin trap.** `codex exec` appends stdin as a `<stdin>` block and, backgrounded, inherits an
-fd that never EOFs — it **hangs forever** at `Reading additional input from stdin...`. Never remove
-the wrapper's `< /dev/null`. Hung or working? after ~60–90 s `<out-file>.log` growing = working;
-stuck on that line = hung → `pkill -f "codex exec"`, resume the session.
-
-## Both channels load CLAUDE.md and skills — but not PATH helpers
-
-A **new** session gets a preamble: read `~/.claude/CLAUDE.md`, every `CLAUDE.md` under the
-directory (root first) and the skills under `~/.claude/skills` / `.claude/skills`. A resumed
-session has it already. Two things the preamble does **not** give it — put them in the brief:
+A **new** session reads `~/.claude/CLAUDE.md`, every `CLAUDE.md` under the directory and the skills
+under `~/.claude/skills` / `.claude/skills`; a resumed one has them already. Put in the brief what
+that does **not** give it:
 
 - **sibling-repo guidance** (`../game-core/Packages/*/CLAUDE.md`) when the unit touches those
-  packages: nothing under the directory points there;
-- the **unity-cli helper scripts by absolute path**: `unity-editor`, `unity-wait`, `unity-suite`,
-  `unity-test` live in `~/.claude/skills/unity-cli/scripts/` and are **not on PATH** (trial 2 lost
-  an attempt on `command not found`).
+  packages — nothing under the directory points there;
+- the **unity-cli helpers by absolute path** — `unity-editor`, `unity-wait`, `unity-suite`,
+  `unity-test` live in `~/.claude/skills/unity-cli/scripts/` and are **not on PATH**.
 
-## The brief — what a Claude agent's brief has, nothing less
+## The brief
 
-The implementor knows only the brief and the repo. Structure (bees §7 shape):
-
-1. **Objective and acceptance criteria** — concrete and checkable: files it should touch, files it
-   must not, the suite filter that proves it, the count it must reach.
-2. **Where it runs** — worktree (cannot run Unity; report what it could not verify) or **in place**
-   (which project it holds alone; the sibling projects it must not touch; that the project
-   compiles at the start).
-3. **Editor-drive contract** (in place): read `~/.claude/skills/unity-cli/SKILL.md` and the
-   project's `.claude/skills/unity-ui*/SKILL.md`; helpers by absolute path; batch `unity test` with
-   an absolute `--output` before any `--`, parse the XML, ignore stdout and the exit code; live
-   editor via `unity-editor up` / `unity command …`; `unity close` before reporting, never kill.
-4. **Commit gate** — "no suite XML in this session → no commit: leave the tree dirty, report
-   `Blocked`" (a luna committed `0f4c12d` on a licensing hang, 22 red tests, 2026-09-19). Stage by
-   explicit path only; the forbidden git commands are listed and denied by the fence.
-5. **Owner WIP paths** never staged, edited or reverted — listed verbatim.
-6. **Blocker cap** — two materially different attempts, then `STOP. Goal / Discovered / Blocker /
-   Tried (both) / Options / Need from orchestrator`; stop immediately on a held resource or a
-   missing decision; no retry loops.
-7. **Style** — short, obviously correct, no restating comments, no unrelated refactors, classify
-   every failure introduced / pre-existing (with evidence) / unknown.
-8. **Return format** — `Outcome / Findings / Changes / Verification (commands verbatim + parsed
-   counts) / Resources (editor state before/after) / Cost / Concerns / Need from orchestrator`.
-   The final message's last line is exactly
-   `BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]`, one entry per
-   `-u` unit, and every commit subject names the unit it serves (bees §7).
+The implementor knows only the brief and the repo. Start from
+[`templates/brief.md`](templates/brief.md) (`cat` it into `$T/brief.md` and fill every `<…>`):
+objective and acceptance, where it runs, the editor-drive contract, the commit gate, owner WIP,
+the blocker cap, style, and the return format with its exact last line. Under bees, follow bees
+"Briefing an agent" too.
 
 Cite the contract file, never paraphrase values from memory. Quote a count only with the command
 that produced it. Never send transcripts or source dumps.
 
 ## Accept on evidence, then a review
 
-After each round: read the report, read the diff, and **re-run the acceptance suite once
-yourself** (or hand it to a `bee-sonnet-medium` holding the resource) — a worktree diff is unverified
-until compiled on the real project; an in-place report is checked, not trusted. Findings go back as
-the next round's prompt in the same session (`-s`). Bees pairs a codex implementor with
-`bee-reviewer` for scores 1–5 or `bee-reviewer-high` for 8–13 (cross-vendor). When it is right: worktree → apply its commits/diff and
-`git worktree remove`; in place → its commits are already on the branch.
+```text
+- [ ] Read the report and the diff.
+- [ ] Re-run the acceptance suite once yourself (or hand it to a bee-sonnet-medium holding the
+      resource): a worktree diff is unverified until compiled on the real project; an in-place
+      report is checked, not trusted.
+- [ ] Findings go back as the next round's prompt in the same session (-s).
+- [ ] Review: under bees, bee-reviewer for scores 1–5, bee-reviewer-high for 8–13.
+- [ ] Land it: worktree → apply its commits/diff, then `git worktree remove`; in place → its
+      commits are already on the branch.
+```
