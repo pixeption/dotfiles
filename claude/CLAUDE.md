@@ -19,6 +19,23 @@ itself.
 - No comments unless the code genuinely needs explaining. Express intent through names instead
   (a `TryTakePooled` helper, not a comment on an inline loop).
 
+## Tests
+
+Tests are durable specifications, not implementation scaffolding.
+
+- Add a persistent test only for observable behavior, a domain invariant, a boundary or failure
+  case, a regression for a real bug, or integration between independently changing components.
+- Don't test accessors, compiler-guaranteed types, private details, trivial forwarding, or
+  behavior another test at the same speed tier already covers.
+- Test through public interfaces; prefer real components or small fakes over mocks.
+- Search for an existing test first and extend or parameterize it rather than adding a near copy.
+- Throwaway tests are fine while iterating; remove them before committing.
+- Delete a test only when this change removed the behavior it covers. Report other obsolete,
+  brittle or duplicate tests instead of deleting them. Never delete or weaken a failing test to
+  get green.
+- A test should survive a refactor that leaves observable behavior unchanged.
+- Run the smallest relevant set while iterating; each repo's CLAUDE.md defines the suites.
+
 ## Owned packages: fix root causes, not workarounds
 
 `game-core` (including `pipeline-ui`) and `game-build` are **mine**, developed in parallel with
