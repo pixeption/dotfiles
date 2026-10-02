@@ -1,6 +1,6 @@
 ---
 name: bee-opus-low
-description: Bees implementor for units scored 1–2 that must drive an editor or hold a resource. Opus 5.5 at low effort.
+description: Bees implementor for units of difficulty 1–2 — mechanical or routine work, however long: suite runs, information gathering, applying specified fixes — that must drive an editor or hold a resource. Opus 5.5 at low effort.
 model: claude-opus-5-5
 effort: low
 memory: project

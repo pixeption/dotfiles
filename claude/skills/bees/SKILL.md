@@ -1,7 +1,7 @@
 ---
 name: bees
 description: >-
-  Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work (1 2 3 5 8 13), route each unit to a cost bucket (codex gpt-6.1-sol medium ≤ 3 / high at 5 / xhigh 8–13; Opus 5.5 low 1–2 / medium 3 / high 5–8 / xhigh 13; Sonnet for support work), pair it with the cross-vendor reviewer, consult astra or Fable on a blocker, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
+  Multi-agent development workflow. You are the orchestrator — the thinker and controller: you frame the problem, set acceptance criteria, decompose and score work by difficulty (1 2 3 5 8 13), route each unit to a cost bucket (codex gpt-6.1-sol medium ≤ 3 / high at 5 / xhigh 8–13; Opus 5.5 low 1–2 / medium 3 / high 5–8 / xhigh 13; Sonnet for support work), pair it with the cross-vendor reviewer, consult astra or Fable on a blocker, and delegate substantial repository work to a small number of budgeted sub-agents, preserving your own context for decisions. Use when the user asks to delegate/orchestrate coding work across agents, or explicitly triggers this skill.
 hooks:
   PostToolUse:
     - hooks:
@@ -86,13 +86,14 @@ path to allow in `opencode.jsonc` — an owner edit; route those units to Claude
 
 ## 1. Size the plan first
 
-Score every item (§3). Then:
+Score every item (§3) — the score is difficulty, not size, so the mode is picked by how many
+units there are and how many sessions they need:
 
-| total score | mode |
+| plan | mode |
 |---|---|
-| ≤ 3 | **No bees.** Do it yourself, or one agent, one brief, no plan checklist, no reviewer unless the change is risky. |
-| 4–13 | **Light.** One implementor, continued across units until its budget is spent; review only risky units; status kept in your final message, no plan checklist. |
-| > 13, or multi-session, or two exclusive resources | **Full.** A plan in the `plan` skill's format, its status and log files, rounds in its `.work/`, review per §8 (§9). |
+| one or two units, one sitting | **No bees.** Do it yourself, or one agent, one brief, no plan checklist, no reviewer unless the change is risky. |
+| a handful of units, one session | **Light.** One implementor, continued across units until its budget is spent; review only risky units; status kept in your final message, no plan checklist. |
+| multi-session, two exclusive resources, or any unit scored ≥ 8 | **Full.** A plan in the `plan` skill's format, its status and log files, rounds in its `.work/`, review per §8 (§9). |
 
 Choosing "full" for a small plan is the error, not the safe default.
 
@@ -150,23 +151,27 @@ Choosing "full" for a small plan is the error, not the safe default.
 
 ## 3. Scoring, buckets, budgets
 
-Score each acceptance item on the `plan` skill's scale (1 2 3 5 8 13, by the work it implies, not
-its wording). Typical cost per unit: 1 → 1–3M, 2 → 3–6M, 3 → 6–12M, 5 → 12–25M, 8 → 25–40M,
-13 → 40–60M. Anything above 13 is split; do not brief it. An item whose score you cannot name is a
-**diagnosis** unit (read-only, because it judges causes and usually needs a run) that returns
-the split and the real scores. One that stays in one area is unscored support work for
-`bee-sonnet-medium`; a broader one is a scored unit (≤ 3 pts) for `bee-opus-medium` or codex sol
-medium. A **scout** is not a
+Score each acceptance item on the `plan` skill's scale (1 2 3 5 8 13). **The score is the
+difficulty of the unit — how much reasoning it takes to get right — and it buys model effort,
+nothing else.** Size does not raise it: a unit that runs suites, collects information, applies a
+specified diff or touches twenty files mechanically is a 1 or 2 and goes to the low-effort row,
+however long it takes. Size is handled separately, by splitting the unit and by the session
+budget (rule 4) — a long unit gets split, not promoted. Anything above 13 is split; do not brief
+it. An item whose score you cannot name is a **diagnosis** unit (read-only, because it judges
+causes and usually needs a run) that returns the split and the real scores. One that stays in one
+area is unscored support work for `bee-sonnet-medium`; a broader one is a scored unit (3) for
+`bee-opus-medium` or codex sol medium. A **scout** is not a
 diagnosis: `bee-scout` (Haiku) answers one enumerable question (callers, writers, call path,
 tests, owners, sites, evidence in a log) with no points, no scores and no judgment. The test: if
 you can write the report's headings before spawning, scout; if the answer needs *why* or
 *which*, diagnosis — which may start with a scout to shrink its brief. Measured: diagnoses ran to
 228k and 276k of context and found defects through dry-runs; Haiku's window is 200k and it
 cannot run anything, so it never diagnoses. A scout question that needs a run goes to
-`bee-sonnet-medium`. A fix round that spans more than one area is routed at its
-score or 8, whichever is higher.
+`bee-sonnet-medium`. A fix round is scored like any unit, by the difficulty of the findings it
+closes, not by how many areas it touches: applying a reviewer's exact fixes is a 1; a finding whose
+cause is still unknown is an 8.
 
-**Buckets** — the score picks the row; inside it, codex is preferred. Codex is always
+**Buckets** — the difficulty picks the row; inside it, codex is preferred. Codex is always
 `codex-implementor` with `-m openai/gpt-6.1-sol` and the row's `-e`:
 
 | scores | codex (preferred) | Claude (when the unit must drive an editor / hold a resource) |
@@ -223,8 +228,8 @@ effort live in the agent files under `~/.claude/agents/` and in the `codex-imple
 
 | | `bee-opus-*`, `bee-sonnet-medium` | `bee-reviewer*`, `bee-consultant` | `bee-scout` | codex session |
 |---|---|---|---|---|
-| points per brief | ≤ 13 (one unit) | one unit's diff / blocker | none (one question) | one unit |
-| points per session | ≤ 26 | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
+| units per brief | one | one unit's diff / blocker | none (one question) | one |
+| units per session | as many as fit under the context lines below | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
 | continue freely below | 120k | 120k | never continued | 120k (`.usage` `context_tokens`) |
 | finish / one recheck below | 200k | 200k | — | 200k |
 | **no new brief at or past** | **200k** | **200k** | any — spawn a new scout | **200k**, or any other directory |
@@ -272,8 +277,10 @@ Rules of continuation:
   cap costs that much again on every single turn.
 - A scout is never continued and never asked a second question. ≤ 2 scouts per unit; a third is
   a diagnosis unit. Log scout tokens on the unit (`[G1] scout ×2 · 90k`); they add no points.
-- Never brief more than the per-brief points at once; two half-briefs to one agent beat one full
-  brief because each report is a checkpoint you can steer from.
+- Never brief more than one unit at once; two half-briefs to one agent beat one full brief
+  because each report is a checkpoint you can steer from. A continued agent keeps its name, so its
+  effort is fixed: a 1-point unit may continue on a `bee-opus-high` that already holds the area,
+  but a 5-point unit never continues on a `bee-opus-low` — spawn the row the difficulty names.
 - A batch step that runs over the agent's cache clock (a full Integration suite on a Claude agent)
   costs it one cold turn afterwards. Accept it; do not split suites to dodge it.
 

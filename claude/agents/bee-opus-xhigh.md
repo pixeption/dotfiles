@@ -1,6 +1,6 @@
 ---
 name: bee-opus-xhigh
-description: Bees implementor for units scored 13 that must drive an editor or hold a resource. Opus 5.5 at xhigh effort.
+description: Bees implementor for units of difficulty 13 that must drive an editor or hold a resource. Opus 5.5 at xhigh effort.
 model: claude-opus-5-5
 effort: xhigh
 memory: project

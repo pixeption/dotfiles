@@ -54,10 +54,21 @@ An audit or review may use `ID | Severity | Item | Status` instead; the ID/ancho
 
 ## Scoring and phases
 
-Score by the work implied, not the wording (Fibonacci): 1 mechanical · 2 small, known files · 3
-locate + implement + test in one area · 5 several files, a fixture, or a live run · 8 cross-area
-or unknown cause · 13 a new surface with migration. Above 13, split. An item whose score you
-cannot name is a read-only diagnosis item (≤ 3) that returns the split.
+Score the **difficulty** of the item — how much reasoning it takes to get right — not its size
+(Fibonacci). Length, file count, suite runs and information gathering do not raise a score; a
+long mechanical task is still a 1.
+
+| Pts | Difficulty |
+|---|---|
+| 1 | mechanical: the change is fully specified; run a suite, collect output, rename, apply a given diff |
+| 2 | routine: known pattern in known files, nothing to design, failure modes obvious |
+| 3 | one design choice inside one area; locate the right place, implement, test |
+| 5 | several interacting parts or a non-obvious invariant; a wrong choice is not caught by the suite |
+| 8 | unknown cause, cross-area trade-offs, or a design with more than one defensible answer |
+| 13 | new architecture or a contract change with migration, where mistakes are expensive to undo |
+
+Above 13, split. Size is handled by splitting and by the session budget, never by the score. An
+item whose score you cannot name is a read-only diagnosis item (3) that returns the split.
 
 A **phase** is what one session should finish: ≈ 5–8 items. Phases are numbered from 1 and follow
 the `Depends` order.
