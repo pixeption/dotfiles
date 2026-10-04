@@ -48,8 +48,8 @@ An audit or review may use `ID | Severity | Item | Status` instead; the ID/ancho
   item takes the next free number, a split takes a suffix (`STEP-03a`).
 - Each item is a `### <ID> · <title>` heading. The checklist link targets GitHub's auto-slug:
   lowercase, spaces → `-`, most punctuation dropped, ` · ` and ` — ` each become `--`.
-- Done: `✅` in the checklist **and** `**✅ Done <date>**` (or `Fixed`) at the end of the heading —
-  which changes the slug, so update the checklist link in the same edit.
+- Done: `✅` in the checklist's Status cell, nowhere else. The heading never changes, so its
+  anchor link stays valid.
 - A re-run of an audit adds a compact "Resolved since previous" table instead of rewriting history.
 
 ## Scoring and phases
@@ -85,7 +85,7 @@ Beside `<plan>.md`, committed with it:
 
 | file | holds | written |
 |---|---|---|
-| `<plan>.status.md` | the handover — overwritten, **≤ 30 lines**; never repeats per-item status (that is the checklist) | on every acceptance and before a handoff |
+| `<plan>.status.md` | the handover — overwritten, **≤ 30 lines**; never repeats per-item status (that is the checklist) | at a pause, before a handoff, and when a resource changes holder — not on every acceptance, which the checklist and the log record |
 | `<plan>.log.md` | one line per event, append-only | as events happen |
 
 `<plan>.status.md` template:
@@ -121,6 +121,8 @@ Beside `<plan>.md`, committed with it:
   anywhere. Each environment line starts with the machine (`scutil --get LocalHostName`) and date: a
   session on the same machine trusts it and skips that check; on another machine it re-runs the
   environment checks only, never the owner's questions.
+- **Resources** keeps one last-verification entry per repo and suite. Older runs live only in the
+  log, so the file stays inside its line limit.
 - A codex session is resumable only on the same server; say so when the plan may move machines.
 - An unknown fact is written `unknown`, never reconstructed.
 

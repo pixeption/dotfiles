@@ -8,9 +8,9 @@ The reviewer is the **other vendor** from the implementor, so no model checks it
 
 | implementor | reviewer | slot |
 |---|---|---|
-| Claude (`bee-opus-*`, `bee-sonnet-medium`) | codex via `codex-review` (`opencode-review -m openai/gpt-6.1-sol -e medium`, CLI fallback) | none (background) |
-| codex, unit scored 1–5 | `bee-reviewer` | one Claude slot |
-| codex, unit scored 8–13 | `bee-reviewer-high` | one Claude slot |
+| Claude (`bee-opus-*`, `bee-sonnet-medium`) | codex via `codex-review` (`opencode-review -m openai/gpt-6.1-sol -e medium`, CLI fallback) | one (background) |
+| codex, unit scored 1–5 | `bee-reviewer` | one |
+| codex, unit scored 8–13 | `bee-reviewer-high` | one |
 
 When codex is out (usage limit, 429), the review goes to the Claude reviewer for its score, and a
 log line says so.
@@ -43,6 +43,16 @@ findings from that diff and its stored rationale, reviews the delta and its depe
 the fix introduced or exposed, and re-reads nothing else. It returns `Fixed / Partial / Open /
 Regressed` id lists plus new findings continuing the id sequence. No sub-agents in a recheck; a
 codex recheck runs `opencode-review --no-subagents`.
+
+Two cases need no reviewer, because checking a small diff against a written expectation costs
+less than a spawn:
+
+- a fix round that applies a reviewer's exact fixes — inspect the fix diff yourself and tick every
+  finding id against its fix text;
+- a unit whose production diff is about five lines or fewer and comes with a fail-before test.
+
+Log either as `review: orchestrator inspection`; a clean inspection closes the loop. Anything
+else, including a fix that departs from the given text, goes to the reviewer.
 
 There is no round cap. For codex, a clean recheck advances to the holistic final pass
 `codex-review` requires, whose `APPROVE` closes the loop; for a Claude reviewer, a clean recheck

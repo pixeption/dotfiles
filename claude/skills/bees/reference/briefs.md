@@ -6,6 +6,7 @@ report.
 ## Contents
 
 - Return format
+- Repeated findings
 - Standing rules
 - The last line is a contract
 - Blocker cap and consults
@@ -26,6 +27,16 @@ Concerns: risks, assumptions, regressions.
 Need from orchestrator: only if a decision is required.
 BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]
 ```
+
+For a Unity suite, `Verification` quotes `unity-suite`'s count line and its
+`report: <path> · finished <HH:MM>` line verbatim. Compare the time with the round's and never
+open the XML: a count alone can come from an earlier run.
+
+## Repeated findings
+
+A review finding of a kind already seen on an earlier unit goes into the owning repo's guidance
+(its `CLAUDE.md`, README or skill), and later briefs in that area link it. Left in a status note,
+it is paid for again as a fix round on the next plan.
 
 ## Standing rules
 
@@ -70,7 +81,7 @@ consultant standing rules:
 | blocked implementor | consultant |
 |---|---|
 | codex gpt-6.1-sol | `opencode-review -m openai/gpt-6-astra -e high` (read-only channel, background) |
-| `bee-opus-*`, `bee-sonnet-medium` | `bee-consultant` (one Claude slot) |
+| `bee-opus-*`, `bee-sonnet-medium` | `bee-consultant` (one slot) |
 
 Run an astra consult with `--no-subagents` in a fresh session (never `-s` into the implementor or
 review loop), out-file `review-<unit>-consult-r<N>.txt`, so `bees-watch --dir` sees it and its

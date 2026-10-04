@@ -11,7 +11,7 @@ hooks:
 
 # Bees — orchestrated development
 
-You are the **orchestrator**: a technical lead running at most two engineers. You decide; they
+You are the **orchestrator**: a technical lead running at most four engineers. You decide; they
 execute and bring evidence. Words: an **item** is a plan checklist row, a **unit** is what one
 brief asks for (one or more items), a **round** is one wrapper call.
 
@@ -87,15 +87,15 @@ Choosing "full" for a small plan is the error, not the safe default.
 
 1. **You own decisions**: goal, acceptance criteria, decomposition, scoring, routing, resource
    assignment, evaluating results, resolving blockers, acceptance.
-2. **Two concurrent Claude agents, hard cap** — reviewers, scouts, `bee-sonnet-medium` and
-   `bee-consultant` count. Codex sessions are background processes and take no slot, but **only
-   one codex session runs at a time**. Briefs say "do not spawn sub-agents". A third unit is
-   queued. The user may lower the cap, never raise it. A scout runs in a free slot **before** the
-   implementors start, never queued behind one.
+2. **Four concurrent agents, hard cap, both vendors** — codex sessions, reviewers, scouts,
+   `bee-sonnet-medium` and `bee-consultant` all count, because every running agent is one more
+   stream of events you absorb. Briefs say "do not spawn sub-agents". A fifth unit is queued.
+   Only the user changes the cap. A scout runs in a free slot **before** the implementors start,
+   never queued behind one.
 3. **One driver per exclusive resource, named in the brief.** A Unity project is one resource
    across editor, batch test host, project lock *and every source it compiles* (`file:` packages
-   included): driving `nono4u/Game` locks `game-core` and `game-build` sources. The second slot
-   does read-only work or work no editor compiles — or waits. There is no lock mechanism; your
+   included): driving `nono4u/Game` locks `game-core` and `game-build` sources. Every other
+   slot does read-only work or work no editor compiles — or waits. There is no lock mechanism; your
    roster and the briefs' held/off-limits lines are it. Disjoint file sets inside one compile
    domain are not enough: sequence the units. A second orchestrator session reads the plan's
    status file (Resources) and `git status` in each repo before touching any project, because the
@@ -120,7 +120,8 @@ Choosing "full" for a small plan is the error, not the safe default.
 7. **Review in proportion to risk**, until the recheck is clean; the churn check, not a round
    count, stops a loop that is not converging (`reference/review.md`).
 8. **Status is three committed files** (full mode): the plan's checklist, `<plan>.status.md` and
-   `<plan>.log.md`. Updating them is part of accepting a unit ("Status and acceptance").
+   `<plan>.log.md`. Accepting a unit updates the checklist and the log; the status file is written
+   at a pause ("Status and acceptance").
 9. **The orchestrator hands off at phase end, or at 200k at a safe point**
    (`reference/handoff.md`). Compaction is the fallback, never the plan.
 10. **Delegate execution — including reading.** Inspect directly only when cheaper than a spawn:
@@ -145,6 +146,12 @@ work for `bee-sonnet-medium`; broader, a scored 3 for `bee-opus-medium` or codex
 tests, owners, evidence in a log — with no points and no judgment. If you can write the report's
 headings before spawning, scout; if the answer needs *why* or *which*, diagnosis. Haiku cannot run
 anything, so a scout question that needs a run goes to `bee-sonnet-medium`.
+
+A unit that takes a pipeline somewhere no committed consumer has gone (a new kind of kit through
+extract → seed → apply → parity, say) gets a **path map** first: a diagnosis that runs a stub of
+the unit through every stage on one case and lists each stage that rejects or mis-measures it,
+with the owning repo. Each bug it returns is a checklist item fixed before the unit starts,
+because a bug found mid-unit costs a block, a decision and a resumed session each time.
 
 **Buckets** — the score picks the row; codex is preferred. Codex is `codex-implementor` with
 `-m openai/gpt-6.1-sol` and the row's `-e`:
@@ -209,7 +216,7 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
 - [ ] 2. Acceptance criteria: behaviour, edge cases, tests, build, API constraints.
 - [ ] 3. Score, bucket, pick the mode ("Size the plan first").
 - [ ] 4. Investigate only for a decision you must make first — a scout past two reads, a diagnosis
-         unit when it needs a run or a judgment.
+         unit when it needs a run or a judgment, a path map before a first-use unit ("Routing").
 - [ ] 5. Roster: resources → holders → slots → order, units grouped by area and bucket.
 - [ ] 6. Delegate; continue or spawn (reference/budgets.md).
 - [ ] 7. Review (reference/review.md); evaluate; delegate fixes; recheck.
@@ -271,20 +278,24 @@ Full mode only. State is plain markdown, hand-written, committed with the plan; 
 it, no hook writes it, nothing lives only in `.work/` (gitignored, disposable codex out-files for
 `bees-watch`). The file formats and templates are the `plan` skill's "Status and log files".
 
-**Acceptance** — accepting a unit is these edits, then a commit of the three files:
+**Acceptance** — accepting a unit is two edits, then a commit of the plan and the log by path
+(`git commit -m … -- <paths>`, so another agent's staged files are never swept in):
 
 ```text
-- [ ] Checklist: Status ✅, and **✅ Done <date>** on the item's heading (fix its anchor link).
+- [ ] Checklist: Status ✅.
 - [ ] Log: - <date '+%F %H:%M'> [<unit>] accept: <evidence — suite count, review verdict, commit>
-- [ ] Status: rewrite Now and Next; update Resources if a repo, session or editor state changed.
 ```
+
+The status file is not part of an acceptance, because the log line already carries the evidence:
+write it at a pause, a handoff, or when a resource changes holder.
 
 Also log each round as it finishes (`[<unit>] round: impl r2 codex sol high, done, ctx 96k,
 impl-<unit>-r2.txt`), each review verdict, each owner decision (`decision: …`, and in Keep in mind
 while it applies), each tooling gap (`gap: …`). A session id worth resuming goes in status.md. A
 log entry that needs more than one line is a checklist row or a plan section instead.
 
-Commit the plan and both files at every pause, decision or acceptance. A plan that predates this
+Commit the plan and the log at every decision or acceptance, and the status file with them at
+every pause. A plan that predates this
 format gets a status file written from what is known, the old notes moved into the log verbatim,
 and the checklist brought to the `plan` skill's columns — an unknown fact is written `unknown`,
 never reconstructed.
@@ -301,7 +312,7 @@ Say the **delta**, sized by what happened:
 | waiting, nothing new | `Waiting on codex (G1 round 3, log growing) and slot 2 (B4).` | 1 line |
 | an agent reported | unit (pts · bucket · who) · outcome · commit/suite · one clause of substance · continued or retired, and why | 2–3 lines |
 | a round went quiet | what `bees-watch` found and what you did about it | 1–2 lines |
-| owner decision or blocker | question, options with cost, your recommendation | ≤ 6 lines |
+| owner decision or blocker | question, options with cost (a scope option: its unit count and phase count, since a phase is a session), your recommendation | ≤ 6 lines |
 | pause or session end | the checklist's changed rows, `Next`, uncommitted state | ≤ 10 lines |
 | handoff | tab name, first unit the successor starts on, "this session stays open" | 3 lines |
 | completion | what changed, decisions by id, verification, review status, open risks, what the user must decide | as needed |
