@@ -48,9 +48,9 @@
 #       is older than 30 minutes: codex's prompt cache TTL is 30m, so resuming after that re-pays
 #       the whole context at full price — start a new session instead (omit -r).
 #
-# A NEW session gets a preamble prepended to the brief: read ~/.claude/CLAUDE.md and every CLAUDE.md
-# in the workdir, and treat ~/.claude/skills + <workdir>/.claude/skills as available skills — the
-# same guidance a Claude session loads. CLAUDE.md is also registered as codex's project-doc fallback
+# A NEW session gets a preamble prepended to the brief: read ~/.claude/CLAUDE.md, the root CLAUDE.md
+# and the nearer ones on the path to what it edits, and a skill only when the brief names it — every
+# read stays in the session's context for each later turn. CLAUDE.md is also registered as codex's project-doc fallback
 # (loaded natively when no AGENTS.md exists). A resumed session already has all of that in context.
 #
 # Run it via the Bash tool with run_in_background:true; you're notified on completion, then read the
@@ -109,10 +109,7 @@ fi
 
 outfile="$(mkdir -p "$(dirname "$outfile")" && cd "$(dirname "$outfile")" && pwd -P)/$(basename "$outfile")"
 [ ! -e "$outfile" ] && [ ! -e "$outfile.log" ] || { echo "codex-implement: $outfile already holds a round; pick a new -o" >&2; exit 2; }
-claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
-preamble="Before acting, read ~/.claude/CLAUDE.md, then every CLAUDE.md in this repository (root first, nearer ones apply to their subtree):
-$claude_docs
-Follow them as user and repository guidance. Skills are available at ~/.claude/skills/<name>/SKILL.md and $workdir/.claude/skills/<name>/SKILL.md; when the task names one or clearly matches one's description, read its SKILL.md completely before acting.
+preamble="Before acting, read ~/.claude/CLAUDE.md and $workdir/CLAUDE.md. A nearer CLAUDE.md applies to its subtree: read the ones on the path to each directory you edit, and no others. Follow them as user and repository guidance. Read a skill file only when the brief names it, and only the part it names.
 
 ---
 

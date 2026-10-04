@@ -2,20 +2,21 @@
 
 ## Objective and acceptance
 <what to build or change>. Done when: <the suite filter that proves it> reaches <count>.
-Touch: <files>. Do not touch: <files>.
+Touch: <files, with line ranges where the change is local>. Do not touch: <files>.
+
+## Context
+<the plan section, pasted here — never "read section X". A contract from a spec or doc is quoted,
+or cited as `path:start-end`. No whole documents.>
 
 ## Where it runs
 <worktree: you cannot run Unity here; report exactly what you could not verify.>
 <in place: you alone drive <project>. Do not run or edit anything against <sibling projects>.
 The project compiles at the start.>
-Read first: <sibling-repo CLAUDE.md files the unit touches, by absolute path>.
+Read first: <the CLAUDE.md of the one sibling package the unit edits, by absolute path, or "nothing">.
 
 ## Editor-drive contract (in place only)
-Read ~/.claude/skills/unity-cli/SKILL.md and <project>/.claude/skills/unity-ui*/SKILL.md. The
-helpers are not on PATH: run them by absolute path from ~/.claude/skills/unity-cli/scripts/
-(unity-editor, unity-wait, unity-test, unity-suite). Batch `unity test` takes an absolute
-`--output` before any `--`; parse the XML, ignore stdout and the exit code. Live editor via
-`unity-editor up` / `unity command …`. `unity close` before reporting; never kill the editor.
+<`cat` templates/editor-card.md here and fill <project>. A `ui_*` unit adds the one skill section
+it needs as `path:start-end`.>
 
 ## Commit gate
 No suite XML produced in this session → no commit: leave the tree dirty and report `Blocked`.

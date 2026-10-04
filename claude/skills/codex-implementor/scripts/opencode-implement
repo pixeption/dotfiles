@@ -43,9 +43,9 @@
 #    `BEES: results=<unit>:blocked:-` for each unit in its out-file, and the wrapper exits 1, so
 #    the notification never reads it as done.
 #
-# A NEW session (no -s) gets a preamble prepended: read ~/.claude/CLAUDE.md and every CLAUDE.md in
-# the worktree, and the skills folders — so opencode loads the same guidance a Claude/codex session
-# does. A resumed session already has that in context.
+# A NEW session (no -s) gets a preamble prepended: read ~/.claude/CLAUDE.md, the root CLAUDE.md and
+# the nearer ones on the path to what it edits, and a skill only when the brief names it — every
+# read stays in the session's context for each later turn. A resumed session already has them.
 #
 # In a worktree opencode cannot run Unity or your build (no Library); validate the diff yourself.
 # In place it drives the live editor through the `unity` CLI and verifies itself.
@@ -128,10 +128,7 @@ outfile="$(mkdir -p "$(dirname "$outfile")" && cd "$(dirname "$outfile")" && pwd
 echo $$ > "${outfile}.pid"
 echo "opencode-implement: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
 
-claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
-preamble="Before acting, read ~/.claude/CLAUDE.md, then every CLAUDE.md in this repository (root first, nearer ones apply to their subtree):
-$claude_docs
-Follow them as user and repository guidance. Skills are available at ~/.claude/skills/<name>/SKILL.md and $workdir/.claude/skills/<name>/SKILL.md; when the task names one or clearly matches one's description, read its SKILL.md completely before acting.
+preamble="Before acting, read ~/.claude/CLAUDE.md and $workdir/CLAUDE.md. A nearer CLAUDE.md applies to its subtree: read the ones on the path to each directory you edit, and no others. Follow them as user and repository guidance. Read a skill file only when the brief names it, and only the part it names.
 
 ---
 

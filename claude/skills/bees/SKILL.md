@@ -111,7 +111,7 @@ Choosing "full" for a small plan is the error, not the safe default.
    Read `reference/budgets.md` before any continue-or-spawn decision.
 5. **Evidence, not claims.** Completion is a suite count, a real run, a byte-identity check. A
    codex diff from a **blind worktree** is unverified until you (or a `bee-sonnet-medium` holding
-   the resource) compile and test it; codex **in place** with the `unity-cli` skill named verifies
+   the resource) compile and test it; codex **in place** with the editor card in its brief verifies
    itself, to the same standard. **No report, no commit**: every brief states that if the
    acceptance suite produced no XML in the session, the agent leaves the tree dirty, reports
    `Blocked`, and the orchestrator validates.
@@ -173,11 +173,8 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
   under an OS sandbox. Same models; the choice is harness.
 - **Codex can drive the live editor.** Give it the unit **in place** in the real project (a
   worktree would need its own Library) with `opencode-implement -C <real checkout>`, holding that
-  project's slot, and **name the `unity-cli` skill in the brief** with the helpers by absolute path
-  (`~/.claude/skills/unity-cli/scripts/unity-editor`) — without it, codex cannot know the command
-  surface exists. Also name the skill files nothing under the project loads for it
-  (`~/.claude/skills/unity-cli/SKILL.md`, the project's `.claude/skills/unity-ui*/SKILL.md`, the
-  sibling `CLAUDE.md`s).
+  project's slot, and **put the editor card in the brief** (codex-implementor "What the session
+  loads, and what it doesn't") — without it, codex cannot know the command surface exists.
 - **Claude instead of codex** only when the unit needs judgment a batch run cannot settle (a
   screenshot read, a live Play-mode check), or codex is out of usage. Before routing for browser
   judgment, verify the assigned bee can open the target with a browser tool; otherwise make the
@@ -240,12 +237,12 @@ both are there, and the last-line contract); "do not spawn sub-agents".
   **Cite the contract file, never paraphrase values from memory.** Quote a count only with the
   command that produced it; take timestamps from `date +%H:%M`. Never send transcripts or source
   dumps.
-- A **codex** brief also names the sibling-repo `CLAUDE.md` files the unit touches (nothing under
-  the worktree points there) and runs with `-C` set to the repo the unit edits — the session is
+- A **codex** brief gives passages, not documents (codex-implementor "What the session loads, and
+  what it doesn't"), and runs with `-C` set to the repo the unit edits — the session is
   pinned to it for life. Pass every other repo it names, a read-only one too, as an absolute
   `--repo` to the OpenCode wrapper so preflight checks the fence allows it.
 - A **worktree** codex brief states it cannot run Unity and must report what it could not verify;
-  an **in-place** codex brief names the `unity-cli` skill and requires live verification.
+  an **in-place** codex brief carries the editor card and requires live verification.
 - Every brief with a live check says: never substitute an emulation for it without saying so in
   `Outcome`.
 

@@ -68,20 +68,26 @@ or the commits it reports).
 
 ## What the session loads, and what it doesn't
 
-A **new** session reads `~/.claude/CLAUDE.md`, every `CLAUDE.md` under the directory and the skills
-under `~/.claude/skills` / `.claude/skills`; a resumed one has them already. Put in the brief what
-that does **not** give it:
+A **new** session reads `~/.claude/CLAUDE.md`, the directory's root `CLAUDE.md` and the nearer ones
+on the path to what it edits. It opens a skill only when the brief names it. A resumed session has
+them already. Everything it reads stays in its context for every later turn, so the brief gives it
+**passages, not documents**:
 
-- **sibling-repo guidance** (`../game-core/Packages/*/CLAUDE.md`) when the unit touches those
-  packages — nothing under the directory points there;
-- the **unity-cli helpers by absolute path** — `unity-editor`, `unity-wait`, `unity-suite`,
-  `unity-test` live in `~/.claude/skills/unity-cli/scripts/` and are **not on PATH**.
+- the **plan section pasted in**, never "read section X" — the read tool has no section mode, so
+  the whole plan is read;
+- a spec or doc contract **quoted, or cited as `path:start-end`**, and task files with line ranges
+  where the change is local;
+- the **`CLAUDE.md` of the one sibling package** the unit edits
+  (`../game-core/Packages/<package>/CLAUDE.md`) — nothing under the directory points there;
+- for an in-place unit, the **editor card** ([`templates/editor-card.md`](templates/editor-card.md)):
+  the unity-cli helpers by absolute path and their rules, in place of the whole `unity-cli` skill.
 
 ## The brief
 
 The implementor knows only the brief and the repo. Start from
 [`templates/brief.md`](templates/brief.md) (`cat` it into `$T/brief.md` and fill every `<…>`):
-objective and acceptance, where it runs, the editor-drive contract, the commit gate, owner WIP,
+objective and acceptance, context, where it runs, the editor-drive contract (`cat` the editor
+card into it), the commit gate, owner WIP,
 the blocker cap, style, and the return format with its exact last line. Under bees, follow bees
 "Briefing an agent" too.
 
