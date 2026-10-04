@@ -1,0 +1,6 @@
+{
+  "name": "bees-budget",
+  "version": "0.1.0",
+  "description": "Refuses SendMessage to a bee past its context budget or with a cold cache (bees reference/budgets.md)",
+  "types": "./types/index.d.ts"
+}

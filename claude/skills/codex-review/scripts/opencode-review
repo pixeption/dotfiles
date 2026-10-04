@@ -44,7 +44,8 @@
 #                   ~/.config/opencode/opencode.jsonc); both deny edit, and review-followup also
 #                   denies task so later rounds cannot spawn sub-agents.
 #   -m  provider/model (default openai/gpt-6.1-sol). -e  effort -> --variant (default medium).
-#   -s  resume a session id (from a previous <out-file>.session). No TTL — server-held.
+#   -s  resume a session id (from a previous <out-file>.session). No TTL — server-held. Refused
+#       past the bees budget (opencode-budget).
 #   --port  server port (default 4096). --url overrides the base URL. --title  TUI session title.
 set -euo pipefail
 
@@ -98,6 +99,7 @@ if [ -n "$session" ]; then
     echo "opencode-review: session ${session} is pinned to ${pinned}, not ${workdir} — start a new session for this directory" >&2
     exit 1
   }
+  "$HOME/.claude/skills/codex-implementor/scripts"/opencode-budget "$session" "$promptfile" || exit 1
 fi
 outfile="$(mkdir -p "$(dirname "$outfile")" && cd "$(dirname "$outfile")" && pwd -P)/$(basename "$outfile")"
 [ ! -e "$outfile" ] && [ ! -e "$outfile.log" ] || { echo "opencode-review: $outfile already holds a round; pick a new -o" >&2; exit 2; }

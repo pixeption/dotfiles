@@ -8,6 +8,10 @@
 !/statusline.sh
 !/skills/
 !/agents/
+!/mods/
+
+# typings the engine lays beside a loaded mod on every load
+/mods/*/.claude-plugin/types/
 
 # local cache of the built-in anthropic-skills bundle, regenerated on demand
 /skills/synced/

@@ -14,7 +14,7 @@ One rule for both vendors (SKILL.md "Rules", the session budget), plus each vend
 |---|---|---|---|---|
 | units per brief | one | one unit's diff / blocker | none (one question) | one |
 | units per session | as many as fit under the context lines below | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
-| continue freely below | 120k | 120k | never continued | 120k (`.usage` `context_tokens`) |
+| continue freely below | 160k | 160k | never continued | 160k (`.usage` `context_tokens`) |
 | finish / one recheck below | 200k | 200k | — | 200k |
 | **no new brief at or past** | **200k** | **200k** | any — spawn a new scout | **200k**, or any other directory |
 | **cache warm for** | **5 min** idle | **5 min** idle | irrelevant | **30 min** idle |
@@ -54,8 +54,9 @@ price instead of reading it at 0.1×.
   means the server summarized the session at ~270k: record the smaller `context_tokens` as-is, but
   treat the agent as freshly spawned for recall (codex-implementor's `extract-opencode-usage`).
 - **Hand over instead of continuing** when a resource holder must be retired. Its last message is
-  "stop at a safe point; write the state a successor needs (suite command + last green count,
-  uncommitted files, what is half-done, resources/Play-mode state) in your report"; you put its
+  "[bees:handover] stop at a safe point; write the state a successor needs (suite command + last
+  green count, uncommitted files, what is half-done, resources/Play-mode state) in your report" —
+  the prefix lets it past the 200k refusal (`bees-budget` mod, `opencode-budget`); you put its
   facts in status.md's Now/Resources. The fresh agent's brief carries that text; it does not
   re-derive the area from the transcript.
 - **Scouts** are never continued and never asked a second question. ≤ 2 scouts per unit; a third

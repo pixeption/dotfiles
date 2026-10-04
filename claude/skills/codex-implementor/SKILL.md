@@ -21,7 +21,7 @@ gating. The **codex CLI** (`scripts/codex-implement`) is the fallback, only when
 start or the unit must run under an OS sandbox: [`reference/codex-cli.md`](reference/codex-cli.md).
 
 **Resume or fresh** (bees "Rules", the session budget): read `context_tokens` from `.usage`. Below
-120k resume freely; 120–200k only for a short recheck in the same files; at 200k, or for **any
+160k resume freely; 160–200k only for a short recheck in the same files; at 200k, or for **any
 other directory**, start a new session — a session is pinned to the directory it was created in,
 and a brief for another repo trips the fence instead of running.
 

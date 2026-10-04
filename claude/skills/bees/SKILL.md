@@ -25,7 +25,7 @@ What the rules below protect:
 - **Capability is bought per unit.** Most units are bounded and sol at medium handles them; higher
   effort only where it changes the outcome, a stronger model only as a consultant on a blocker.
 - **Neither a spawn nor a resume is free.** A fresh agent pays ~40–60k of onboarding; a resumed
-  one re-reads its session every step. Below ~120k the resume wins, past ~200k the spawn does.
+  one re-reads its session every step. Below ~160k the resume wins, past ~200k the spawn does.
 - **Rework is the second cost** (a review → fix → recheck round is 10–15M), **the orchestrator's
   own context the third** — compaction loses things nobody chose; a curated handoff does not.
 - **A blocked agent costs the owner's wall-clock**, so a background task is inspected, never
@@ -101,13 +101,15 @@ Choosing "full" for a small plan is the error, not the safe default.
    status file (Resources) and `git status` in each repo before touching any project, because the
    slot table is per plan. A codex worktree is outside every compile domain; **validating its
    diff** against the real project is not.
-4. **Session budget, both vendors: continue below 120k, finish below 200k, retire at 200k.** The
+4. **Session budget, both vendors: continue below 160k, finish below 200k, retire at 200k.** The
    figure is the harness's token count on a Claude agent's final notification, or `context_tokens`
-   in the codex wrapper's `.usage` — never the agent's own estimate, which runs low. Between 120k
+   in the codex wrapper's `.usage` — never the agent's own estimate, which runs low. Between 160k
    and 200k an agent may finish its unit or do one short recheck in the same files. At 200k it
    gets no new brief: spawn fresh and hand the resource over. **A unit in a different repo or area
    always gets a fresh session**: the old context is dead weight, and a codex session is pinned to
-   the directory it was created in. Check the figure before every SendMessage or `-s` resume.
+   the directory it was created in. Check the figure before every SendMessage or `-s` resume;
+   the `bees-budget` mod shows it above the prompt and enforces it on SendMessage to a `bee-*`
+   agent, `opencode-budget` on `-s`.
    Read `reference/budgets.md` before any continue-or-spawn decision.
 5. **Evidence, not claims.** Completion is a suite count, a real run, a byte-identity check. A
    codex diff from a **blind worktree** is unverified until you (or a `bee-sonnet-medium` holding

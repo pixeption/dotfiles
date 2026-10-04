@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Refuses to resume an OpenCode session past the bees session budget (bees reference/budgets.md):
+# context at or past the retire line, or a cold cache at or past the cold limit. The Claude side is
+# the `bees-budget` mod's; this is the codex side, run by opencode-implement and opencode-review
+# (codex-review) on every -s, since only the wrapper sees the resolved session id.
+#
+# Reads the session's last completed assistant message from OpenCode's db: `tokens.total` is the
+# figure extract-opencode-usage reports as context_tokens, `time.completed` starts the cache clock.
+# A session with no completed message yet passes. A prompt starting with [bees:handover] passes:
+# it is the retirement message the budget asks for.
+#
+# Usage: opencode-budget <session-id> <prompt-file>     exit 1 with the reason on stderr
+set -euo pipefail
+sid="${1:?usage: opencode-budget <session-id> <prompt-file>}"
+promptfile="${2:?usage: opencode-budget <session-id> <prompt-file>}"
+retire_at=200000                    # bees: no new brief at 200k
+cold_limit=100000                   # bees: past the clock, continue only under ~100k
+cache_ttl_ms=$((30 * 60 * 1000))    # codex's cache clock is 30 minutes
+
+[ "$(head -c 15 "$promptfile")" = "[bees:handover]" ] && exit 0
+[[ "$sid" =~ ^[A-Za-z0-9_]+$ ]] || { echo "opencode-budget: bad session id '$sid'" >&2; exit 2; }
+command -v sqlite3 >/dev/null 2>&1 || { echo "opencode-budget: 'sqlite3' not on PATH (brew install sqlite)" >&2; exit 127; }
+db="${XDG_DATA_HOME:-$HOME/.local/share}/opencode/opencode.db"
+[ -f "$db" ] || { echo "opencode-budget: no db at $db" >&2; exit 2; }
+
+row="$(sqlite3 -separator ' ' "$db" "
+  select coalesce(json_extract(data, '\$.tokens.total'),
+           ifnull(json_extract(data, '\$.tokens.input'), 0) + ifnull(json_extract(data, '\$.tokens.output'), 0)
+           + ifnull(json_extract(data, '\$.tokens.reasoning'), 0) + ifnull(json_extract(data, '\$.tokens.cache.read'), 0)
+           + ifnull(json_extract(data, '\$.tokens.cache.write'), 0)),
+         json_extract(data, '\$.time.completed')
+  from message
+  where session_id = '$sid' and json_extract(data, '\$.role') = 'assistant'
+    and json_extract(data, '\$.time.completed') is not null
+    and json_extract(data, '\$.error') is null
+  order by time_created desc limit 1")"
+[ -n "$row" ] || exit 0
+read -r ctx completed <<< "$row"
+idle_ms=$(( $(date +%s) * 1000 - completed ))
+
+if (( ctx >= retire_at )); then
+  echo "opencode-budget: session $sid is at $((ctx / 1000))k context, past the $((retire_at / 1000))k retire line — start a fresh session and hand over (bees reference/budgets.md); a retirement brief may start with [bees:handover]" >&2
+  exit 1
+fi
+if (( idle_ms > cache_ttl_ms && ctx >= cold_limit )); then
+  echo "opencode-budget: session $sid's cache is cold (idle $((idle_ms / 60000))m, clock $((cache_ttl_ms / 60000))m) at $((ctx / 1000))k context, at or past $((cold_limit / 1000))k — start a fresh session (bees reference/budgets.md)" >&2
+  exit 1
+fi
