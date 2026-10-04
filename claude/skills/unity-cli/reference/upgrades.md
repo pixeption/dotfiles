@@ -14,17 +14,17 @@ commands.
   descriptor JSON directly (`port`/`evalToken` are stable) rather than referencing those types.
 - Runtime Pipeline/Roslyn are excluded from non-development builds unless
   `ENABLE_RUNTIME_PIPELINE` is defined; the attributes remain usable with no reload effect.
-- Upgrade the CLI with plain `unity self-update`, then `unity --version` / `unity self-update
-  --changelog` (`--check`, `--rollback`). `unity pipeline upgrade --project-path <dir>` updates the
-  package separately and needs an Editor restart to resolve. After either, recheck the affected
-  sections of this skill against `--help` and the package
-  [changelog](https://docs.unity3d.com/Packages/com.unity.pipeline@0.8/changelog/CHANGELOG.html),
-  and update the version line at the top.
-- **Never run `unity skill install claude-code`**: it writes the CLI's embedded skill to
-  `~/.claude/skills/unity-cli/` and overwrites this file. `unity skill show` prints that embedded
-  skill to stdout; it describes the CLI binary, not the project's Pipeline package, so read it
-  after a CLI upgrade and read the resolved package's `Documentation~`/CHANGELOG after a package
-  upgrade.
+- Upgrades run through the `unity-cli-upgrade` skill ("Upgrade the CLI", "Upgrade the Pipeline
+  package", "Revise the unity-cli skill"): the CLI and the package version separately, a package
+  upgrade needs an Editor restart to resolve, and this skill is revised in the same pass.
+  `unity self-update` also takes `--check`, `--changelog` and `--rollback`.
+- **Never run `unity skill install claude-code` or `unity skill refresh`**: they write the CLI's
+  embedded skill to `~/.claude/skills/unity-cli/` and overwrite this skill. **Nor `unity setup
+  claude`**: it installs Unity's Claude Code plugin, whose own Unity skills would load beside this
+  one. Read the embedded skill without installing it: `unity skill show` prints its SKILL.md,
+  `--list` names its files and `--path references/<file>.md` prints one. It describes the CLI
+  binary, not the project's Pipeline package, and its claims need the same verification as a
+  changelog.
 - `unity open --wait` (macOS/Linux) blocks until the editor exits and reports a crash or licensing
   failure as exit 6: for CI, not a live session.
 - `unity mcp` survives recompiles (the auth token persists across domain reloads); editor restarts

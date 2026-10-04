@@ -27,9 +27,11 @@ counts and compile state; compile errors from before capture started are backfil
 `console_status` gives counts without entries; `clear_console` clears both buffers. There is no
 `read_console` or `get_console_logs`; guessing returns `400 Command Not Found`.
 
-To browse the live command catalog by area, `GET /api/commands?detail=tags` (the direct HTTP escape hatch in `editor-api.md`)
-returns one row per tag with a count, then `?tag=<tag>` lists that area. No `unity list` flag
-surfaces it.
+To browse the live command catalog, `unity command --project-path <dir>` with no command name
+lists the editor's tags with a command count each; `--tag <tag>` lists that area's commands and
+their parameters, `--query <term>` filters by substring of name, description or tag, and
+`--detail full` returns the whole catalog. Under `--format json` the rows are `data.tags`
+(`tag`, `count`) for the tag index and `data.commands` otherwise.
 
 ## `eval` / `eval_file` / `run_script`
 
@@ -60,3 +62,15 @@ members, `on_met.capture` to screenshot the frame it fires). Synchronous `wait_f
 queue for its whole duration, so use it only for a short wait that nothing you still have to send
 can satisfy; otherwise `--async true` and poll `wait_status`. Async waits don't survive a domain
 reload.
+
+**Prove Play Mode is advancing before trusting what you observe in it.** `editor_status:
+playing` and a captured frame both look healthy on a game frozen at frame 1. Once the editor
+answers again after `editor_play`:
+
+```bash
+unity command wait_for --project-path <dir> --result-only -- \
+  --condition '{"member":"UnityEngine.Time.frameCount","op":"changed"}' --timeout_s 10
+```
+
+`met: true` with `framesObserved` above 0 is the proof; `timedOut: true` means a frozen player
+loop, so check `set_autotick` first.

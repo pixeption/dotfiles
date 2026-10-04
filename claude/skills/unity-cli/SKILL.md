@@ -6,7 +6,7 @@ description: >-
 
 # Unity CLI + Unity Pipeline
 
-> Written for **Unity CLI `1.0.0-beta.11`**, **Pipeline `0.8.0-exp.1`**, **Unity `6000.6.2f1`**.
+> Written for **Unity CLI `1.0.0-beta.12`**, **Pipeline `0.8.0-exp.1`**, **Unity `6000.6.2f1`**.
 > Both tools are pre-release and flags move on every upgrade: after any `unity self-update` or
 > `unity pipeline upgrade`, trust `unity <cmd> --help`, `unity commands --format json` and
 > `unity list --project-path <dir> --format json` over this file, and fix the file.
@@ -25,7 +25,8 @@ package is in the target project. Updating the CLI does not update the package, 
 
 Everyday verbs: `status`, `list`, `open`, `close`, `recompile`, `test`, `run`, `command` (alias
 `cmd`), `job`. `unity --help` has the rest (`assets`, `docs`, `pipeline`, `mcp`, `editors`,
-`config`, `watch`, `shell`, …). This repo builds through `game-build`, not `unity build`.
+`config`, `watch`, `shell`, …), and `unity commands --grep <pattern>` finds a CLI command by
+keyword across names, descriptions and options. This repo builds through `game-build`, not `unity build`.
 Version-matched API docs: `unity docs GameObject --url` from the project (`--manual`, `--search`,
 `--editor-version <v>`).
 
@@ -114,6 +115,13 @@ active; report the active scene and its `rootCount`. Why each step exists:
   while the editor is still importing/compiling reports `starting` and the command exits non-zero.
   `unity-wait ready` polls `editor_status` itself. An empty `unity status` still needs diagnosis:
   `unity pipeline list` can show a running Editor whose Pipeline server is unreachable.
+- **`unity status --until-ready` is not a substitute for `unity-wait ready`.** It blocks until a
+  matching editor reports `ready` (`--timeout`, default 300 s, exit 6 at the deadline), but it
+  cannot see Safe Mode, and right after `editor_play` it returns `ready` at once while the next
+  `unity command` still fails with a bare network error.
+- **Never `unity open` a project that may already be open.** It does not check: it starts a second
+  editor process on the same project, without `-automated`, and reports success with a
+  `launchedPid`. `unity-editor up` checks `unity status` first.
 - **`set_autotick --enable true`**: an unfocused GUI editor throttles its update loop, so
   `recompile`/`run_tests` make no progress, a full-deadline symptom with no editor activity. Batch
   editors always tick.
@@ -273,6 +281,7 @@ unity test --mode EditMode <project> --filter <filter> --output /abs/path/report
 | 4 | precondition not met (no license, floating server not configured) |
 | 6 | editor process failure; `recompile`: compile failure |
 | 7 | service unreachable |
+| 9 | `install`, `install-modules`, `projects require` with `--no-wait`/`--wait-timeout`: another install holds the lock (`INSTALL_LOCK_BUSY`); retry later |
 | 130 | user cancelled |
 | 143 | SIGTERM |
 
@@ -300,5 +309,5 @@ Read the one you need when the task reaches it:
 - [`reference/editor-api.md`](reference/editor-api.md) — before a destructive or non-undoable
   tool (`confirm`/`dry_run`, `save_all`, Play Mode as a scoped borrow), the direct HTTP API, code
   reload without a domain reload, or capturing the game view.
-- [`reference/upgrades.md`](reference/upgrades.md) — before or after `unity self-update` or
-  `unity pipeline upgrade`, or when an asmdef declares Pipeline commands.
+- [`reference/upgrades.md`](reference/upgrades.md) — before an upgrade (the `unity-cli-upgrade` skill
+  runs it), or when an asmdef declares Pipeline commands.

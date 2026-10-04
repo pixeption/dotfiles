@@ -4,7 +4,10 @@
 
 - `.unitypackage`: `unity assets inspect <file>` before import; `unity assets import <file>
   --project <dir>`; `unity assets export Assets/Art --output /abs/art.unitypackage --project <dir>`
-  (dependencies included unless `--no-dependencies`). These spawn batch Editors: honour project
+  (dependencies included unless `--no-dependencies`). Export signs the package for an organization,
+  so it needs a signed-in CLI and an org (`--cloud-org <id-or-name>`, `UNITY_CLOUD_ORG` or the
+  `unity cloud org set-default` default) and fails before the Editor starts without them;
+  `--no-sign` writes an unsigned package. These spawn batch Editors: honour project
   ownership. Note the flag: `unity assets` takes `--project`, not the `--project-path` every
   live-editor command takes.
 - `find_assets --type` matches the **main** asset type: a sprite-mode texture is `Texture2D`, not
