@@ -108,10 +108,7 @@ implementor="$HOME/.claude/skills/codex-implementor/scripts"
   --serverlog "${outfile%/*}/opencode-serve-${port}.log" || exit 1
 echo "opencode-review: WATCH LIVE ->  opencode attach ${url} --dir ${workdir}   (the TUI lists sessions per --dir; add --session <id> from the .session file to jump straight in)" >&2
 
-claude_docs="$(find "$workdir" -name CLAUDE.md -not -path '*/Library/*' -not -path '*/node_modules/*' 2>/dev/null | sort)"
-preamble="You are a READ-ONLY reviewer: raise findings, never edit files. Before reviewing, read ~/.claude/CLAUDE.md, then every CLAUDE.md in this repository (root first, nearer ones apply to their subtree):
-$claude_docs
-Follow them as user and repository guidance. Skills are available at ~/.claude/skills/<name>/SKILL.md and $workdir/.claude/skills/<name>/SKILL.md; when the task names one or clearly matches one's description, read its SKILL.md completely before acting.
+preamble="You are a READ-ONLY reviewer: raise findings, never edit files. Before reviewing, read ~/.claude/CLAUDE.md and $workdir/CLAUDE.md. A nearer CLAUDE.md applies to its subtree: read the ones on the path to each file under review, and no others. Follow them as user and repository guidance. Read a skill file only when the brief names it, and only the part it names.
 
 ---
 
