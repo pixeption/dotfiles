@@ -74,7 +74,7 @@ if [[ ! -s "$REPORT" ]]; then
 fi
 
 python3 - "$REPORT" <<'PY'
-import sys, xml.etree.ElementTree as ET
+import os, sys, time, xml.etree.ElementTree as ET
 
 root = ET.parse(sys.argv[1]).getroot()
 run = root if root.tag == "test-run" else root.find(".//test-run")
@@ -82,6 +82,8 @@ attrs = run.attrib if run is not None else root.attrib
 total, passed = attrs.get("total", "?"), attrs.get("passed", "?")
 failed, skipped = attrs.get("failed", "0"), attrs.get("skipped", "0")
 print(f"{passed}/{total} passed, {failed} failed, {skipped} skipped")
+finished = time.strftime("%H:%M", time.localtime(os.path.getmtime(sys.argv[1])))
+print(f"report: {sys.argv[1]} · finished {finished}")
 if total == "0":
     print("0 tests ran: the filter or assembly list matched nothing", file=sys.stderr)
     sys.exit(2)

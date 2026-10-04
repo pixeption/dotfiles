@@ -225,7 +225,8 @@ comma in either and exits 2 when the report holds 0 tests, since `unity test` it
 A Play Mode session poisons a live editor for full-suite runs, so the suite runs in a fresh batch
 editor holding no lock. The script closes any live editor, runs `unity test` with an explicit
 `--output` and `--timeout` (default 1800 s; the CLI's own default is *no* timeout), reopens the editor afterward if one was open, and parses the NUnit XML for pass/fail
-rather than guessing from the exit code. With a compile error it exits 2 in ~10 s listing the
+rather than guessing from the exit code. Under the count line it prints
+`report: <path> · finished <HH:MM>`, so a quoted result shows which run it came from. With a compile error it exits 2 in ~10 s listing the
 `error CS` lines and does **not** reopen the editor (that would only enter Safe Mode): fix, then
 `unity-editor up`.
 
