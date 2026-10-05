@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, ModelUsage, Register } from 'claude-code'
 
 import type { CodexLaunch, CodexSession } from '../types'
+import { PRUNE, PRUNE_IF_LARGER, prune, tokensOf } from './prune'
 
 const CONTINUE_LINE = 160_000
 const RETIRE_AT = 200_000
@@ -150,6 +151,11 @@ const statusColor = (r: Row, now: number) => (isBlocked(r, now) ? 'red' : r.isRu
 const tokenColor = (tokens: number) =>
   isRetired(tokens) ? 'red' : tokens >= CONTINUE_LINE ? 'yellow' : undefined
 
+const pruneSkip = (instructions: string, { kept, removed }: ReturnType<typeof prune>) =>
+  removed.length === 0 ? 'bees: no finished units to prune'
+    : instructions === PRUNE_IF_LARGER && tokensOf(removed) < tokensOf(kept) ? 'bees: finished units are still smaller than the rest'
+      : undefined
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     $.clock.every(REFRESH_MS, () => void refresh($))
@@ -211,4 +217,12 @@ export const register: Register = on => {
     )
   })
 
+  on('session.compact', async ($, e, next) => {
+    if (!e.instructions?.startsWith(PRUNE) || e.agentId) return next(e)
+    const pruned = prune(e.messages)
+    const skip = pruneSkip(e.instructions, pruned)
+    if (skip) return { skip }
+    $.ui.log(`bees: pruned ${pruned.removed.length} messages of finished units`)
+    return { messages: pruned.messages }
+  })
 }

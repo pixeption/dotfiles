@@ -287,12 +287,16 @@ it, no hook writes it, nothing lives only in `.work/` (gitignored, disposable co
 `bees-watch`). The file formats and templates are the `plan` skill's "Status and log files".
 
 **Acceptance** — accepting a unit is two edits, then a commit of the plan and the log by path
-(`git commit -m … -- <paths>`, so another agent's staged files are never swept in):
+(`git commit -m … -- <paths>`, so another agent's staged files are never swept in), and a done line:
 
 ```text
 - [ ] Checklist: Status ✅.
 - [ ] Log: - <date '+%F %H:%M'> [<unit>] accept: <evidence — suite count, review verdict, commit>
+- [ ] Your text, on a line of its own: BEES: done=<unit>[,<unit>…]
 ```
+
+The done line lets the `bees-prune` mod drop every turn about that unit from your context between
+turns, so write it only once the plan and log hold the unit's record.
 
 The status file is not part of an acceptance, because the log line already carries the evidence:
 write it at a pause, a handoff, or when a resource changes holder.
