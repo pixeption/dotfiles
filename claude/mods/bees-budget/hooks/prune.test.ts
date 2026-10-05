@@ -17,9 +17,8 @@ const accepted = [
 ]
 const inFlight = [prompt('STEP-10 hand-back: blocked'), said('', bash('t2', 'cat report-STEP-10.md')), ran('t2', 'blocked'), said('rebrief')]
 const acceptAndSpawn = [prompt('STEP-1 review: approve'), said('BEES: done=STEP-1\nspawning STEP-2')]
-const spawnOtherFamily = [
-  prompt('STEP-1 recheck: approve'),
-  said('BEES: done=STEP-1', bash('t3', 'opencode-implement -o docs/plans/p.work/impl-FIX-01-r1.txt')), ran('t3', 'started'),
+const spawnOtherFamily = (launch: string) => [
+  prompt('STEP-1 recheck: approve'), said('BEES: done=STEP-1', bash('t3', launch)), ran('t3', 'started'),
 ]
 const notifiedMidTool = [
   prompt('STEP-1 final pass'), said('', bash('t4', 'git log STEP-1')), prompt('STEP-10 hand-back: done'),
@@ -58,11 +57,17 @@ test('a prune asked only if the finished units outweigh the rest waits until the
   expect((await compact($, transcript, PRUNE_IF_LARGER)).messages?.slice(1)).toEqual([...opening, ...inFlight, ...acceptAndSpawn])
 })
 
-test('a turn that starts the first unit of another family is kept', async ($, on) => {
-  on('session.compact', () => ({ skip: 'core reached' }))
-  expect((await compact($, [...transcript, ...spawnOtherFamily])).messages?.slice(1))
-    .toEqual([...opening, ...inFlight, ...acceptAndSpawn, ...spawnOtherFamily])
-})
+const launches = [
+  'opencode-implement -C /repo -o "$W/impl-FIX-01-r1.txt" -- brief',
+  'sed "s|<report>|$W/report-FIX-01-impl-r1.md|" brief.txt > FIX-01.brief',
+]
+
+for (const launch of launches)
+  test(`a turn that starts the first unit of another family is kept: ${launch}`, async ($, on) => {
+    on('session.compact', () => ({ skip: 'core reached' }))
+    expect((await compact($, [...transcript, ...spawnOtherFamily(launch)])).messages?.slice(1))
+      .toEqual([...opening, ...inFlight, ...acceptAndSpawn, ...spawnOtherFamily(launch)])
+  })
 
 test('a notification between a tool use and its result never splits the pair', async ($, on) => {
   on('session.compact', () => ({ skip: 'core reached' }))

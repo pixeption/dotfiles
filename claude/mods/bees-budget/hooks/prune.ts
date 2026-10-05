@@ -9,7 +9,7 @@ const UNIT_ID = new RegExp(`\\b${UNIT}\\b`, 'g')
 const isUnitId = (id: string) => new RegExp(`^${UNIT}$`).test(id)
 const DONE_LINE = /^BEES: done=(.+)$/gm
 const RESULT_LINE = /^BEES: (?:results|reviews)=(.+)$/gm
-const WORK_FILE = new RegExp(`\\.work/(?:impl|review|report)-(${UNIT})-`, 'g')
+const WORK_FILE = new RegExp(`\\b(?:impl|review|report)-(${UNIT})-(?:[a-z]+-)?r\\d+\\b`, 'g')
 
 const textOf = (m: SessionMessage) =>
   [m.text, ...m.toolUses.map(t => `${JSON.stringify(t.input)}\n${t.text ?? ''}`), ...(m.toolResults ?? []).map(r => r.text)].join('\n')
