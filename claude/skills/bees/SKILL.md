@@ -243,8 +243,6 @@ both are there, and the last-line contract); "do not spawn sub-agents".
   what it doesn't"), and runs with `-C` set to the repo the unit edits — the session is
   pinned to it for life. Pass every other repo it names, a read-only one too, as an absolute
   `--repo` to the OpenCode wrapper so preflight checks the fence allows it.
-- A Claude bee with `isolation: worktree` may start behind HEAD: its brief names the current HEAD
-  hash and has the agent run `git merge --ff-only <hash>` before any edit.
 - A **worktree** codex brief states it cannot run Unity and must report what it could not verify;
   an **in-place** codex brief carries the editor card and requires live verification.
 - Every brief with a live check says: never substitute an emulation for it without saying so in
