@@ -42,7 +42,6 @@ unity command clear_console --project-path "$PROJECT" --format json >/dev/null 2
 run_tests() { unity command run_tests --project-path "$PROJECT" --mode "$MODE" --filter "$FILTER" --filter_type "$TYPE" --format json "$@" -- --timeout "$DEADLINE"; }
 
 if [[ "$MODE" == EditMode ]]; then
-  LOG=$(editor_log)
   log_slice() { tail -c +"$LOG_FROM" "$LOG"; }
   run_started() { log_slice | grep -q '^\[TestResultCollector\] Run started'; }
   job_state() { unity job status "$JOB" --project-path "$PROJECT" --format json 2>/dev/null | python3 -c '
@@ -56,6 +55,7 @@ except Exception: pass'; }
   # job stays `running`, holds the one-command exec gate (editor_status times out) and ignores
   # `job cancel`. Nothing will ever arrive, so give up within START_DEADLINE instead of the full DEADLINE.
   start_run() {
+    LOG=$(editor_log)
     LOG_FROM=$(( $(wc -c <"$LOG") + 1 ))
     JOB=$(run_tests --detach | python3 -c 'import sys,json; print(json.load(sys.stdin)["data"]["jobId"])') \
       || die "run did not start (editor busy or compiling?)"
