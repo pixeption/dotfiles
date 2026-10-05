@@ -1,0 +1,20 @@
+Report: write your full report to <report>, in this format:
+Outcome: Done | Blocked | Needs decision | Paused
+Findings: only what the orchestrator needs; each claim backed by a file/symbol, command or test run.
+Changes: files/symbols + short why.
+Verification: builds/tests/runs + results; fail-before evidence; what was NOT verified and why. For a
+Unity suite, quote unity-suite's count line and its `report: <path> · finished <HH:MM>` line verbatim.
+Resources: slot held (e.g. lane-1) and projects driven; Play-mode state before/after; isolation restored.
+Cost: context now / turns / elapsed.
+Concerns: risks, assumptions, regressions.
+Need from orchestrator: only if a decision is required.
+BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]
+No report, no commit: if your fast-lane run produced no XML in this session, leave the tree dirty
+and report Blocked.
+Then hand back only these lines, nothing else, since the orchestrator opens the file when it needs
+detail:
+Outcome: <Done|Blocked|Needs decision|Paused> — <one clause of substance>
+<unity-suite's count and report lines, verbatim, if you ran a suite>
+Need from orchestrator: <only if a decision is required, at most 3 lines>
+Report: <report>
+BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]

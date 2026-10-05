@@ -129,7 +129,9 @@ Choosing "full" for a small plan is the error, not the safe default.
 10. **Delegate execution — including reading.** Inspect directly only when cheaper than a spawn:
     one diff, a few definitions, reconciling two reports. More than two file reads or a grep
     fan-out is a **scout**: it returns 1–3k of evidence once, while files you read stay in your
-    context every later turn. The same goes for wrapper logs: never Read a `.log`.
+    context every later turn. The same goes for wrapper logs: never Read a `.log`. And for reports: a
+    Claude bee writes its full report to a file and hands back a few lines; read reports and codex
+    out-files through `bees-report`, never `cat` (`reference/briefs.md` "Reports").
 11. **Exclusive resources are released by their holder.** A command that fails because another
     editor holds the project means stop and report; "check the lock and retry" is a forbidden
     brief, and so are background retry or polling loops.
@@ -234,14 +236,18 @@ known floor before the loop; put open owner questions into one decision packet w
 ## Briefing an agent
 
 A brief holds: objective; scope (items with their **scores and bucket**); acceptance criteria;
-what it may change; **resources held and resources off-limits**; verification expected; the return
-format and the role's standing rules (**read `reference/briefs.md` before writing any brief** —
-both are there, and the last-line contract); "do not spawn sub-agents".
+what it may change; **resources held and resources off-limits**; verification expected; the role's
+standing rules and return contract from `templates/` (**read `reference/briefs.md` before writing
+any brief** — how to compose one, the report files and the last-line contract); "do not spawn
+sub-agents".
 
 - Include load-bearing constants earlier agents reported (paths, profiles, last suite counts).
   **Cite the contract file, never paraphrase values from memory.** Quote a count only with the
   command that produced it; take timestamps from `date +%H:%M`. Never send transcripts or source
   dumps.
+- **Point, don't paste.** Problem and diagnosis are cited as the plan section and report file, a fix
+  or recheck as the review file and the ids to close; the brief adds only what is not written down
+  yet (acceptance, resources, decisions), since every pasted line is paid again in your context.
 - A **codex** brief gives passages, not documents (codex-implementor "What the session loads, and
   what it doesn't"), and runs with `-C` set to the repo the unit edits — the session is
   pinned to it for life. Pass every other repo it names, a read-only one too, as an absolute
@@ -339,3 +345,4 @@ Should read like:
 | [`reference/watching.md`](reference/watching.md) | before the session's first codex round, and on any flag or termination |
 | [`reference/handoff.md`](reference/handoff.md) | at phase end or when the context hook fires |
 | `templates/standing-rules-{implementor,reviewer,consultant}.txt`, `templates/successor-brief.txt` | `cat` into the brief verbatim — never retype |
+| `templates/return-{implementor,reviewer}.txt` | `sed` `<report>` into Claude implementor and reviewer briefs (`reference/briefs.md` "Reports") |

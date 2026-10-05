@@ -6,6 +6,7 @@ report.
 ## Contents
 
 - Return format
+- Reports
 - Repeated findings
 - Standing rules
 - The last line is a contract
@@ -13,24 +14,47 @@ report.
 
 ## Return format
 
-Claude agents return this; codex returns its final message, and you fill the same fields from the
-diff and `.usage`:
+A Claude implementor or reviewer brief carries its role's return contract, `sed`-ed from
+`templates/return-implementor.txt` or `templates/return-reviewer.txt` with `<report>` set: the full
+report goes to that file and the hand-back is a few lines ending in the BEES line. Codex returns
+its final message in the out-file, and you fill the same fields from the diff and `.usage`.
 
-```text
-Outcome: Done | Blocked | Needs decision | Paused
-Findings: only what the orchestrator needs; each claim backed by a file/symbol, command or test run.
-Changes: files/symbols + short why.
-Verification: builds/tests/runs + results; what was NOT verified and why.
-Resources: projects driven; Play-mode state before/after; isolation restored.
-Cost: context now / turns / elapsed.
-Concerns: risks, assumptions, regressions.
-Need from orchestrator: only if a decision is required.
-BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]
+A suite count is evidence only with the `report: … · finished <HH:MM>` line quoted beside it:
+compare the time with the round's and never open the XML, since a count alone can come from an
+earlier run.
+
+## Reports
+
+Every report is read once, compact, because a hand-back or a `cat` stays in your context every
+later turn:
+
+- A Claude bee's report path is absolute — a lane bee runs in another worktree —
+  `<repo>/docs/plans/<plan>.work/report-<unit>-<impl|fix|review|recheck>-r<N>.md`, in your
+  scratchpad in light mode. The `report-` prefix keeps it out of `bees-watch --dir`.
+- Read finished reports and codex out-files with
+  `~/.claude/skills/bees/scripts/bees-report <file>...`: outcome, suite lines, what it needs from
+  you, finding ids, BEES and verdict, in a few lines. Open a file only for the detail a decision
+  needs, and then only that part (`grep -n -A3 MAJ-02 <file>`).
+- A hand-back that ignores the contract is acted on as it is; the next brief to that agent says so
+  in one line.
+
+Compose a brief file without retyping the shared parts, then hand the agent only its path
+(`Read <brief> and do what it says.`):
+
+```sh
+W="$PWD/docs/plans/<plan>.work"
+brief="$W/brief-<unit>-r<N>.txt"
+report="$W/report-<unit>-impl-r<N>.md"
+escaped_report=$(printf '%s\n' "$report" | sed 's/[\\&|]/\\&/g')
+{ cat <<'EOF'
+<the unit's own lines: objective, plan section link, acceptance, may change, resources>
+EOF
+  cat ~/.claude/skills/bees/templates/standing-rules-implementor.txt
+  sed "s|<report>|$escaped_report|g" ~/.claude/skills/bees/templates/return-implementor.txt
+} > "$brief"
 ```
 
-For a Unity suite, `Verification` quotes `unity-suite`'s count line and its
-`report: <path> · finished <HH:MM>` line verbatim. Compare the time with the round's and never
-open the XML: a count alone can come from an earlier run.
+A review brief does the same with the `reviewer` templates.
 
 ## Repeated findings
 
@@ -54,7 +78,7 @@ without a verdict; it carries no meaning in a consult.
 
 ## The last line is a contract
 
-Codex and bee alike. Every implementor brief ends with: *"Your final message's last line is exactly
+Codex and bee alike; a Claude brief's return template carries it. Every implementor brief ends with: *"Your final message's last line is exactly
 `BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]`"* — one entry per unit
 the round serves (the wrapper's `-u` list), hashes comma-separated, `-` for none: a round that
 finishes F2 and blocks LV-02 ends `BEES: results=F2:done:4a31ceeb;LV-02:blocked:-`.

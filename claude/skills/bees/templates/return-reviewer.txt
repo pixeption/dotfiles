@@ -1,0 +1,8 @@
+Report: write your full review to <report>: the hash reviewed, every finding on its own line with
+id, severity, file:line and exact fix, the Cost line, then the BEES and verdict lines as above.
+Then hand back only these lines, nothing else, since the orchestrator and the fixer read the file:
+Reviewed: <hash or range> — <ids of all findings, or "clean">
+Report: <report>
+Cost: context now / turns / elapsed
+BEES: reviews=<unit>:<open Critical/Major ids|->[;…]
+<APPROVE or CHANGES_REQUIRED, as the last line>
