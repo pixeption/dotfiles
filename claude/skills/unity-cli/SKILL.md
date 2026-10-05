@@ -174,8 +174,9 @@ to "see its params".
 run never begins (no `[TestResultCollector] Run started` in the editor log). The job stays
 `running`, holds the exec gate (`editor_status` times out), and `unity job cancel` does not
 release it. When `unity-test` sees neither a start marker nor a terminal job state within
-`--start-deadline` (default 120 s), it requests cancellation, runs `unity-editor restart` once and
-retries the run; a second trip exits 2. Offline test:
+`--start-deadline` (default 120 s), it requests cancellation. Only the confirmed hang (job
+`running`, `Running N tests` logged) gets one `unity-editor restart` and a retry; a second trip, or
+a queued job or unreadable status, exits 2 and leaves the editor alone. Offline test:
 `tests/unity-test-start-watchdog.sh`.
 
 **Job completion is not operation completion.** `unity job wait <id> --project-path <dir>

@@ -43,11 +43,14 @@ run_tests() { unity command run_tests --project-path "$PROJECT" --mode "$MODE" -
 
 if [[ "$MODE" == EditMode ]]; then
   LOG=$(editor_log)
-  run_started() { tail -c +"$LOG_FROM" "$LOG" | grep -q '^\[TestResultCollector\] Run started'; }
-  job_done() { unity job status "$JOB" --project-path "$PROJECT" --format json 2>/dev/null | python3 -c '
+  log_slice() { tail -c +"$LOG_FROM" "$LOG"; }
+  run_started() { log_slice | grep -q '^\[TestResultCollector\] Run started'; }
+  job_state() { unity job status "$JOB" --project-path "$PROJECT" --format json 2>/dev/null | python3 -c '
 import sys, json
-try: sys.exit(0 if json.load(sys.stdin)["data"]["state"] in ("completed", "failed", "canceled") else 1)
-except Exception: sys.exit(1)'; }
+try: print(json.load(sys.stdin)["data"]["state"])
+except Exception: pass'; }
+  job_done() { [[ $(job_state) =~ ^(completed|failed|canceled)$ ]]; }
+  hung() { [[ $(job_state) == running ]] && log_slice | grep -q '^\[PipelineTestRunner\] Running [0-9]* tests' && ! run_started; }
   started_or_done() { run_started || job_done; }
   # Pipeline can accept run_tests, log "Running N tests" and never start the TestRunnerApi run: the
   # job stays `running`, holds the one-command exec gate (editor_status times out) and ignores
@@ -58,7 +61,10 @@ except Exception: sys.exit(1)'; }
       || die "run did not start (editor busy or compiling?)"
     wait_for "$START_DEADLINE" started_or_done 2>/dev/null && return
     unity job cancel "$JOB" --project-path "$PROJECT" --format json >/dev/null 2>&1
-    return 1
+    hung && return 1
+    die "run_tests job $JOB: no '[TestResultCollector] Run started' in $LOG and no terminal job state
+within ${START_DEADLINE}s; cancellation requested. Not the known hang (job not running with
+'Running N tests' logged), so the editor was left alone: check \`unity job status $JOB\` and /api/progress."
   }
   start_run || {
     echo "run_tests job $JOB did not start within ${START_DEADLINE}s; restarting the editor once and retrying" >&2

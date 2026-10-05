@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Offline test for unity-test's start watchdog: a stub `unity` stands in for the editor.
-#   stuck  - run_tests is accepted, the job sits `queued`, no "Run started" is ever logged: must fail fast, exit 2.
-#   retry  - stuck until the editor restarts once, then the run starts: must restart, retry, exit 0.
+#   stuck      - the job is `running` and logs "Running N tests" but never "Run started" (the confirmed
+#                hang): must restart the editor once, then fail fast, exit 2.
+#   retry      - stuck until the editor restarts once, then the run starts: must restart, retry, exit 0.
+#   queued     - the job sits `queued` and never starts: must not restart, exit 2.
+#   unreadable - the job status cannot be read: must not restart, exit 2.
 #   normal - the run starts and completes: must print the summary, exit 0.
 set -uo pipefail
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
@@ -19,9 +22,11 @@ case "\$1 \$2" in
   "status "*)             echo '{"data":{"instances":[{"project":"$PROJ"}]}}';;
   "command editor_status") echo '{"data":{"result":{"playMode":"stopped"}}}';;
   "command run_tests")
+    echo '[PipelineTestRunner] Running 3 tests' >>"$PROJ/Logs/Editor.log"
     [[ \$STUB == normal || ( \$STUB == retry && -s "$TMP/restarts" ) ]] && echo '[TestResultCollector] Run started: 3 test(s)' >>"$PROJ/Logs/Editor.log"
     echo '{"data":{"jobId":"j1"}}';;
-  "job status")           echo '{"data":{"state":"queued"}}';;
+  "job status")
+    case \$STUB in queued) echo '{"data":{"state":"queued"}}';; unreadable) echo 'timeout';; *) echo '{"data":{"state":"running"}}';; esac;;
   "job wait")             echo '{"data":{"result":{"FilterApplied":"testName: X","Summary":{"Total":3,"Passed":3,"Failed":0,"Skipped":0}}}}';;
   *)                      echo '{"data":{}}';;
 esac
@@ -40,5 +45,7 @@ check() { # check <name> <want-exit> <want-output-regex> <max-seconds> <want-res
 }
 check stuck  2 "within 4s; cancellation requested" 20 1 --start-deadline 4
 check retry  0 "3/3 passed"                        14 1 --start-deadline 4
+check queued     2 "within 4s; cancellation requested" 10 0 --start-deadline 4
+check unreadable 2 "within 4s; cancellation requested" 10 0 --start-deadline 4
 check normal 0 "3/3 passed"                        5  0 --start-deadline 4
 exit $fail
