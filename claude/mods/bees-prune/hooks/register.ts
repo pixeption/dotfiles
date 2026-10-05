@@ -7,7 +7,8 @@ const PRUNE_AT = 150_000
 const DONE_LINE = /^BEES: done=/m
 
 const isPrompt = (m: SessionMessage) => m.role === 'user' && !m.toolResults?.length
-const isPruneNote = (m: SessionMessage) => m.role === 'user' && m.text.startsWith('[bees] ')
+const NOTE = '[bees] Finished units were removed from this context; the plan file and log hold their record.'
+const isPruneNote = (m: SessionMessage) => m.role === 'user' && m.text.startsWith(`${NOTE}\n`)
 const recordsDone = (m: SessionMessage) => (m.role === 'assistant' || isPruneNote(m)) && DONE_LINE.test(m.text)
 const acceptedThisTurn = (messages: readonly SessionMessage[]) =>
   messages.slice(messages.findLastIndex(isPrompt)).some(m => m.role === 'assistant' && recordsDone(m))

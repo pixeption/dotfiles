@@ -51,7 +51,7 @@ test('once the orchestrator has been idle past its cache clock it asks for a pru
 })
 
 test('a session whose only done line is the user\'s is left alone', async ($, on) => {
-  const { clock, asked } = orchestrator(on, [prompt('BEES: done=STEP-1'), ...working], 190_000)
+  const { clock, asked } = orchestrator(on, [prompt('BEES: done=STEP-1'), prompt('[bees] Example output:\nBEES: done=STEP-1'), ...working], 190_000)
   await endTurn($, clock)
   await clock.advance(2 * 60 * MINUTE)
   expect(asked).toEqual([])
