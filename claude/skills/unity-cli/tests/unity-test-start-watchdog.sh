@@ -8,6 +8,8 @@
 #   queued     - the job sits `queued` and never starts: must not restart, exit 2.
 #   unreadable - the job status cannot be read: must not restart, exit 2.
 #   normal - the run starts and completes: must print the summary, exit 0.
+#   retry-big, normal-big - as retry and normal, with ~1 MB of editor output after the markers, which a
+#                grep -q under pipefail would misread as no match (SIGPIPE in tail).
 set -uo pipefail
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 cp -R "$(cd "$(dirname "$0")/.." && pwd)/scripts" "$TMP/scripts"
@@ -20,17 +22,20 @@ PROJ=$(cd "$PROJ" && pwd)
 
 cat >"$TMP/home/.unity/bin/unity" <<EOF
 #!/usr/bin/env bash
+S=\${STUB%-big}
 case "\$1 \$2" in
   "status "*)             echo '{"data":{"instances":[{"project":"$PROJ"}]}}';;
   "command editor_status") echo '{"data":{"result":{"playMode":"stopped"}}}';;
   "command run_tests")
     log="$PROJ/Logs/Editor.log"; [[ -f \$log ]] || log="$TMP/home/Library/Logs/Unity/Editor.log"
     echo '[PipelineTestRunner] Running 3 tests' >>"\$log"
-    [[ \$STUB == normal || ( \$STUB != stuck && -s "$TMP/restarts" ) ]] && echo '[TestResultCollector] Run started: 3 test(s)' >>"\$log"
-    echo '{"data":{"jobId":"j1"}}';;
+    [[ \$S == normal || ( \$S != stuck && -s "$TMP/restarts" ) ]] && echo '[TestResultCollector] Run started: 3 test(s)' >>"\$log"
+    [[ \$STUB == *-big ]] && head -c 1000000 /dev/zero | tr '\\0' x >>"\$log"
+    [[ -s "$TMP/restarts" ]] && echo '{"data":{"jobId":"j2"}}' || echo '{"data":{"jobId":"j1"}}';;
   "job status")
-    case \$STUB in queued) echo '{"data":{"state":"queued"}}';; unreadable) echo 'timeout';; *) echo '{"data":{"state":"running"}}';; esac;;
-  "job wait")             echo '{"data":{"result":{"FilterApplied":"testName: X","Summary":{"Total":3,"Passed":3,"Failed":0,"Skipped":0}}}}';;
+    case \$S in queued) echo '{"data":{"state":"queued"}}';; unreadable) echo 'timeout';; *) echo '{"data":{"state":"running"}}';; esac;;
+  "job wait")             [[ -s "$TMP/restarts" && \$3 != j2 ]] && { echo '{"data":{}}'; exit 0; }
+                          echo '{"data":{"result":{"FilterApplied":"testName: X","Summary":{"Total":3,"Passed":3,"Failed":0,"Skipped":0}}}}';;
   *)                      echo '{"data":{}}';;
 esac
 EOF
@@ -53,4 +58,6 @@ check transition 0 "3/3 passed"                    14 1 --start-deadline 4
 check queued     2 "within 4s; cancellation requested" 10 0 --start-deadline 4
 check unreadable 2 "within 4s; cancellation requested" 10 0 --start-deadline 4
 check normal 0 "3/3 passed"                        5  0 --start-deadline 4
+check retry-big  0 "3/3 passed"                    14 1 --start-deadline 4
+check normal-big 0 "3/3 passed"                    5  0 --start-deadline 4
 exit $fail

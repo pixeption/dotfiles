@@ -43,13 +43,13 @@ run_tests() { unity command run_tests --project-path "$PROJECT" --mode "$MODE" -
 
 if [[ "$MODE" == EditMode ]]; then
   log_slice() { tail -c +"$LOG_FROM" "$LOG"; }
-  run_started() { log_slice | grep -q '^\[TestResultCollector\] Run started'; }
+  run_started() { log_slice | grep '^\[TestResultCollector\] Run started' >/dev/null; }
   job_state() { unity job status "$JOB" --project-path "$PROJECT" --format json 2>/dev/null | python3 -c '
 import sys, json
 try: print(json.load(sys.stdin)["data"]["state"])
 except Exception: pass'; }
   job_done() { [[ $(job_state) =~ ^(completed|failed|canceled)$ ]]; }
-  hung() { [[ $(job_state) == running ]] && log_slice | grep -q '^\[PipelineTestRunner\] Running [0-9]* tests' && ! run_started; }
+  hung() { [[ $(job_state) == running ]] && log_slice | grep '^\[PipelineTestRunner\] Running [0-9]* tests' >/dev/null && ! run_started; }
   started_or_done() { run_started || job_done; }
   # Pipeline can accept run_tests, log "Running N tests" and never start the TestRunnerApi run: the
   # job stays `running`, holds the one-command exec gate (editor_status times out) and ignores
