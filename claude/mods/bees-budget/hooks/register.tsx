@@ -217,8 +217,11 @@ export const register: Register = on => {
     )
   })
 
+  on('engine.create', async (_$, e, next) => ({ ...await next(e), beesPruner: { isReady: async () => true } }))
+
   on('session.compact', async ($, e, next) => {
-    if (!e.instructions?.startsWith(PRUNE) || e.agentId) return next(e)
+    if (!e.instructions?.startsWith(PRUNE)) return next(e)
+    if (e.agentId) return { skip: 'bees: only the main conversation is pruned' }
     const pruned = prune(e.messages)
     const skip = pruneSkip(e.instructions, pruned)
     if (skip) return { skip }
