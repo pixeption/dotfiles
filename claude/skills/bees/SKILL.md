@@ -114,8 +114,8 @@ Choosing "full" for a small plan is the error, not the safe default.
 5. **Evidence, not claims.** Completion is a suite count, a real run, a byte-identity check. A
    codex diff from a **blind worktree** is unverified until you (or a `bee-sonnet-medium` holding
    the resource) compile and test it; codex **in place** with the editor card in its brief verifies
-   itself, to the same standard. **No report, no commit**: every brief states that if its filtered
-   acceptance tests produced no XML in the session, the agent leaves the tree dirty, reports
+   itself, to the same standard. **No report, no commit**: every brief states that if its fast-lane
+   run produced no XML in the session, the agent leaves the tree dirty, reports
    `Blocked`, and the orchestrator validates.
 6. **A background task is inspected, never waited on.** A codex round whose `.log` has not grown
    in ~20 minutes is checked with `bees-watch`, which costs no tokens (`reference/watching.md`).
@@ -198,12 +198,12 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
 - Diagnosis before implementation when the score is unknown; a scout before a diagnosis or a brief
   when you need a fact, not a verdict. The saving is that the evidence lands in your context once,
   compact.
-- A codex unit's validation (compile, filtered tests) is part of its cost: do it
+- A codex unit's validation (compile, the fast lane) is part of its cost: do it
   yourself when the diff is small, otherwise hand it to `bee-sonnet-medium` holding the resource.
   The same agent records a baseline before a unit whose acceptance compares against one.
-- Implementors run filtered tests only, in the loop and for acceptance. The full suite runs once
-  per phase, launched by you in the background: it outlasts a sub-agent's 5-minute cache clock,
-  not your hour. A repo's CLAUDE.md that sets the suite cadence wins. A 1-cell smoke asserting
+- Implementors run the repo's **fast lane** only (its CLAUDE.md names it), narrowed with a filter
+  while iterating. The full suite runs once, at the end of the phase, launched by you in the
+  background: it outlasts a sub-agent's 5-minute cache clock, not your hour. A 1-cell smoke asserting
   preconditions (capture size, stack, viewport) before any multi-cell or live run.
 - Fold confirmations into the next real brief; a confirmation alone is never a turn. But a ready
   brief goes now, inside the cache clock — batching it is how a warm agent goes cold.

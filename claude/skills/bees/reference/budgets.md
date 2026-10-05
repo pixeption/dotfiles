@@ -66,5 +66,5 @@ price instead of reading it at 0.1×.
   1-point unit may continue on a `bee-opus-high` that already holds the area, but a 5-point unit
   never continues on a `bee-opus-low` — spawn the row the difficulty names.
 - A batch step that runs past the agent's cache clock costs it one cold turn afterwards, a full
-  re-write of its context. So no brief asks an implementor for the full suite (SKILL.md "Cost
-  routing"); a long filtered run is accepted, never split to dodge the clock.
+  re-write of its context. So implementors run only the fast lane (SKILL.md "Cost routing"); a
+  long fast-lane run is accepted, never split to dodge the clock.
