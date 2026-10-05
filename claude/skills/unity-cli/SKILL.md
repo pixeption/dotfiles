@@ -230,7 +230,8 @@ unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [-
 comma in either and exits 2 when the report holds 0 tests, since `unity test` itself exits 0 then.
 
 A Play Mode session poisons a live editor for full-suite runs, so the suite runs in a fresh batch
-editor holding no lock. The script closes any live editor, runs `unity test` with an explicit
+editor holding no lock. The script closes any live editor (force-closing one that no longer answers; one that answers
+but will not close stops the run), runs `unity test` with an explicit
 `--output` and `--timeout` (default 1800 s; the CLI's own default is *no* timeout), reopens the editor afterward if one was open, and parses the NUnit XML for pass/fail
 rather than guessing from the exit code. Under the count line it prints
 `report: <path> · finished <HH:MM>`, so a quoted result shows which run it came from. With a compile error it exits 2 in ~10 s listing the

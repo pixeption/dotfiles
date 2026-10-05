@@ -40,13 +40,15 @@ else
   REPORT=$(mktemp -t unity-suite-XXXXXX).xml
 fi
 
+unreachable() { [[ "$(result_json "$PROJECT" editor_status)" == unreachable ]]; }
 WAS_OPEN=0; SCENE=""
 if editor_open "$PROJECT"; then
   WAS_OPEN=1
   SCENE=$(result_json "$PROJECT" list_open_scenes | python3 -c '
 import sys, json
 print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] and s["path"]), ""))' 2>/dev/null)
-  "$HERE/unity-editor" down "$PROJECT" || die "could not close the live editor — refusing to run a suite that would get poisoned"
+  "$HERE/unity-editor" down "$PROJECT" || { unreachable && "$HERE/unity-editor" down "$PROJECT" --force; } \
+    || die "could not close the live editor — refusing to run a suite that would get poisoned"
 fi
 
 # `unity test --timeout` is disabled by default, so a hung batch editor would wait forever.
