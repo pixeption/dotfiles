@@ -52,7 +52,8 @@ less than a spawn:
 - a unit whose production diff is about five lines or fewer and comes with a fail-before test.
 
 Log either as `review: orchestrator inspection`; a clean inspection closes the loop. Anything
-else, including a fix that departs from the given text, goes to the reviewer.
+else, including a fix that departs from the given text, goes to the reviewer — also when your own
+decision replaced that text, since nobody has checked the decision's code.
 
 There is no round cap. For codex, a clean recheck advances to the holistic final pass
 `codex-review` requires, whose `APPROVE` closes the loop; for a Claude reviewer, a clean recheck
