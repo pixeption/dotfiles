@@ -173,10 +173,9 @@ to "see its params".
 **The one silent hang.** Pipeline logs `[PipelineTestRunner] Running N tests` but the TestRunnerApi
 run never begins (no `[TestResultCollector] Run started` in the editor log). The job stays
 `running`, holds the exec gate (`editor_status` times out), and `unity job cancel` does not
-release it. `unity-test` exits 2 after `--start-deadline` (default 120 s) when it sees neither a
-start marker nor a terminal job state, and requests cancellation. A `queued` job or an unreadable
-status does not prove the gate is stuck, so check `unity job status` and `/api/progress` first;
-if every command times out, `unity-editor restart` once, then re-run. Offline test:
+release it. When `unity-test` sees neither a start marker nor a terminal job state within
+`--start-deadline` (default 120 s), it requests cancellation, runs `unity-editor restart` once and
+retries the run; a second trip exits 2. Offline test:
 `tests/unity-test-start-watchdog.sh`.
 
 **Job completion is not operation completion.** `unity job wait <id> --project-path <dir>
