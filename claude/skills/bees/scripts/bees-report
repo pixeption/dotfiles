@@ -4,18 +4,21 @@
   bees-report <file>...
 
 Per file: its size, the Outcome, any Blocked/STOP line, unity-suite's count and report lines, the
-Need-from-orchestrator section unless it says none, the finding ids, and the trailing BEES and
-verdict lines. Open the file itself only for the detail a decision needs (bees reference/briefs.md
-"Reports").
+Verification, Concerns, Blocker, Options and Need-from-orchestrator sections unless they say none, each finding's
+and each non-blocking suggestion's first line, and the trailing BEES and verdict lines. Open the file itself only for the detail a decision
+needs (bees reference/briefs.md "Reports").
 Exit 1 when a file is missing or has no BEES line: a malformed report, the orchestrator's call.
 """
 import re, sys
 
-FIELD = re.compile(r"^(#+\s*)?(?:Concerns\s*/\s*)?(Outcome|Findings|Changes|Verification|Resources|Cost|Concerns|Need from orchestrator)\b")
+FIELD = re.compile(r"^(#+\s*|[-*]\s+)?(?:Concerns\s*/\s*)?(Outcome|Findings|Changes|Verification|Resources|Cost|Concerns|Suggestions|Goal|Discovered|Blocker|Tried|Options|Need from orchestrator)\b")
+SHOWN = ("Verification", "Concerns", "Blocker", "Options", "Need from orchestrator")
+BULLET = re.compile(r"^(?:[-*]|\d+[.)])\s+")
 NEED_NONE = re.compile(r"^[\s:*_-]*(none|nothing|n/?a)?\W*$", re.I)
 KEEP = re.compile(r"^(Blocked:|STOP\.|\d+/\d+ passed, |report: .* · finished |BEES: )")
 FINDING_ID = re.compile(r"^(?:#+\s*)?[-*\s]*((?:CRIT|MAJ|MIN|NIT)-\d+|F\d+)\b")
 VERDICT = ("APPROVE", "CHANGES_REQUIRED")
+FINDING_CHARS = 200  # the claim and usually its file:line; the exact fix stays in the file
 
 
 def field_body(lines, i):
@@ -35,16 +38,25 @@ def compact(lines):
         m = FIELD.match(line)
         if m and m.group(2) == "Outcome" and "Outcome" not in seen:
             seen.add("Outcome")
-            out += ["Outcome: " + " ".join(field_body(lines, i)[:2])[:240]]
-        elif m and m.group(2) == "Need from orchestrator":
-            need = field_body(lines, i)
-            if need and not NEED_NONE.match(" ".join(need)):
-                out += ["Need from orchestrator:"] + need[:5] + ["… (more in the file)"] * (len(need) > 5)
+            body = field_body(lines, i)
+            if body:
+                out += ["Outcome: " + " ".join(body[:2])[:240]]
+        elif m and m.group(2) in SHOWN:
+            body = field_body(lines, i)
+            if body and not NEED_NONE.match(" ".join(body)):
+                out += [m.group(2) + ":"] + body[:5] + ["… (more in the file)"] * (len(body) > 5)
+        elif m and m.group(2) == "Suggestions":
+            bullets = [b[:FINDING_CHARS] for b in field_body(lines, i) if BULLET.match(b)]
+            if bullets:
+                out += ["Suggestions:"] + bullets[:5] + ["… (more in the file)"] * (len(bullets) > 5)
         elif KEEP.match(line) and not line.startswith("BEES: "):
             out.append(line)
-    ids = dict.fromkeys(m.group(1) for m in map(FINDING_ID.match, lines) if m)
-    if ids:
-        out.append("findings: " + " ".join(ids))
+    findings = {}
+    for line in lines:
+        m = FINDING_ID.match(line)
+        if m:
+            findings.setdefault(m.group(1), line[:FINDING_CHARS])
+    out += findings.values()
     out += [l for l in lines if l.startswith("BEES: ")]
     last = next((l for l in reversed(lines) if l), "")
     if last in VERDICT:
