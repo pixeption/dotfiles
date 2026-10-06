@@ -19,13 +19,13 @@ One rule for both vendors (SKILL.md "Rules", the session budget), plus each vend
 | **no new brief at or past** | **200k** | **200k** | any — spawn a new scout | **200k**, or any other directory |
 | **cache warm for** | **5 min** idle | **5 min** idle | irrelevant | **30 min** idle |
 | resumable after the cache | one cold turn | one cold turn | — | OpenCode: any time, same `--dir`, one cold turn · CLI: never |
-| **agent self-pauses at** | **350k** | 350k | reports `Needs diagnosis` at ~120k | — |
+| **agent self-pauses at** | **200k (hook)** | unhooked | unhooked; reports `Needs diagnosis` at ~120k | — |
 
 ## Why the lines sit where they do
 
-A single complex unit may legitimately need 300–400k, so the agent itself pauses at 350k (safe
-point, handover, `Outcome: Paused`); a brief sent to an agent already past 200k is a bug in the
-orchestration, not a judgment call. Every turn of a 400k agent re-reads 400k of cache.
+An implementor that needs more than 200k pauses when its context hook (`bee-context-nudge`) reaches
+200k (safe point, handover, `Outcome: Paused`), and its successor starts from the pause report. A
+brief sent to an agent already past 200k is a bug in the orchestration, not a judgment call. Every turn of a 400k agent re-reads 400k of cache.
 
 The arithmetic: a 20-step round on a 250k session reads ~5M of cache (~500k full-price-equivalent
 at 0.1×); the same round in a fresh session pays ~50k of onboarding at full price and then reads a

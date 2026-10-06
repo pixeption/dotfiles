@@ -118,4 +118,19 @@ new_case no-warn-after-pause
 respond A 210000; call A; expect "no-warn-after-pause pause" "$(pause 210)"
 respond A 160000; call A; expect "no-warn-after-pause 160k" ""
 
+# SA-02 contract: the hook's pause text defers to the standing rules, so every implementor brief must
+# define a hook-triggered pause with Outcome: Paused and a paused BEES entry, and no context figure.
+printf '# P\n\n### X-01 · unit\n\nBody.\n' > "$TMP/plan.md"
+pause_text=$(pause 200 | jq -r .hookSpecificOutput.additionalContext)
+for kind in impl fix gate; do
+  echo "Objective: contract." | "$here/../scripts/bees-brief" --plan "$TMP/plan.md" --units X-01 --kind $kind >/dev/null
+  brief="$TMP/plan.work/brief-X-01-$kind-r1.txt"
+  missing=""
+  [[ $pause_text == *"your standing rules"*"Outcome: Paused"* ]] || missing+=" hook-text"
+  grep -q "^Standing rules:" "$brief" || missing+=" standing-rules"
+  tr '\n' ' ' < "$brief" | grep -q 'When the context hook tells you to pause, .*report `Outcome: Paused`, end with `BEES: results=<unit>:paused:-' || missing+=" hook-pause"
+  if grep -Eo '[0-9]+k\b' "$brief"; then missing+=" context-figure"; fi
+  if [ -z "$missing" ]; then echo "ok   brief-contract $kind"; else echo "FAIL brief-contract $kind:$missing"; fail=1; fi
+done
+
 exit $fail

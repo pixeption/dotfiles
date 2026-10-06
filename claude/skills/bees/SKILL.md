@@ -115,9 +115,10 @@ Choosing "full" for a small plan is the error, not the safe default.
    figure is the harness's token count on a Claude agent's final notification, or `context_tokens`
    in the codex wrapper's `.usage` — never the agent's own estimate, which runs low. Between 160k
    and 200k an agent may finish its unit or do one short recheck in the same files. At 200k it
-   gets no new brief: spawn fresh and hand the resource over. **A unit in a different repo or area
-   always gets a fresh session**: the old context is dead weight, and a codex session is pinned to
-   the directory it was created in. Check the figure before every SendMessage or `-s` resume;
+   gets no new brief: spawn fresh and hand the resource over; an implementor bee pauses itself when
+   its context hook says 200k. **A unit in a different repo or area always gets a fresh session**:
+   the old context is dead weight, and a codex session is pinned to the directory it was created in.
+   Check the figure before every SendMessage or `-s` resume;
    the `bees-budget` mod shows it above the prompt and enforces it on SendMessage to a `bee-*`
    agent, `opencode-budget` on `-s`.
    Read `reference/budgets.md` before any continue-or-spawn decision.
