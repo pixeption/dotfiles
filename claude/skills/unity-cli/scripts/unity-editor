@@ -70,7 +70,8 @@ fi
 export LAUNCH_MARKER; LAUNCH_MARKER=$(mktemp); trap 'rm -f "$LAUNCH_MARKER"' EXIT
 launch() {
   touch "$LAUNCH_MARKER"
-  local args="-batchmode -automated -logFile $PROJECT/Logs/Editor.log"
+  # `unity open` splits --args like a shell, honouring double quotes: a path with spaces stays whole.
+  local args="-batchmode -automated -logFile \"$PROJECT/Logs/Editor.log\""
   [[ -n "$WINDOWED" ]] && args="-automated"
   mkdir -p "$PROJECT/Logs"
   unity open "$PROJECT" --args "$args" >/dev/null || die "unity open failed"
