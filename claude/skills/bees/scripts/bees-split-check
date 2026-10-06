@@ -14,7 +14,7 @@ import argparse, pathlib, re, sys
 PAUSE_LINE = 200_000  # the implementor pause line (reference/budgets.md)
 ENTRY = re.compile(r"^- \S+ \S+ \[([^\]]+)\] (round|accept): (.*)$")
 CTX = re.compile(r"\bctx (\d[\d,]*(?:\.\d+)?)(k?)\b")
-PAUSED = re.compile(r"\bpaused\b", re.I)
+PAUSED = {"round": re.compile(r"^[^,;]*,\s*(?:Outcome:\s*)?paused\b", re.I), "accept": re.compile(r"^\s*(?:Outcome:\s*)?paused\b", re.I)}
 
 
 def tokens(m):
@@ -35,7 +35,7 @@ for line in a.log.read_text().splitlines():
         continue
     for unit in set(m.group(1).split(",")) & set(like):
         ctx[unit] += [tokens(c) for c in CTX.finditer(m.group(3))]
-        if PAUSED.search(m.group(3)):
+        if PAUSED[m.group(2)].search(m.group(3)):
             paused.add(unit)
 
 split = [u for u in like if u in paused or any(c >= PAUSE_LINE for c in ctx[u])]

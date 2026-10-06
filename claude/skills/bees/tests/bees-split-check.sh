@@ -26,6 +26,7 @@ check listed-no-ctx STEP-01,STEP-02 unknown 2 < <({ line STEP-01 "round: impl r1
 check trigger-beats-missing STEP-02,STEP-01 split 1 < <({ line STEP-01 "round: impl r1 bee-opus-high, done, ctx 268k (retired)"; line STEP-02 "accept: 5/5"; })
 check several-below STEP-01,STEP-03 ok 0 < <({ line STEP-01 "round: impl r1 bee-opus-low, done, ctx 44k"; line STEP-02a,STEP-03 "round: impl r1 bee-opus-medium, done, ctx 120k";
   line STEP-03 "review: r1 codex sol, ctx 250k"; line STEP-03 "accept: 9/9, ctx 130k"; })
+check done-with-paused-proof STEP-01 ok 0 < <({ line STEP-01 "round: impl r1 bee-opus-medium, done, ctx 119k; proof: Paused report"; line STEP-01 "accept: probe: Outcome: Paused + PR-01:paused:-"; })
 check only-malformed STEP-01 unknown 2 < <(printf '%s\n' "STEP-01 round ctx 300k" "- [STEP-01 round: paused" "garbage")
 
 exit $fail
