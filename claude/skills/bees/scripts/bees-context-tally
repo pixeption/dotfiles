@@ -282,6 +282,12 @@ def k(n):
     return f"{n // 1000}k"
 
 
+def read_row(name, cells):
+    count, untokened = sum(x["count"] for x in cells), sum(x["untokened"] for x in cells)
+    known = "unknown" if count and untokened == count else sum(x["tokens"] or 0 for x in cells)
+    return [name, count, known, untokened]
+
+
 def table(title, head, rows):
     print(f"\n## {title}\n\n| {' | '.join(head)} |\n|{'---|' * len(head)}")
     for row in rows:
@@ -310,10 +316,8 @@ def aggregate(records):
     table("Growth by agent type (unattributed residual)",
           ["agent", "runs", "growth per run", "residual share", "residual per thinking response",
            "responses with thinking"], rows)
-    table("Whole reads by class", ["class", "count", "tokens", "untokened"],
-          [[c, sum(r["reads"][c]["count"] for r in records), sum(r["reads"][c]["tokens"] or 0 for r in records),
-            sum(r["reads"][c]["untokened"] for r in records)]
-           for c in records[0]["reads"]] if records else [])
+    table("Whole reads by class", ["class", "count", "known tokens", "untokened"],
+          [read_row(c, [r["reads"][c] for r in records]) for c in records[0]["reads"]] if records else [])
     by_effort = {}
     for r in records:
         by_effort.setdefault(r["effort"] or "unknown", []).append(r)
