@@ -87,11 +87,11 @@ Your follow-up need not restate old findings: reference them ("your round-2 F1�
 you did with each — **applied**, **applied differently (how)**, or **rejected (why)**. A rejection
 with a reason is a decision: the reviewer may push back once with new evidence, and you rule.
 
-**Reuse established repository understanding.** The reviewer reopens source only for the specific
-file, symbol or range it needs: a detail it cannot confidently recover, a new assumption the
-changed artifact introduces, a repo change since the last round, or a detail compaction removed.
-Compaction alone is never a reason for a broad rescan. **Always reopen the source before an exact
-`file:line` citation** — never cite from memory.
+**Reuse established repository understanding.** Reopen only the specific source needed when it
+changed since its read, was never read in this session, or the needed lines are no longer in
+context. Cite `file:line` only from an unchanged file's read still in context, never from summaries
+or memory, so grounding does not require redundant reads. Compaction never warrants a broad rescan.
+"Unchanged" means the repo's contents, uncommitted source included — a SHA alone does not show it.
 
 **Compact review state.** Every round's answer ends with the open findings in compact form — id,
 severity, status, the problem, the established facts it rests on, the required correction — and
@@ -131,6 +131,8 @@ Run one once every Open or Partial finding is dispositioned; never when neither 
 disposition changed. **You supply the delta**: the artifact's diff since the last reviewed commit
 (`git diff <sha>.. -- <artifact>`) or the changed section names — or `no artifact delta` when
 findings were only rejected — with each disposition, the repo SHA, and whether the repo moved.
+For an uncommitted artifact, snapshot it after each round (`cp <artifact> "$W/<unit>-reviewed.md"`)
+and send `diff -u` against the snapshot: without a diff the reviewer rereads the whole artifact.
 
 The reviewer does two jobs in the existing session, spawning nothing: **verify** each Open or
 Partial finding (Fixed / Partial / Open / Regressed; settled findings stay settled unless the
@@ -151,7 +153,8 @@ cat ~/.claude/skills/codex-review/templates/followup-prompt.txt \
 After round 1 with nothing left Open/Partial, or after a follow-up `APPROVE`, run one holistic pass
 in the same session, `--no-subagents`, with `templates/final-pass-prompt.txt` as the prompt. It
 reads the artifact top to bottom against the repository and does **not** assume earlier findings
-or verdicts were right: prior source facts may be reused, prior conclusions may not. Its findings
+or verdicts were right: prior source facts may be reused, prior conclusions may not. Fill in the
+repo SHA and whether it moved since the session's last round. Its findings
 are ordinary `CHANGES_REQUIRED` — fix, one targeted follow-up, then this pass again. A final pass
 that finds a lot means the follow-ups were too narrow or the fixes drifted from the reviewer's
 text: fix the section structurally rather than adding rounds.

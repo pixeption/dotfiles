@@ -1,8 +1,11 @@
+Repo at <sha>, unchanged since round <n> [or: changed — <what>].
 Read the current artifact top to bottom against the current repository and determine whether it
 is coherent, complete, correctly sequenced, compatible with the actual source, testable and ready
-to implement or accept, as appropriate. Do not assume previous approvals or findings were correct. Do not spawn
-sub-agents. Reuse existing repository understanding, but reopen source wherever exact
-verification is needed. Raise any remaining or newly discovered blocking findings with continuing
-stable IDs, severity, claim, why with a freshly reopened file:line citation, and exact fix text.
+to implement or accept, as appropriate. Do not assume previous approvals or findings were correct:
+re-derive each conclusion, but from the source facts this session already holds. Do not spawn
+sub-agents. Reopen a file only when it changed since you read it, you never read it in this
+session, or the lines a conclusion or citation needs are no longer in your context; do not reopen
+an unchanged file just to re-confirm it. Raise any remaining or newly discovered blocking findings
+with continuing stable IDs, severity, claim, why with a file:line citation, and exact fix text.
 Confirm what is sound, list non-blocking suggestions separately, and end with the compact review
 state, then `BEES: reviews=<unit>:<open-ids|->[;…]`, then APPROVE or CHANGES_REQUIRED.
