@@ -11,8 +11,9 @@ $S/unity-suite "$P" --filter 'A|B'            # the acceptance run, once, at the
 - `unity-test`'s filter is one case-insensitive substring of the full test name, so `A|B` matches
   nothing there. Accept a run only with no `FILTER MISMATCH` and the passed/total you expect. Never
   run it without a filter.
-- `unity-suite` closes the live editor, runs in batch and reopens it. Quote its count line and its
-  `report:` line verbatim under Verification.
+- `unity-suite` runs a filtered Edit-Mode run in the open editor (same PID) unless that editor
+  entered Play; anything else closes it, runs in batch and reopens it. Pass `--output
+  <project>/Logs/<unit>.xml`. Quote its count line and its `report:` line verbatim under Verification.
 - A hand-run batch `unity test` takes an absolute `--output` before any `--`; parse the XML and
   ignore stdout and the exit code.
 - Pass `--project-path "$P"` on every `unity command`: a bare one lands on whatever editor is
