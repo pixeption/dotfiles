@@ -51,10 +51,25 @@ scenes = json.load(sys.stdin)["scenes"]
 titled = [s["path"] for s in scenes if s["isDirty"] and s["path"]]
 print(titled[0] if titled else "untitled" if any(s["isDirty"] and s["isActive"] for s in scenes) else "")
 ' 2>/dev/null; }
-DIRTY_SCENE=$(dirty_scene)
+DIRTY_SCENE=$(dirty_scene) || die "could not inspect open scenes; no tests ran"
 if [[ "$DIRTY_SCENE" == untitled ]]; then
-  unity command eval --project-path "$PROJECT" --format json --code 'UnityEditor.SceneManagement.EditorSceneManager.NewScene(UnityEditor.SceneManagement.NewSceneSetup.EmptyScene, UnityEditor.SceneManagement.NewSceneMode.Single); return null;' >/dev/null 2>&1
-  DIRTY_SCENE=$(dirty_scene)
+  # One command, so the scene it discards is re-checked at the moment it is discarded; other open
+  # scenes stay open.
+  unity command eval --project-path "$PROJECT" --format json --code '
+if (UnityEditor.EditorApplication.isPlayingOrWillChangePlaymode)
+    throw new System.InvalidOperationException("Cannot replace a scene during Play Mode.");
+var scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+if (!scene.IsValid() || !scene.isDirty || !string.IsNullOrEmpty(scene.path))
+    throw new System.InvalidOperationException("The active scene changed; refusing to discard it.");
+var clean = UnityEditor.SceneManagement.EditorSceneManager.NewScene(
+    UnityEditor.SceneManagement.NewSceneSetup.EmptyScene,
+    UnityEditor.SceneManagement.NewSceneMode.Additive);
+UnityEngine.SceneManagement.SceneManager.SetActiveScene(clean);
+if (!UnityEditor.SceneManagement.EditorSceneManager.CloseScene(scene, true))
+    throw new System.InvalidOperationException("Could not close the dirty untitled scene.");
+return null;
+' >/dev/null 2>&1 || die "could not safely replace the dirty untitled active scene"
+  DIRTY_SCENE=$(dirty_scene) || die "could not inspect open scenes; no tests ran"
   [[ "$DIRTY_SCENE" == untitled ]] && die "the untitled active scene has unsaved changes and could not be replaced by an empty one;
 the test framework's save prompt would cancel the run - discard it in the editor first"
 fi

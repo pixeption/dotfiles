@@ -203,7 +203,8 @@ exits 2 instead, for a caller holding the editor); a second trip, or
 a queued job or unreadable status, exits 2 and leaves the editor alone. One known cause is a dirty
 scene: the test framework's save prompt (`Canceling DisplayDialog: Scene(s) Have Been Modified` in
 the log) is auto-cancelled and so is the run. `unity-test` replaces a dirty untitled active scene
-with an empty one before the run; a dirty titled scene is never saved or discarded, so that hang
+with an empty one before the run, in one `eval` that re-checks it and leaves other open scenes open,
+and exits 2 if the open scenes cannot be read; a dirty titled scene is never saved or discarded, so that hang
 exits 2 naming the scene and `unity-editor ensure`. Offline test:
 `tests/unity-test-start-watchdog.sh`.
 
