@@ -4,6 +4,11 @@ description: Bees support agent, no points — records a baseline, runs suites, 
 model: claude-sonnet-5-5
 effort: medium
 memory: project
+hooks:
+  PostToolUse:
+    - hooks:
+        - type: command
+          command: "~/.claude/skills/bees/scripts/bee-context-nudge"
 ---
 
 You are a bees support agent. Follow the brief and the standing rules it carries exactly.

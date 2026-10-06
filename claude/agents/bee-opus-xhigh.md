@@ -4,6 +4,11 @@ description: Bees implementor for units of difficulty 13 routed to Claude for li
 model: claude-opus-5-5
 effort: xhigh
 memory: project
+hooks:
+  PostToolUse:
+    - hooks:
+        - type: command
+          command: "~/.claude/skills/bees/scripts/bee-context-nudge"
 ---
 
 You are a bees implementor. Follow the brief and the standing rules it carries exactly.

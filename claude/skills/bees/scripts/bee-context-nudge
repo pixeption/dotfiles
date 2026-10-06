@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""PostToolUse hook (implementor bee frontmatter): give a sub-agent its own context reading.
+
+Reads the input context of the agent's last API response from
+<transcript dir>/<session_id>/subagents/agent-<agent_id>.jsonl and emits each stage once per agent:
+a warning at BEE_NUDGE_WARN, a pause instruction at BEE_NUDGE_PAUSE. A reading past the pause line
+records both stages and emits only the pause. No agent_id (the orchestrator, which has
+context-nudge) or no reading yet means no output; the next tool call retries. Parallel tool calls
+run their hooks in parallel, so each step runs under a nonblocking per-agent flock and a call that
+cannot take it exits silently. State and lock live in $TMPDIR, which the OS cleans; they survive a
+hand-back because the same agent may be resumed.
+  BEE_NUDGE_WARN   default 150000: leaves room to finish a step and plan the pause before 200k
+  BEE_NUDGE_PAUSE  default 200000: the implementor pause line (bees reference/budgets.md)
+"""
+import fcntl, json, os, pathlib, sys
+
+STAGES = ("warn", "pause")
+
+
+def reading(path):
+    usage = None
+    for line in path.read_text().splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        if entry.get("type") == "assistant" and entry.get("message", {}).get("usage"):
+            usage = entry["message"]["usage"]
+    if usage is None:
+        return None
+    return sum(usage.get(k) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+
+
+def text(stage, n, pause):
+    if stage == "pause":
+        return f"Context at {n // 1000}k: stop at the next safe point and pause per your standing rules (Outcome: Paused)."
+    return (f"Context at {n // 1000}k: finish the current step; if more than a few steps of this unit "
+            f"remain, plan to pause at {pause // 1000}k.")
+
+
+hook = json.load(sys.stdin)
+sid, agent, transcript = hook.get("session_id"), hook.get("agent_id"), hook.get("transcript_path")
+if not (sid and agent and transcript):
+    sys.exit(0)
+path = pathlib.Path(transcript).parent / sid / "subagents" / f"agent-{agent}.jsonl"
+if not path.is_file():
+    sys.exit(0)
+lines = {"warn": int(os.environ.get("BEE_NUDGE_WARN", 150000)),
+         "pause": int(os.environ.get("BEE_NUDGE_PAUSE", 200000))}
+base = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / f"bee-context-nudge-{sid}-{agent}"
+lock = open(f"{base}.lock", "a")
+try:
+    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+except BlockingIOError:
+    sys.exit(0)
+state = pathlib.Path(f"{base}.state")
+done = set(state.read_text().split()) if state.exists() else set()
+n = reading(path)
+reached = [s for s in STAGES if n is not None and n >= lines[s]]
+if not reached or reached[-1] in done:
+    sys.exit(0)
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
+                                         "additionalContext": text(reached[-1], n, lines["pause"])}}), flush=True)
+state.write_text(" ".join(sorted(done | set(reached))) + "\n")
