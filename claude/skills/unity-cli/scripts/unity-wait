@@ -5,7 +5,8 @@
 # an editor mid-domain-reload refuses connections, `data.result` is a JSON-encoded *string*
 # rather than an object, and there is no deadline. This handles all three.
 #
-#   unity-wait recompile [deadline_seconds]   trigger a recompile, wait, report errors
+#   unity-wait recompile [deadline_seconds]   trigger a recompile, wait, report errors; exit 4 fast
+#                                             when the editor's server is up but no command answers
 #   unity-wait job <job-id> [deadline]        wait on a ui_* job record on disk
 #   Prefix any mode with --project-path <dir> (default: $UNITY_PROJECT_PATH, else the cwd).
 #
@@ -16,7 +17,8 @@
 #
 # For tests, use `unity-test` (--detach + `unity job wait`) instead of this script.
 #
-# Exit 0 on success, 1 on failure, 2 on deadline, 3 on a failed Pipeline server. Always terminates.
+# Exit 0 on success, 1 on failure, 2 on deadline, 3 on a failed Pipeline server, 4 on a hung editor.
+# Always terminates.
 set -uo pipefail
 source "$(dirname "$0")/_common.sh"
 
@@ -33,6 +35,15 @@ PROJECT=$(resolve_project "${UNITY_PROJECT_PATH:-.}") || exit 1
 require_editor() { editor_open "$PROJECT" || die "no live editor for $PROJECT — unity-editor up '$PROJECT'"; }
 
 status_json() { result_json "$PROJECT" "$1"; }
+
+# The project's state in `unity status`, read from /api/status off the main thread: it still answers
+# `ready` (or `blocked_by_dialog`) while a stuck command holds the exec gate, but not during a domain
+# reload, and reports `starting` while the editor imports or compiles.
+server_state() { unity status --format json 2>/dev/null | python3 -c '
+import sys, json
+print(next((i.get("state", "") for i in json.load(sys.stdin)["data"]["instances"] if i.get("project") == sys.argv[1]), ""))
+' "$PROJECT" 2>/dev/null; }
+server_idle() { [[ "$(server_state)" =~ ^(ready|blocked_by_dialog)$ ]]; }
 
 case "$MODE" in
   ready)
@@ -68,6 +79,9 @@ case "$MODE" in
   recompile)
     DEADLINE=${2:-$DEADLINE_DEFAULT}
     SETTLE=${UNITY_WAIT_SETTLE:-60}
+    # HANG: an idle server whose commands go unanswered this long is hung, not compiling: a recompile
+    # answers recompile_status throughout, and a reload takes the server down with it.
+    HANG=${UNITY_WAIT_HANG:-30}
     require_editor
     # A recompile is DEFERRED while the editor is in Play Mode: the request never completes, so this
     # would wait out the whole deadline while the editor silently keeps running the OLD code. Stop
@@ -84,10 +98,18 @@ then re-run this; resume with editor_play afterwards."
       wait_for 60 check_stopped || die "editor_stop did not take effect within 60s - check: unity status"
     fi
     unity command recompile --project-path "$PROJECT" --format json >/dev/null 2>&1
-    LAST=""
+    LAST=""; SILENT_SINCE=""
+    exit_if_hung() {
+      server_idle || { SILENT_SINCE=""; return; }
+      SILENT_SINCE=${SILENT_SINCE:-$SECONDS}
+      (( SECONDS - SILENT_SINCE < HANG )) && return
+      echo "editor hung - unity-editor ensure '$PROJECT' (its server is up, but no command answered for ${HANG}s)" >&2
+      exit 4
+    }
     check_compiled() {
       LAST=$(status_json recompile_status)
-      [[ "$LAST" == unreachable ]] && return 1
+      [[ "$LAST" == unreachable ]] && { exit_if_hung; return 1; }
+      SILENT_SINCE=""
       local s; s=$(printf '%s' "$LAST" | field status)
       [[ "$s" == completed || "$s" == up_to_date ]]
     }

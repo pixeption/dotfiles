@@ -225,7 +225,8 @@ unity-wait [--project-path <dir>] recompile  [deadline]   # editor_stop if playi
 unity-wait [--project-path <dir>] job <id>   [deadline]   # ui_* job record on disk, readable through Play Mode
 ```
 
-Exit 0 success, 1 failure, 2 deadline, 3 Pipeline server failed to start (`ready`). Use `unity-wait recompile` when you need its Play Mode stop
+Exit 0 success, 1 failure, 2 deadline, 3 Pipeline server failed to start (`ready`), 4 editor hung
+(`recompile`: `unity status` still reads `ready`, but no command answers for 30 s). Use `unity-wait recompile` when you need its Play Mode stop
 and post-reload settling; the details it handles:
 
 - `recompile_status` has **two completion terminals**, `completed` and `up_to_date` (a trivial
@@ -262,7 +263,8 @@ first) instead of a shared temp file — pass a lane-scoped one under `<project>
 
 **Open editor.** A filtered Edit-Mode run (no `--assemblies`/`--failed-only`, `--category` empty or
 `!<Name>`) runs in the open editor through `unity-test`, which stays open under the same PID: it
-recompiles first (compile errors exit 2, editor left open), runs each `--filter` term as
+recompiles first (compile errors exit 2, editor left open; an editor whose server is up but answers
+no command for 30 s exits 2 with `editor hung - unity-editor ensure`), runs each `--filter` term as
 `unity-test`'s case-insensitive substring with `--no-restart`, merges the results into the
 `--output` report, and counts a test two terms match once, keeping a failure under either. Once it
 has started, anything but a test result (a start hang, an unreadable result or test list, a Play
@@ -270,7 +272,7 @@ entry before the next term) exits 2 with the editor left open — never a batch 
 session (`Entering Playmode…`/`Reloading assemblies for play mode`) or is not provably its own, or
 when `list_tests` shows a test the terms match in the excluded category — the live runner knows no
 categories. The first stderr line names the path taken: `running in the open editor` or `running in
-a batch editor: <why>`. Offline test: `tests/unity-suite-live.sh`.
+a batch editor: <why>`. Offline tests: `tests/unity-suite-live.sh`, `tests/unity-wait-hang.sh`.
 
 **Batch editor.** A Play Mode session poisons a live editor for full-suite runs, so everything else
 runs in a fresh batch editor holding no lock. The script closes any live editor (force-closing one that stays silent for 30 s; one that answers

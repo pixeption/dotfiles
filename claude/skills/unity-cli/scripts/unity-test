@@ -72,7 +72,7 @@ within ${START_DEADLINE}s; cancellation requested. Not the known hang (job not r
   }
   start_run || {
     (( RESTART )) || die "run_tests job $JOB: no '[TestResultCollector] Run started' within ${START_DEADLINE}s
-(the known start hang); cancellation requested, editor left alone (--no-restart)."
+(the known start hang); cancellation requested, editor left alone (--no-restart): unity-editor ensure '$PROJECT'."
     echo "run_tests job $JOB did not start within ${START_DEADLINE}s; restarting the editor once and retrying" >&2
     "$(dirname "$0")/unity-editor" restart "$PROJECT" >&2 || die "unity-editor restart '$PROJECT' failed"
     start_run || die "run_tests job $JOB: no '[TestResultCollector] Run started' in $LOG and no terminal job state

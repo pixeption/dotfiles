@@ -168,9 +168,10 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
 
 WHY=$(live_blocker)
 if [[ -z "$WHY" ]]; then
-  ERRORS=$(UNITY_PROJECT_PATH="$PROJECT" "$HERE/unity-wait" recompile) \
-    || live_die "scripts have compiler errors or the recompile did not finish - no tests ran:
+  ERRORS=$(UNITY_PROJECT_PATH="$PROJECT" "$HERE/unity-wait" recompile) || {
+    [[ -n "$ERRORS" ]] && live_die "scripts have compiler errors - no tests ran:
 $ERRORS"
+    live_die "editor hung - unity-editor ensure '$PROJECT'; the recompile did not finish, no tests ran"; }
   HIT=$(excluded_test) || live_die "could not read the editor's test list to check --category $CATEGORY"
   [[ -n "$HIT" ]] && WHY="--filter matches $HIT, in category ${CATEGORY#!}"
 fi
