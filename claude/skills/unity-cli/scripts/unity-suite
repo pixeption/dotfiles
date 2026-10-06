@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <seconds>]
-#             [--filter <A|B>] [--assemblies <A;B>] [--category <expr>]
+#             [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
 #
-# Game/CLAUDE.md's clean-suite rule: a Play-mode session poisons a live editor, so the full suite
-# must run in a fresh batch editor with nothing holding the project lock. This closes any live
-# editor first, runs `unity test`, reopens the editor if one was open, then reports pass/fail by
-# parsing the NUnit XML report — `unity test`'s exit code collapses every failure into a plain 6,
-# so it only tells you the run started, never why it ended.
+# A filtered Edit-Mode run goes to the open editor through unity-test, leaving it open, when that
+# editor never entered Play this session and its run selects what a batch run would (live_blocker,
+# excluded_tests). Everything else follows Game/CLAUDE.md's clean-suite rule: a Play-mode session
+# poisons a live editor, so the run happens in a fresh batch editor with nothing holding the project
+# lock. That path closes any live editor first, runs `unity test`, and reopens the editor if one was
+# open. Both paths end in an NUnit XML report (--output, else a temp file) whose pass/fail this
+# parses — `unity test`'s exit code collapses every failure into a plain 6, so it only tells you
+# the run started, never why it ended.
 # Exit 0 all passed, 1 some failed, 2 the run never produced a report or ran 0 tests.
 set -uo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -15,15 +18,16 @@ DIE_CODE=2
 
 # TIMEOUT: 30 min is many times a full suite (Pipeline.UI runs ~2 min) yet still ends a hung batch
 # editor, which `unity test` alone would wait on forever.
-ARG="."; MODE=EditMode; REPORT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""; CATEGORY=""
+ARG="."; MODE=EditMode; FAILED=""; OUTPUT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""; CATEGORY=""
 while [[ $# -gt 0 ]]; do case "$1" in
-  --failed-only) REPORT=$2; shift 2;;
+  --failed-only) FAILED=$2; shift 2;;
+  --output) OUTPUT=$2; shift 2;;
   --mode) MODE=$2; shift 2;;
   --timeout) TIMEOUT=$2; shift 2;;
   --filter) FILTER=$2; shift 2;;
   --assemblies) ASSEMBLIES=$2; shift 2;;
   --category) CATEGORY=$2; shift 2;;
-  -*) die "usage: unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>] [--category <expr>]";;
+  -*) die "usage: unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]";;
   *) ARG=$1; shift;;
 esac; done
 PROJECT=$(resolve_project "$ARG") || exit 2
@@ -34,47 +38,138 @@ PROJECT=$(resolve_project "$ARG") || exit 2
 # --rerun-failed reads the *previous* run's report from wherever --output points (there is no
 # separate "report to rerun" flag) — so rerunning failures means pointing --output at that same file.
 RERUN=""
-if [[ -n "$REPORT" ]]; then
-  [[ -f "$REPORT" ]] || die "--failed-only report not found: $REPORT"
+if [[ -n "$FAILED" ]]; then
+  [[ -f "$FAILED" ]] || die "--failed-only report not found: $FAILED"
   RERUN=--rerun-failed
+  OUTPUT=${OUTPUT:-$FAILED}
+fi
+if [[ -n "$OUTPUT" ]]; then
+  mkdir -p "$(dirname "$OUTPUT")" || die "cannot create the directory of --output $OUTPUT"
+  REPORT="$(cd "$(dirname "$OUTPUT")" && pwd)/$(basename "$OUTPUT")"
+  [[ -n "$FAILED" && ! "$FAILED" -ef "$REPORT" ]] && cp "$FAILED" "$REPORT"
 else
   REPORT=$(mktemp -t unity-suite-XXXXXX).xml
 fi
+# A report left at --output by an earlier run would read as this run's result.
+[[ -z "$RERUN" ]] && rm -f "$REPORT"
 
-answers() { [[ "$(result_json "$PROJECT" editor_status)" != unreachable ]]; }
-WAS_OPEN=0; SCENE=""
-if editor_open "$PROJECT"; then
-  WAS_OPEN=1
-  SCENE=$(result_json "$PROJECT" list_open_scenes | python3 -c '
+# Unity logs one of these on every Play entry, with and without domain reload.
+PLAY_ENTRY='^(Entering Playmode|Reloading assemblies for play mode)'
+
+# Prints why the run cannot go to the open editor; nothing when it can. The editor log covers its
+# whole session, so an editor whose log is not provably its own counts as having played.
+live_blocker() {
+  if [[ "$MODE" != EditMode ]]; then echo "a $MODE run"
+  elif [[ -z "$FILTER" ]]; then echo "no --filter: the full suite"
+  elif [[ -n "$RERUN$ASSEMBLIES" ]]; then echo "--failed-only and --assemblies are batch-only"
+  elif [[ -n "$CATEGORY" && ! "$CATEGORY" =~ ^![A-Za-z0-9_]+$ ]]; then echo "--category other than !<Name>"
+  elif ! editor_open "$PROJECT"; then echo "no open editor"
+  elif ! log_is_ours; then echo "its editor log cannot show it never entered Play"
+  elif grep -Eiq "$PLAY_ENTRY" "$(editor_log)"; then echo "the open editor entered Play this session"
+  fi
+}
+
+# The live runner matches each --filter term as a substring and knows no categories, so it is exact
+# only when no test those terms match carries the excluded category. Prints why not, else nothing.
+excluded_tests() {
+  [[ -z "$CATEGORY" ]] && return
+  result_json "$PROJECT" list_tests --mode editor | python3 -c '
+import sys, json
+try: tests = json.load(sys.stdin)["Tests"]
+except Exception: print("list_tests did not answer"); sys.exit()
+terms, cat = sys.argv[1].lower().split("|"), sys.argv[2].lower()
+hits = [t["FullName"] for t in tests if any(x in t["FullName"].lower() for x in terms)
+        and cat in (c.lower() for c in t.get("Categories") or [])]
+if hits: print(f"--filter matches {len(hits)} test(s) in category {sys.argv[2]}, e.g. {hits[0]}")
+' "$FILTER" "${CATEGORY#!}"
+}
+
+compile_live() {
+  local errors
+  errors=$(UNITY_PROJECT_PATH="$PROJECT" "$HERE/unity-wait" recompile) && return
+  echo "scripts have compiler errors or the recompile did not finish - no tests ran; editor left open:" >&2
+  printf '%s\n' "$errors" >&2
+  exit 2
+}
+
+# One unity-test run per --filter term; a test two terms match is counted once.
+run_live() {
+  local terms term part parts=()
+  IFS='|' read -ra terms <<<"$FILTER"
+  for term in "${terms[@]}"; do
+    part="$REPORT.${#parts[@]}.json"
+    "$HERE/unity-test" "$term" --project-path "$PROJECT" --deadline "$TIMEOUT" --result "$part" >/dev/null
+    [[ -s "$part" ]] || die "the live run of '$term' did not finish; editor left open"
+    parts+=("$part")
+  done
+  python3 - "$REPORT" "${parts[@]}" <<'MERGE'
+import json, sys, xml.etree.ElementTree as ET
+lower = lambda d: {k.lower(): v for k, v in d.items()}
+cases = {}
+for path in sys.argv[2:]:
+    for t in lower(json.load(open(path))).get("results") or []:
+        t = lower(t); cases[t["fullname"]] = t
+count = lambda status: sum(t.get("status") == status for t in cases.values())
+passed, skipped = count("Passed"), count("Skipped")
+run = ET.Element("test-run", total=str(len(cases)), passed=str(passed),
+                 failed=str(len(cases) - passed - skipped), skipped=str(skipped))
+for name, t in cases.items():
+    case = ET.SubElement(run, "test-case", fullname=name, result=t.get("status") or "")
+    if t.get("message"): ET.SubElement(ET.SubElement(case, "failure"), "message").text = t["message"]
+ET.ElementTree(run).write(sys.argv[1], encoding="utf-8", xml_declaration=True)
+MERGE
+  rm -f "${parts[@]}"
+}
+
+run_batch() {
+  answers() { [[ "$(result_json "$PROJECT" editor_status)" != unreachable ]]; }
+  local was_open=0 scene="" test_json test_rc errors
+  if editor_open "$PROJECT"; then
+    was_open=1
+    scene=$(result_json "$PROJECT" list_open_scenes | python3 -c '
 import sys, json
 print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] and s["path"]), ""))' 2>/dev/null)
-  "$HERE/unity-editor" down "$PROJECT" || { ! wait_for 30 answers 2>/dev/null && "$HERE/unity-editor" down "$PROJECT" --force; } \
-    || die "could not close the live editor — refusing to run a suite that would get poisoned"
+    "$HERE/unity-editor" down "$PROJECT" || { ! wait_for 30 answers 2>/dev/null && "$HERE/unity-editor" down "$PROJECT" --force; } \
+      || die "could not close the live editor — refusing to run a suite that would get poisoned"
+  fi
+
+  # `unity test --timeout` is disabled by default, so a hung batch editor would wait forever.
+  local nunit=(${ASSEMBLIES:+-assemblyNames "$ASSEMBLIES"} ${CATEGORY:+-testCategory "$CATEGORY"})
+  test_json=$(unity test --mode "$MODE" "$PROJECT" --output "$REPORT" --timeout "$TIMEOUT" $RERUN \
+    ${FILTER:+--filter "$FILTER"} --format json ${nunit[@]:+-- "${nunit[@]}"})
+  test_rc=$?
+
+  # A compile error aborts the batch run in seconds with no report; reopening the editor would only
+  # put it into Safe Mode, so report the errors and leave it closed.
+  if [[ ! -s "$REPORT" ]] && errors=$(compile_errors) && [[ -n "$errors" ]]; then
+    echo "scripts have compiler errors - no tests ran; editor left closed. Fix, then unity-editor up:" >&2
+    printf '%s\n' "$errors" >&2
+    exit 2
+  fi
+
+  if [[ $was_open -eq 1 ]]; then
+    "$HERE/unity-editor" up "$PROJECT" ${scene:+--scene "$scene"} \
+      || echo "WARNING: could not reopen the editor that was open before this run" >&2
+  fi
+
+  if [[ ! -s "$REPORT" ]]; then
+    echo "test run produced no report (unity test exit $test_rc) — it did not finish" >&2
+    echo "$test_json" >&2
+    exit 2
+  fi
+}
+
+WHY=$(live_blocker)
+if [[ -z "$WHY" ]]; then
+  compile_live
+  WHY=$(excluded_tests)
 fi
-
-# `unity test --timeout` is disabled by default, so a hung batch editor would wait forever.
-NUNIT=(${ASSEMBLIES:+-assemblyNames "$ASSEMBLIES"} ${CATEGORY:+-testCategory "$CATEGORY"})
-TEST_JSON=$(unity test --mode "$MODE" "$PROJECT" --output "$REPORT" --timeout "$TIMEOUT" $RERUN \
-  ${FILTER:+--filter "$FILTER"} --format json ${NUNIT[@]:+-- "${NUNIT[@]}"})
-TEST_RC=$?
-
-# A compile error aborts the batch run in seconds with no report; reopening the editor would only
-# put it into Safe Mode, so report the errors and leave it closed.
-if [[ ! -s "$REPORT" ]] && ERRORS=$(compile_errors) && [[ -n "$ERRORS" ]]; then
-  echo "scripts have compiler errors - no tests ran; editor left closed. Fix, then unity-editor up:" >&2
-  printf '%s\n' "$ERRORS" >&2
-  exit 2
-fi
-
-if [[ $WAS_OPEN -eq 1 ]]; then
-  "$HERE/unity-editor" up "$PROJECT" ${SCENE:+--scene "$SCENE"} \
-    || echo "WARNING: could not reopen the editor that was open before this run" >&2
-fi
-
-if [[ ! -s "$REPORT" ]]; then
-  echo "test run produced no report (unity test exit $TEST_RC) — it did not finish" >&2
-  echo "$TEST_JSON" >&2
-  exit 2
+if [[ -z "$WHY" ]]; then
+  echo "running in the open editor" >&2
+  run_live
+else
+  echo "running in a batch editor: $WHY" >&2
+  run_batch
 fi
 
 python3 - "$REPORT" <<'PY'

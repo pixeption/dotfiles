@@ -154,7 +154,7 @@ it hangs again, stop and report rather than looping.
 
 ```bash
 unity-test <filter> [--type name|assembly|category] [--mode editmode|playmode] [--project-path <dir>]
-           [--deadline <s>] [--start-deadline <s>]
+           [--deadline <s>] [--start-deadline <s>] [--result <file.json>]
 ```
 
 EditMode detaches (`run_tests --detach` + `unity job wait <jobId>`), so the run survives the CLI's
@@ -169,9 +169,10 @@ make no progress).
 The `testName` filter is a case-insensitive **substring of the full test name**
 (`Namespace.Class.Method(args)`), so a bare class name and a namespace-qualified one both work, and
 the bare one also matches any class whose name contains it. To cover several unrelated classes, pick
-a shared substring, pass `--type assembly <Name>`, or run them in batch (`unity-suite --filter`).
+a shared substring, pass `--type assembly <Name>`, or pass `A|B` to `unity-suite --filter`, which runs
+each term in the open editor when it can and otherwise in batch.
 
-| | `unity-test <filter>` (live editor) | `unity test --filter` / `unity-suite --filter` (batch) |
+| | `unity-test <filter>` (live editor) | `unity test --filter` / `unity-suite --filter` |
 |---|---|---|
 | match | one case-insensitive substring of the full name | a pattern over the full name |
 | several classes | `A\|B` is literal and matches nothing | `A\|B\|C` runs all three |
@@ -235,7 +236,7 @@ and post-reload settling; the details it handles:
 
 ```bash
 unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>]
-            [--filter <A|B>] [--assemblies <A;B>] [--category <expr>]
+            [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
 ```
 
 `--filter` joins class names with `|` and `--assemblies` joins assembly names with `;`, e.g.
@@ -244,8 +245,21 @@ NUnit's `-testCategory` expression, e.g. `--category '!Integration'` for a fast 
 refuses a comma in `--filter` or `--assemblies` and exits 2 when the report holds 0 tests, since
 `unity test` itself exits 0 then.
 
-A Play Mode session poisons a live editor for full-suite runs, so the suite runs in a fresh batch
-editor holding no lock. The script closes any live editor (force-closing one that stays silent for 30 s; one that answers
+`--output` puts the NUnit report at that path (directories created, a stale report there removed
+first) instead of a shared temp file — pass a lane-scoped one under `<project>/Logs/`.
+
+**Open editor.** A filtered Edit-Mode run (no `--assemblies`/`--failed-only`, `--category` empty or
+`!<Name>`) runs in the open editor through `unity-test`, which stays open under the same PID: it
+recompiles first (compile errors exit 2, editor left open), runs each `--filter` term as
+`unity-test`'s case-insensitive substring, merges the results into the `--output` report, and counts
+a test two terms match once. It falls back to batch when the editor's log shows a Play entry this
+session (`Entering Playmode…`/`Reloading assemblies for play mode`) or is not provably its own, or
+when `list_tests` shows a test the terms match in the excluded category — the live runner knows no
+categories. The first stderr line names the path taken: `running in the open editor` or `running in
+a batch editor: <why>`. Offline test: `tests/unity-suite-live.sh`.
+
+**Batch editor.** A Play Mode session poisons a live editor for full-suite runs, so everything else
+runs in a fresh batch editor holding no lock. The script closes any live editor (force-closing one that stays silent for 30 s; one that answers
 but will not close stops the run), runs `unity test` with an explicit
 `--output` and `--timeout` (default 1800 s; the CLI's own default is *no* timeout), reopens the editor afterward if one was open, and parses the NUnit XML for pass/fail
 rather than guessing from the exit code. Under the count line it prints

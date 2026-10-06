@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # unity-test <filter> [--type name|assembly|category] [--mode editmode|playmode] [--project-path <dir>]
-#                     [--deadline <seconds>] [--start-deadline <seconds>]
+#                     [--deadline <seconds>] [--start-deadline <seconds>] [--result <file.json>]
 # EditMode runs detach (`--detach` + `unity job wait`): the result survives the CLI request timeout, not a domain reload.
 # PlayMode cannot detach — entering Play mode drops the request — so it runs --async_tests and polls
-# test_status. Exit 0 all passed, 1 failures / no tests matched / filter mismatch, 2 could not run.
+# test_status. --result saves the run's result JSON (after the filter check) for a caller to merge.
+# Exit 0 all passed, 1 failures / no tests matched / filter mismatch, 2 could not run.
 set -uo pipefail
 source "$(dirname "$0")/_common.sh"
 DIE_CODE=2
 
-FILTER=""; TYPE=testName; MODE=EditMode; PROJECT_ARG="${UNITY_PROJECT_PATH:-.}"
+FILTER=""; TYPE=testName; MODE=EditMode; PROJECT_ARG="${UNITY_PROJECT_PATH:-.}"; RESULT_FILE=""
 # DEADLINE bounds the whole run and is passed on as run_tests' own timeout: 15 min is far above a
 # filtered run, and it must outlast the run or the tool's timeout wedges the exec gate (below).
 DEADLINE=900
@@ -21,6 +22,7 @@ while [[ $# -gt 0 ]]; do case "$1" in
   --mode) MODE=$([[ ${2,,} == playmode ]] && echo PlayMode || echo EditMode); shift 2;;
   --project-path) PROJECT_ARG=$2; shift 2;;
   --deadline) DEADLINE=$2; shift 2;;
+  --result) RESULT_FILE=$2; shift 2;;
   -*) die "unknown option $1";;
   *) FILTER=$1; shift;;
 esac; done
@@ -88,6 +90,7 @@ r = json.load(sys.stdin); k = lambda *names: next((r[n] for n in names if n in r
 want = f"{sys.argv[1]}: {sys.argv[2]}".lower(); applied = (k("FilterApplied", "filterApplied") or "").lower()
 if applied and applied != want:
     print(f"FILTER MISMATCH: asked {want!r}, ran {applied!r}", file=sys.stderr); sys.exit(1)
+if sys.argv[3]: json.dump(r, open(sys.argv[3], "w"))
 s = {n.lower(): v for n, v in (k("Summary", "summary") or {}).items()}
 print("%s/%s passed, %s failed, %s skipped" % tuple(s.get(n) for n in ("passed", "total", "failed", "skipped")))
 if not s.get("total"):
@@ -95,4 +98,4 @@ if not s.get("total"):
 bad = [t for t in (k("Results", "results") or []) if (t.get("Status") or t.get("status")) not in ("Passed", "Skipped")]
 for t in bad: print("FAIL", t.get("FullName") or t.get("fullName")); print("   ", (t.get("Message") or t.get("message") or "").strip()[:300])
 sys.exit(1 if bad else 0)
-' "$TYPE" "$FILTER"
+' "$TYPE" "$FILTER" "$RESULT_FILE"
