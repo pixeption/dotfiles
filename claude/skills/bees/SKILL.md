@@ -60,6 +60,10 @@ are all you schedule from, and a whole plan stays in your context every turn. A 
 its implementor's to read; open one yourself (`sed -En '/^### <unit> ·/,/^#{1,3} /p'`) only when a
 decision, blocker or finding on that unit turns on it.
 
+**On adopting a plan that arrives already scored**, check its checklist for units that take a
+pipeline where no committed consumer has gone, and schedule their path maps ("Routing") before
+them: the scoring step that would have caught them has already passed.
+
 **Before the first codex unit**, run the preflight. The server reads
 `~/.config/opencode/opencode.jsonc` and its model catalogue at startup only, so a stale server
 turns every external directory into an unanswered ask, denies a newly allowed one, or rejects a
