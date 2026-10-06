@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >-
-  Format rules for any structured markdown deliverable with enumerated items — implementation plans, code audits, design reviews, review reports. Covers the header block, the triage and checklist tables at the top, stable anchored IDs, the scoring scale and phases, source links, and the status/log files that travel with a plan (and are deleted with it). Load it before writing, restructuring or deleting one of those documents, and whenever the bees skill runs a plan.
+  Formats structured Markdown plans, audits and reviews with summary tables, stable item IDs, scoring, phases, source links and companion status/log files. Use when writing, restructuring or deleting a structured Markdown deliverable with enumerated items, or when bees runs a plan.
 ---
 
 # Plan and audit format
@@ -88,41 +88,17 @@ Beside `<plan>.md`, committed with it:
 | `<plan>.status.md` | the handover — overwritten, **≤ 30 lines**; never repeats per-item status (that is the checklist) | at a pause, before a handoff, and when a resource changes holder — not on every acceptance, which the checklist and the log record |
 | `<plan>.log.md` | one line per event, append-only | as events happen |
 
-`<plan>.status.md` template:
-
-```markdown
-# <plan title> — status
-
-## Setup
-- owner: routing buckets · review cross-vendor · cadence per unit      (answers, valid on any machine)
-- Locs-Mac-Studio-5, 2026-09-24: playwright-cli ok · Chrome extension ok · opencode preflight ok · codex weekly 59%
-
-## Now
-- phase 2 · STEP-06 running (codex sol, session ses_…, pinned /Users/…/repo, last out-file impl-STEP-06-r1.txt, ctx 84k)
-- editor: nono4u/Game held by STEP-06, not in Play
-
-## Next
-- STEP-07 after STEP-06
-
-## Blocked
-- none
-
-## Resources
-- nono4u feat/x @ 1a2b3c4 · uncommitted: Game/Assets/X.cs (owner WIP — never touch)
-- game-core main @ 5d6e7f8 · clean
-- last verification: `unity test --mode EditMode Game` → 412 passed (2026-09-24 14:10)
-- open review ids: STEP-05 F3
-
-## Keep in mind
-- decision 2026-09-24: STEP-04 keeps the old column order (log: "decision: …")
-```
+`<plan>.status.md` starts as a copy of [`templates/status.md`](templates/status.md)
+(`cat ~/.claude/skills/plan/templates/status.md`), an example to overwrite line by line:
 
 - **Setup** holds what a new session would otherwise ask or check again. Owner answers are valid
   anywhere. Each environment line starts with the machine (`scutil --get LocalHostName`) and date: a
   session on the same machine trusts it and skips that check; on another machine it re-runs the
   environment checks only, never the owner's questions.
-- **Resources** keeps one last-verification entry per repo and suite. Older runs live only in the
-  log, so the file stays inside its line limit.
+- **Resources** lists each slot by name with its holder or `free` — a slot is what bees "Rules"
+  (rule 3) names, and what it covers is unity-cli "One driver per project". It keeps one
+  last-verification entry per slot and suite. Older runs live only in the log, so the file stays
+  inside its line limit.
 - A codex session is resumable only on the same server; say so when the plan may move machines.
 - An unknown fact is written `unknown`, never reconstructed.
 
