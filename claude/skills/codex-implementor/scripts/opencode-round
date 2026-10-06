@@ -16,7 +16,7 @@
 # <out-file>.usage, written last because bees-watch reads it as "finished". The round FAILED when an
 # ask was rejected or could not be checked, the stream stalled, the log has an `error` event, the
 # run exited non-zero, there is no final message, the final message's step did not finish with
-# reason `stop`, or (review) the answer does not end in APPROVE/CHANGES_REQUIRED. A failed out-file is `Blocked: <reason>`, the
+# reason `stop` (per the log, or the server when the log lacks it), or (review) the answer does not end in APPROVE/CHANGES_REQUIRED. A failed out-file is `Blocked: <reason>`, the
 # partial answer without BEES lines, and `BEES: results=<unit>:blocked:-` for every -u (none without
 # -u), so a failed review never reads as a verdict.
 # Exit 0 finished · 1 failed (stderr says why) · 2 usage.
@@ -44,12 +44,16 @@ dirs=("$(cd "$workdir" && pwd -L)"); [ "$(cd "$workdir" && pwd -P)" = "${dirs[0]
 session_id() { jq -Rr 'fromjson? | select(.sessionID) | .sessionID' "$logfile" 2>/dev/null | head -1; }
 pending_ask() {
   for d in "${dirs[@]}"; do
-    curl -sfG "${url}/permission" --data-urlencode "directory=$d" 2>/dev/null |
+    curl -sfG -m 10 "${url}/permission" --data-urlencode "directory=$d" 2>/dev/null |
       jq -c --arg s "$1" --arg d "$d" 'if type == "array" then .[] | select(.sessionID == $s) | . + {directory: $d}
         else error("not a list") end' 2>/dev/null || return 1
   done
 }
-post_ok() { [ "$(curl -sf -X POST "$@" 2>/dev/null)" = true ]; }
+post_ok() {
+  local reply
+  reply="$(curl -sf -m 10 -X POST "$@" 2>/dev/null)" || return 1
+  [ "$reply" = true ]
+}
 reject() {
   post_ok "${url}/permission/$(jq -r '"\(.id)/reply?directory=\(.directory | @uri)"' <<<"$1")" \
     -H 'content-type: application/json' -d '{"reply":"reject","message":"headless run: outside the fence"}'
@@ -64,9 +68,14 @@ activity=""; still=0
 session_status() { curl -sfG -m 10 "${url}/session/status" --data-urlencode "directory=${dirs[0]}" 2>/dev/null |
   jq -r --arg s "$1" '.[$s].type // empty' 2>/dev/null; }
 stalled() {
-  local now=""
-  [ "$(session_status "$1")" = busy ] && now="$("$here/opencode-activity" "$url" "${dirs[0]}" "$1")"
-  if [ -z "$now" ] || [ "$now" = tool ] || [ "$now" != "$activity" ]; then activity="$now"; still=0; return 1; fi
+  local now="" state=""
+  if ! state="$(session_status "$1")" || [ "$state" != busy ] ||
+     ! now="$("$here/opencode-activity" "$url" "${dirs[0]}" "$1")"; then
+    activity=""; still=0; return 1
+  fi
+  if [ -z "$now" ] || [ "$now" = tool ] || [ "$now" != "$activity" ]; then
+    activity="$now"; still=0; return 1
+  fi
   still=$((still + poll)); [ "$still" -ge $((stall_min * 60)) ]
 }
 
@@ -101,18 +110,41 @@ sid="$(session_id)"
 [ -n "$sid" ] && printf '%s\n' "$sid" > "${outfile}.session"
 "$here/extract-opencode-final" "$logfile" "$sid" > "$outfile" 2>/dev/null
 apierr="$(jq -rR 'fromjson? | select(.type=="error") | .error | "\(.name // "error")\(if .data.ref then " (\(.data.ref))" else "" end): \(.data.message // "")"' "$logfile" 2>/dev/null | head -1)"
+final_message_id() { jq -rnR --arg s "$sid" '[inputs | fromjson? | select(.sessionID == $s and .type == "text")] | last | .part.messageID // empty' "$logfile" 2>/dev/null; }
 final_step_stopped() {
-  jq -enR --arg s "$sid" '[inputs | fromjson? | select(.sessionID == $s)] as $e |
-    ([$e[] | select(.type == "text")] | last | .part.messageID) as $msg |
-    ([$e[] | select(.type == "step_finish")] | last | .part) as $step |
-    $msg != null and $step.messageID == $msg and $step.reason == "stop"' "$logfile" >/dev/null 2>&1
+  jq -enR --arg s "$sid" --arg msg "$1" '[inputs | fromjson? | select(.sessionID == $s and .type == "step_finish")] | last |
+    .part.messageID == $msg and .part.reason == "stop"' "$logfile" >/dev/null 2>&1
+}
+# `opencode run` can exit on session idle before printing the last step_finish (opencode 1.18.33:
+# the final step's step_finish was missing from the log but stored on the server), so ask the server
+# for it, as a log event, and use it for both the finish check and .usage.
+server_step_finish() {
+  curl -sfG -m 10 "${url}/session/${sid}/message/$1" --data-urlencode "directory=${dirs[0]}" 2>/dev/null |
+    jq -c --arg s "$sid" '[.parts[] | select(.type == "step-finish")] | last | select(.reason == "stop") |
+      {type: "step_finish", sessionID: $s, part: .}' 2>/dev/null
+}
+final_msg="$(final_message_id)"; server_finish=""
+final_message_is_latest() {
+  jq -enR --arg s "$sid" --arg msg "$final_msg" '
+    [inputs | fromjson? |
+      select(.sessionID == $s and .part.messageID != null)] |
+    last | .part.messageID == $msg
+  ' "$logfile" >/dev/null 2>&1
+}
+if [ -n "$final_msg" ] && final_message_is_latest &&
+   ! final_step_stopped "$final_msg"; then
+  server_finish="$(server_step_finish "$final_msg")" || server_finish=""
+fi
+final_finished() {
+  [ -n "$final_msg" ] && final_message_is_latest &&
+    { final_step_stopped "$final_msg" || [ -n "$server_finish" ]; }
 }
 ends_in_verdict() { grep -v '^[[:space:]]*$' "$outfile" | tail -n 1 | grep -qE '^[[:space:]]*(APPROVE|CHANGES_REQUIRED)[[:space:]]*$'; }
 
 [ -z "$blocked" ] && [ -n "$apierr" ] && blocked="Blocked: opencode ${apierr}"
 [ -z "$blocked" ] && [ "$status" != 0 ] && blocked="Blocked: opencode run exited ${status}"
 [ -z "$blocked" ] && [ ! -s "$outfile" ] && blocked="Blocked: the round ended without a final message"
-[ -z "$blocked" ] && ! final_step_stopped && blocked="Blocked: the final message's step did not finish (no step_finish with reason stop)"
+[ -z "$blocked" ] && ! final_finished && blocked="Blocked: the final message's step did not finish (no step_finish with reason stop)"
 [ -z "$blocked" ] && [ "$role" = review ] && ! ends_in_verdict && blocked="Blocked: the answer does not end in APPROVE or CHANGES_REQUIRED (truncated?)"
 if [ -n "$blocked" ]; then
   blocked="$blocked (log: ${logfile})"
@@ -121,5 +153,5 @@ if [ -n "$blocked" ]; then
   printf '%s\n\n%s%s\n' "$blocked" "$partial" "${results:+${partial:+$'\n\n'}BEES: results=${results%;}}" > "$outfile"
   echo "opencode-round: $blocked" >&2
 fi
-"$here/extract-opencode-usage" "$logfile" "$sid" > "${outfile}.usage"
+"$here/extract-opencode-usage" <(cat "$logfile"; [ -z "$server_finish" ] || printf '%s\n' "$server_finish") "$sid" > "${outfile}.usage"
 [ -z "$blocked" ]
