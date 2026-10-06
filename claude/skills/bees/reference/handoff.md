@@ -21,6 +21,7 @@ At the next safe point:
 - [ ] Start nothing new. Every running unit reports; a reviewer mid-recheck finishes.
 - [ ] Retire every Claude bee (the successor cannot receive their notifications). A codex session
       under 200k may stay for the successor to resume by id, in its pinned directory, same server.
+- [ ] Every gap a report listed since the last handoff is a tooling-gaps row or a `gap:` log line.
 - [ ] Write <plan>.status.md so the successor needs nothing from this tab:
       Setup — owner answers, each environment check with machine and date
       Now / Resources — each kept codex session (id, pinned dir, last out-file, context),

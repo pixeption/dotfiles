@@ -316,8 +316,9 @@ write it at a pause, a handoff, or when a resource changes holder.
 
 Also log each round as it finishes (`[<unit>] round: impl r2 codex sol high, done, ctx 96k,
 impl-<unit>-r2.txt`), each review verdict, each owner decision (`decision: …`, and in Keep in mind
-while it applies), each tooling gap (`gap: …`). A session id worth resuming goes in status.md. A
-log entry that needs more than one line is a checklist row or a plan section instead.
+while it applies), each tooling gap, every one a report lists and not only the blocking ones
+(`gap: …`). A session id worth resuming goes in status.md. A log entry that needs more than one
+line is a checklist row or a plan section instead.
 
 **Commit cadence** — commit the plan, log and status at every decision, acceptance and pause, by
 path (`git commit -m … -- <paths>`, so another agent's staged files are never swept in). A run of
