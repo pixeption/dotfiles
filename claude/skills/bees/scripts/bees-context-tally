@@ -81,10 +81,12 @@ def attachment_text(att):
 
 
 def read_class(path):
+    if re.search(r"[$*?`]", path):
+        return "unknown"
     for name, rx in READ_CLASSES:
         if rx.search(path):
             return name
-    return "unknown" if re.search(r"[$*?`]", path) else None
+    return None
 
 
 def whole_cats(command):
@@ -100,23 +102,36 @@ def whole_cats(command):
 
 
 def reads(tool_uses, result_chars):
-    """Whole reads by class: {class: [count, tokens]}."""
-    out = {name: [0, 0.0] for name, _ in READ_CLASSES + (("unknown", None),)}
+    """Whole reads by class: {class: [count, tokens, untokened]}. A result is attributed only to the
+    sole whole-file read of a command that does nothing else; other reads are counted untokened."""
+    out = {name: [0, 0.0, 0] for name, _ in READ_CLASSES + (("unknown", None),)}
     for use in tool_uses:
         inp = use.get("input") or {}
         if use.get("name") == "Read" and not ({"offset", "limit", "pages"} & inp.keys()):
             paths = [[inp.get("file_path", "")]]
+            chained = False
         elif use.get("name") == "Bash":
-            paths = list(whole_cats(inp.get("command", "")))
+            command = inp.get("command", "")
+            paths = list(whole_cats(command))
+            chained = len(CHAIN.split(HEREDOC.sub(r"<<\3", command))) > 1
         else:
             continue
+        sole = not chained and len(paths) == 1 and len(paths[0]) == 1 and use.get("id") in result_chars
         for args in paths:
             for path in args:
                 name = read_class(path)
-                if name:
+                if name and sole:
                     out[name][0] += 1
-                    out[name][1] += tokens(result_chars.get(use.get("id"), 0) / len(args))
-    return {k: {"count": c, "tokens": round(t)} for k, (c, t) in out.items()}
+                    out[name][1] += tokens(result_chars[use["id"]])
+                elif name:
+                    out[name][0] += 1
+                    out[name][2] += 1
+    return {k: {"count": c, "tokens": None if c and u == c else round(t), "untokened": u}
+            for k, (c, t, u) in out.items()}
+
+
+def known_count(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
 def outcome(blocks):
@@ -165,8 +180,7 @@ def tally(path):
             r = responses[msg["id"]]
             r.ctx, r.model = context(msg["usage"]), msg.get("model")
             details = msg["usage"].get("output_tokens_details") or {}
-            if "thinking_tokens" in details:
-                r.thinking = details["thinking_tokens"]
+            r.thinking = details.get("thinking_tokens")
             for b in msg.get("content") or []:
                 r.blocks.append(b)
                 if b.get("type") == "thinking":
@@ -213,8 +227,12 @@ def tally(path):
         growth, own = growth + grew, own + tokens(order[i].chars)
         visible += seen
         thinking = order[i].thinking
-        if not iv.unknown and thinking is not None:
-            (eligible.append([round(grew - seen), thinking]) if thinking > 0 else controls.append(round(grew - seen)))
+        if iv.unknown or not known_count(thinking):
+            continue
+        if thinking > 0:
+            eligible.append([round(grew - seen), thinking])
+        elif thinking == 0:
+            controls.append(round(grew - seen))
     residual = growth - visible
     thinkers = sum(r.thinks for r in order)
     if pause_at is not None:
@@ -292,8 +310,9 @@ def aggregate(records):
     table("Growth by agent type (unattributed residual)",
           ["agent", "runs", "growth per run", "residual share", "residual per thinking response",
            "responses with thinking"], rows)
-    table("Whole reads by class", ["class", "count", "tokens"],
-          [[c, sum(r["reads"][c]["count"] for r in records), sum(r["reads"][c]["tokens"] for r in records)]
+    table("Whole reads by class", ["class", "count", "tokens", "untokened"],
+          [[c, sum(r["reads"][c]["count"] for r in records), sum(r["reads"][c]["tokens"] or 0 for r in records),
+            sum(r["reads"][c]["untokened"] for r in records)]
            for c in records[0]["reads"]] if records else [])
     by_effort = {}
     for r in records:
@@ -316,6 +335,8 @@ def main():
     ap.add_argument("--since")
     ap.add_argument("--manifest", type=Path)
     a = ap.parse_args()
+    if a.manifest and a.since:
+        ap.error("--manifest and --since are mutually exclusive")
     if a.manifest:
         meta = manifest_rows(a.manifest)
         paths = [a.dir / sid / "subagents" / f"agent-{aid}.jsonl" for sid, aid in meta]

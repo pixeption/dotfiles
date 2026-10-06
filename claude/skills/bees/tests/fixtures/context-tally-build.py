@@ -109,6 +109,15 @@ def build(root, root2):
     r.asst(18100, [text("Outcome: Done\nBEES: results=SA-05:done:abc1234")])
     r.write()
 
+    r = Run(root, S1, "aedge", "bee-opus-low", "low", ("2026-10-01T14", 0, 0))
+    r.prompt()
+    r.asst(5000, [tool("Bash", command='cat "$root/docs/plans/x.md"')], -5); r.result("a" * 350)
+    r.asst(6000, [tool("Read", file_path="/r/docs/plans/m.md")], float("nan"))
+    r.asst(7000, [tool("Bash", command="cat /p/skills/b/SKILL.md; cat /r/docs/plans/w.md")], float("inf"))
+    r.result("w" * 700)
+    r.asst(8000, [text("Outcome: Done\nBEES: results=SA-05:done:abc1234")])
+    r.write()
+
     r = Run(root, S1, "alow", "bee-opus-low", "low", ("2026-10-01T12", 0, 0))
     r.prompt()
     r.asst(5000, [bash_x()], 0); r.result("r" * PAD)
