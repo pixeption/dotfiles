@@ -1,7 +1,7 @@
 ---
 name: unity-cli-upgrade
 description: >-
-  Checks for and applies upgrades of the `unity` CLI and the Unity Pipeline package (`com.unity.pipeline`) in the Unity projects, game-core and nono4u/Game unless others are named, then reads the changelogs and revises the unity-cli skill to match. Use when the user asks to check, update or upgrade the Unity CLI, the pipeline package or "unity tooling", or says "unity-cli-upgrade".
+  Checks for and applies upgrades of the `unity` CLI and the Unity Pipeline package (`com.unity.pipeline`) in the Unity projects nono4u/GameCore and nono4u/Game unless others are named, then reads the changelogs and revises the unity-cli skill to match. Use when the user asks to check, update or upgrade the Unity CLI, the pipeline package or "unity tooling", or says "unity-cli-upgrade".
 ---
 
 # Upgrade the Unity CLI and the Pipeline package
@@ -18,7 +18,7 @@ a project here.
 
 ```bash
 S=~/.claude/skills/unity-cli-upgrade/scripts
-$S/unity-cli-upgrade-check                        # game-core and nono4u/Game
+$S/unity-cli-upgrade-check                        # nono4u/GameCore and nono4u/Game
 $S/unity-cli-upgrade-check <project-dir>...       # exactly the projects the user named
 ```
 
@@ -112,7 +112,7 @@ the package changelog range.
 7. **Other owners.** If a changed command appears in another skill or a repo doc
    (`grep -rn` over `~/.claude/skills` and the repos' `CLAUDE.md`, `docs/`, `.claude/skills/`), fix
    it in its owning source. Synced skills under a project's `.claude/skills/` are generated from
-   game-core; edit the source there.
+   `nono4u/GameCore`'s packages; edit the source there.
 
 Never run `unity skill install` or `unity skill refresh`: see unity-cli's `reference/upgrades.md`.
 

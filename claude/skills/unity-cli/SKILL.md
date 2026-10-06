@@ -1,7 +1,7 @@
 ---
 name: unity-cli
 description: >-
-  Drives Unity through the `unity` CLI, the Unity Pipeline package (`com.unity.pipeline`) and a live editor's HTTP API (`unity command`, `recompile`, `test`, `status`, `job`) and the helpers `unity-editor`, `unity-test`, `unity-suite`, `unity-wait` for an edit → recompile → test loop. Use when scripting or iterating on a live Unity editor, running batch tests or builds, managing or upgrading editors and the CLI, or debugging its exit codes.
+  Drives Unity through the unity CLI, Pipeline API and editor/test helpers for an edit → recompile → test loop. Use when scripting or iterating on a live Unity editor, running batch tests or builds, managing or upgrading editors and the CLI, or debugging its exit codes.
 ---
 
 # Unity CLI + Unity Pipeline
@@ -56,19 +56,22 @@ at the end, through `unity-suite`.
 
 ## One driver per project (read this first)
 
-A Unity project is **one exclusive resource**: its GUI editor, a batch `unity test`, `unity
-command`, the `Temp/UnityLockfile`, **and every source file it compiles**, its own `Assets/` plus
-every package it pulls by `file:` path (here, `nono4u/Game` loads `game-core`'s packages and
-`game-build`). A second driver on the same project fails ("another instance is running", a refused
-`run_tests`, a mid-reload socket); editing *any* file in that compile domain while another driver
-holds the editor puts it into a broken compile, a domain reload or Safe Mode. Two drivers that both
-retry starve each other forever.
+**A Unity resource is a project plus every source directory it resolves to.** Projects whose
+resolved sources overlap are one resource. A worktree's `Game/` and `GameCore/` are one resource;
+separate worktrees are separate resources.
 
-There is no locking mechanism; the rule is organisational and the `bees` orchestrator enforces it:
+The resource covers the project's GUI editor, a batch `unity test`, `unity command`, the
+`Temp/UnityLockfile`, its own `Assets/` and every package it resolves by `file:` path (a pinned git
+package is immutable, so it adds nothing). A second driver on the same resource fails ("another
+instance is running", a refused `run_tests`, a mid-reload socket); editing *any* source in it while
+another driver holds the editor puts that editor into a broken compile, a domain reload or Safe
+Mode. Two drivers that both retry starve each other forever.
 
-- Exactly one agent drives a project at a time, named in its brief, and no other agent edits
-  sources that project compiles while it does. `game-core` and `nono4u/Game` share a compile
-  domain, so one agent holds both or the other agent does non-Unity work.
+The rule is organisational; the `bees` orchestrator assigns resources and nono4u's
+`tools/workspace.sh` records who holds one:
+
+- Exactly one agent drives a resource at a time, named in its brief, and no other agent edits
+  sources it resolves to while it does.
 - A failure because another editor/instance holds the project is **not transient**: end your turn
   and report it. Never wrap it in a loop, a `sleep`, or a "wait for the lock".
 - **"Held" means a lock error on *your* project.** `unity status` listing a GUI editor on a

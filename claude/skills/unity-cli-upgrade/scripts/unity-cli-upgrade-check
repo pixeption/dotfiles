@@ -9,8 +9,8 @@ for tool in unity python3; do
   command -v "$tool" >/dev/null || { echo "$tool not found on PATH: install it, then re-run" >&2; exit 1; }
 done
 
-# game-core first: it owns the packages that declare Pipeline commands, and nono4u/Game compiles them.
-(( $# )) || set -- "$HOME/code/game-core" "$HOME/code/nono4u/Game"
+# GameCore first: it owns the packages that declare Pipeline commands, and nono4u/Game compiles them.
+(( $# )) || set -- "$HOME/code/nono4u/GameCore" "$HOME/code/nono4u/Game"
 
 cli=$(unity self-update --check --format json) || { echo "unity self-update --check failed" >&2; exit 1; }
 versions=$(unity pipeline list-versions --format json) || { echo "unity pipeline list-versions failed" >&2; exit 1; }
