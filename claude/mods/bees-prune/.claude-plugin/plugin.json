@@ -1,8 +1,0 @@
-{
-  "name": "bees-prune",
-  "version": "0.1.0",
-  "description": "Asks bees-budget to prune finished units from the orchestrator's context between turns (bees SKILL.md, Status and acceptance)",
-  "dependencies": [
-    "bees-budget"
-  ]
-}
