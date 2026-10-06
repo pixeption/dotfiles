@@ -38,12 +38,24 @@ status_json() { result_json "$PROJECT" "$1"; }
 
 # The project's state in `unity status`, read from /api/status off the main thread: it still answers
 # `ready` (or `blocked_by_dialog`) while a stuck command holds the exec gate, but not during a domain
-# reload, and reports `starting` while the editor imports or compiles.
+# reload. Past startup it stays `ready` through a compile too, so server_idle also needs the on-disk
+# recompile status not to read `triggered` or `compiling`: a long compile is waited out, not hung.
 server_state() { unity status --format json 2>/dev/null | python3 -c '
 import sys, json
 print(next((i.get("state", "") for i in json.load(sys.stdin)["data"]["instances"] if i.get("project") == sys.argv[1]), ""))
 ' "$PROJECT" 2>/dev/null; }
-server_idle() { [[ "$(server_state)" =~ ^(ready|blocked_by_dialog)$ ]]; }
+server_idle() {
+  [[ "$(server_state)" =~ ^(ready|blocked_by_dialog)$ ]] || return 1
+  python3 - "$PROJECT/Temp/pipeline_recompile_status.json" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        status = json.load(f).get("status")
+except (OSError, ValueError):
+    status = None
+sys.exit(1 if status in ("triggered", "compiling") else 0)
+PY
+}
 
 case "$MODE" in
   ready)
@@ -79,8 +91,7 @@ case "$MODE" in
   recompile)
     DEADLINE=${2:-$DEADLINE_DEFAULT}
     SETTLE=${UNITY_WAIT_SETTLE:-60}
-    # HANG: an idle server whose commands go unanswered this long is hung, not compiling: a recompile
-    # answers recompile_status throughout, and a reload takes the server down with it.
+    # HANG: an idle server (server_idle) whose commands go unanswered this long is hung.
     HANG=${UNITY_WAIT_HANG:-30}
     require_editor
     # A recompile is DEFERRED while the editor is in Play Mode: the request never completes, so this

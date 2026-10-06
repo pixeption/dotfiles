@@ -4,6 +4,8 @@
 #   hung     - server answers `ready`, no command answers: exit 4 within the hang window.
 #   dialog   - same, server `blocked_by_dialog`: exit 4.
 #   reload   - no command answers, server down (a domain reload): waits out the deadline, exit 2.
+#   triggered, compiling - no command answers, server `ready`, but the on-disk recompile status says a
+#              compile is under way (a long compile holds the exec gate): waits out the deadline, exit 2.
 #   answered - recompile_status answers: compiled clean, exit 0.
 #   suite    - unity-suite on a hung editor says "editor hung", not "compiler errors", and runs nothing.
 set -uo pipefail
@@ -12,6 +14,7 @@ cp -R "$(cd "$(dirname "$0")/.." && pwd)/scripts" "$TMP/scripts"
 PROJ="$TMP/proj"; mkdir -p "$PROJ/ProjectSettings" "$PROJ/Logs" "$TMP/home/.unity/bin" "$TMP/home/Library/Logs/Unity"
 touch "$PROJ/ProjectSettings/ProjectVersion.txt" "$TMP/home/Library/Logs/Unity/Editor.log"
 PROJ=$(cd "$PROJ" && pwd)
+mkdir -p "$PROJ/Temp"
 printf 'header\n%s\n' "$PROJ" >"$PROJ/Logs/Editor.log"
 
 cat >"$TMP/home/.unity/bin/unity" <<EOF
@@ -34,7 +37,8 @@ chmod +x "$TMP/home/.unity/bin/unity"
 
 fail=0
 run() { # run <stub> <command...>: sets out, code, took
-  rm -f "$TMP/recompiled" "$TMP/calls"
+  rm -f "$TMP/recompiled" "$TMP/calls" "$PROJ/Temp/pipeline_recompile_status.json"
+  [[ $1 == triggered || $1 == compiling ]] && echo '{"status":"'"$1"'","failed":false}' >"$PROJ/Temp/pipeline_recompile_status.json"
   local start=$SECONDS
   out=$(STUB=$1 HOME="$TMP/home" UNITY_WAIT_HANG=3 UNITY_WAIT_SETTLE=6 "${@:2}" 2>&1); code=$?
   took=$(( SECONDS - start ))
@@ -50,6 +54,10 @@ run dialog "${wait_cmd[@]}"
 check dialog   eval '(( code == 4 && took < 12 ))'
 run reload "${wait_cmd[@]}"
 check reload   eval '(( code == 2 )) && [[ $out != *hung* ]]'
+for stub in triggered compiling; do
+  run $stub "${wait_cmd[@]}"
+  check $stub eval '(( code == 2 )) && [[ $out != *hung* ]]'
+done
 run answered "${wait_cmd[@]}"
 check answered eval '(( code == 0 )) && [[ $out == *"compiled clean"* ]]'
 run hung "$TMP/scripts/unity-suite" "$PROJ" --filter FooTests

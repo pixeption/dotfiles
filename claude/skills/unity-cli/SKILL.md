@@ -230,7 +230,8 @@ unity-wait [--project-path <dir>] job <id>   [deadline]   # ui_* job record on d
 ```
 
 Exit 0 success, 1 failure, 2 deadline, 3 Pipeline server failed to start (`ready`), 4 editor hung
-(`recompile`: `unity status` still reads `ready`, but no command answers for 30 s). Use `unity-wait recompile` when you need its Play Mode stop
+(`recompile`: `unity status` still reads `ready` and nothing is compiling, but no command answers
+for 30 s). Use `unity-wait recompile` when you need its Play Mode stop
 and post-reload settling; the details it handles:
 
 - `recompile_status` has **two completion terminals**, `completed` and `up_to_date` (a trivial
@@ -267,8 +268,8 @@ first) instead of a shared temp file — pass a lane-scoped one under `<project>
 
 **Open editor.** A filtered Edit-Mode run (no `--assemblies`/`--failed-only`, `--category` empty or
 `!<Name>`) runs in the open editor through `unity-test`, which stays open under the same PID: it
-recompiles first (compile errors exit 2, editor left open; an editor whose server is up but answers
-no command for 30 s exits 2 with `editor hung - unity-editor ensure`), runs each `--filter` term as
+recompiles first (compile errors exit 2, editor left open; an editor whose server is up and not
+compiling but answers no command for 30 s exits 2 with `editor hung - unity-editor ensure`), runs each `--filter` term as
 `unity-test`'s case-insensitive substring with `--no-restart`, merges the results into the
 `--output` report, and counts a test two terms match once, keeping a failure under either. Once it
 has started, anything but a test result (a start hang, an unreadable result or test list) exits 2
