@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Assemble a Claude bee's brief from the unit-specific lines on stdin and the verbatim templates.
+
+  bees-brief --plan <plan.md> --units DR-02,DR-01 --kind impl [--round N]
+  bees-brief --plan <plan.md> --units GATE-1 --kind gate < gate-lines
+             [--include <file> --set 'lane=lane-1' --set 'task branch=…' …] < unit-lines
+
+Writes <plan>.work/brief-<units>-<kind>-r<N>.txt and prints its path and the hand-off line. The
+brief is: stdin, the units line (BEES order), a pointer to each unit's plan section, each --include
+with its <placeholders> filled by --set, the role's standing rules, and its return contract with
+the report path. --work <dir> replaces --plan in light mode, where there is no plan to point at.
+--kind gate is the phase gate: implementor rules and return contract, no plan section to point at.
+Exit 1 on a missing template, an existing brief (rounds are never overwritten), an unfilled
+placeholder in an include, or a --set that fills nothing.
+"""
+import argparse, pathlib, re, shlex, sys
+
+TEMPLATES = pathlib.Path(__file__).resolve().parent.parent / "templates"
+ROLE = {"impl": "implementor", "fix": "implementor", "review": "reviewer", "recheck": "reviewer",
+        "consult": "consultant", "gate": "implementor"}
+PLACEHOLDER = re.compile(r"<([a-z][a-z -]*)>")
+
+
+def fail(msg):
+    sys.exit(f"bees-brief: {msg}")
+
+
+def read(path):
+    try:
+        return pathlib.Path(path).read_text()
+    except OSError as e:
+        fail(f"{path}: {e.strerror}")
+
+
+SPEC = {
+    "implementor": "Spec: read each unit's section in {plan} and follow it as written; its "
+                   "acceptance holds unless this brief overrides it:",
+    "reviewer": "Spec: each unit's section in {plan} is the acceptance the diff is reviewed against:",
+    "consultant": "Context: each unit's section in {plan}; diagnose, never implement:",
+}
+
+
+def spec_lines(plan, units, role):
+    return [SPEC[role].format(plan=plan)] + \
+           [f"  sed -En '/^### {u} ·/,/^#{{1,3}} /p' {shlex.quote(str(plan))}" for u in units]
+
+
+def fill(text, values, used):
+    def sub(m):
+        if m.group(1) in values:
+            used.add(m.group(1))
+            return values[m.group(1)]
+        return m.group(0)
+    return PLACEHOLDER.sub(sub, text)
+
+
+ap = argparse.ArgumentParser()
+where = ap.add_mutually_exclusive_group(required=True)
+where.add_argument("--plan", type=pathlib.Path)
+where.add_argument("--work", type=pathlib.Path)
+ap.add_argument("--units", required=True)
+ap.add_argument("--kind", required=True, choices=ROLE)
+ap.add_argument("--round", type=int, default=1)
+ap.add_argument("--include", action="append", default=[])
+ap.add_argument("--set", action="append", default=[], metavar="NAME=VALUE")
+a = ap.parse_args()
+
+units = a.units.split(",")
+if "" in units or len(set(units)) != len(units):
+    fail("--units takes distinct comma-separated unit IDs")
+if a.round < 1:
+    fail("--round starts at 1")
+if a.plan and a.kind != "gate":
+    plan_text = read(a.plan)
+    missing = [u for u in units if not re.search(rf"^### {re.escape(u)} · ", plan_text, re.M)]
+    if missing:
+        fail(f"{a.plan}: no '### <ID> · ' section for {', '.join(missing)}")
+role = ROLE[a.kind]
+work = (a.work or a.plan.with_suffix(".work")).resolve()
+name = f"{'_'.join(units)}-{a.kind}-r{a.round}"
+brief, report = work / f"brief-{name}.txt", work / f"report-{name}.md"
+if brief.exists():
+    fail(f"{brief} exists; a new round takes the next --round")
+
+body = sys.stdin.read().strip()
+if not body:
+    fail("no unit lines on stdin (objective, decisions, overrides, may change)")
+
+values = dict(s.split("=", 1) for s in a.set if "=" in s)
+if len(values) != len(a.set):
+    fail("--set takes NAME=VALUE")
+used = set()
+bees = "" if role == "consultant" else " — your BEES line has one entry per unit, in this order"
+parts = [body, f"Units: {', '.join(units)}{bees}."]
+if a.plan and a.kind != "gate":
+    parts.append("\n".join(spec_lines(a.plan.resolve(), units, role)))
+for inc in a.include:
+    text = fill(read(inc), values, used)
+    left = sorted(set(PLACEHOLDER.findall(text)))
+    if left:
+        fail(f"{inc}: unfilled {', '.join(f'<{p}>' for p in left)}; pass --set for each")
+    parts.append(text.strip())
+if set(values) - used:
+    fail(f"--set filled nothing: {', '.join(sorted(set(values) - used))}")
+parts.append(read(TEMPLATES / f"standing-rules-{role}.txt").strip())
+if role != "consultant":
+    parts.append(read(TEMPLATES / f"return-{role}.txt").replace("<report>", shlex.quote(str(report))).strip())
+
+work.mkdir(parents=True, exist_ok=True)
+brief.write_text("\n\n".join(parts) + "\n")
+print(f"{brief} · {len(brief.read_text().splitlines())} lines")
+print(f"Hand-off: Read {brief} and do what it says.")

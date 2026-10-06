@@ -1,5 +1,7 @@
-Report: write your full review to <report>: the hash reviewed, every finding on its own line with
-id, severity, file:line and exact fix, the Cost line, then the BEES and verdict lines as above.
+Report: write your full review to <report> with a Bash heredoc (cat > <report> <<'EOF'), since the
+Write tool is refused for subagent report files: the hash reviewed, every finding on its own line
+starting with its id (id, severity, file:line, exact fix), the Cost line, then the BEES and verdict
+lines as above.
 Then hand back only these lines, nothing else, since the orchestrator and the fixer read the file:
 Reviewed: <hash or range> — <ids of all findings, or "clean">
 Report: <report>

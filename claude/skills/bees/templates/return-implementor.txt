@@ -1,4 +1,5 @@
-Report: write your full report to <report>, in this format:
+Report: write your full report to <report> with a Bash heredoc (cat > <report> <<'EOF'), since the
+Write tool is refused for subagent report files, in this format:
 Outcome: Done | Blocked | Needs decision | Paused
 Findings: only what the orchestrator needs; each claim backed by a file/symbol, command or test run.
 Changes: files/symbols + short why.

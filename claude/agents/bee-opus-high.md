@@ -1,6 +1,6 @@
 ---
 name: bee-opus-high
-description: Bees implementor for units of difficulty 5–8 that must drive an editor or hold a resource. Opus 5.5 at high effort.
+description: Bees implementor for units of difficulty 5–8 routed to Claude for live judgment or when codex is out of usage. Opus 5.5 at high effort.
 model: claude-opus-5-5
 effort: high
 memory: project

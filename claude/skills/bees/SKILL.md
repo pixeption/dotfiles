@@ -11,7 +11,7 @@ hooks:
 
 # Bees — orchestrated development
 
-You are the **orchestrator**: a technical lead running at most four engineers. You decide; they
+You are the **orchestrator**: a technical lead running at most six engineers. You decide; they
 execute and bring evidence. Words: an **item** is a plan checklist row, a **unit** is what one
 brief asks for (one or more items), a **round** is one wrapper call.
 
@@ -46,13 +46,19 @@ answers in Setup (light mode: in your first status line):
 
 | question | default |
 |---|---|
-| Implementor routing | **buckets** ("Routing"): the score picks the effort, codex preferred unless the unit must drive an editor; codex via OpenCode, CLI fallback. |
+| Implementor routing | **buckets** ("Routing"): the score picks the effort, codex preferred, in place in a lane when the unit drives an editor; codex via OpenCode, CLI fallback. |
 | Review pairing | **cross-vendor** (`reference/review.md`). |
 | Review cadence | **per unit** or **at the end of the plan** (one diff review of the whole plan). |
 
 Do not start a unit until the answers are in. They hold for the whole plan; a later change is an
 owner decision, logged and reflected in Setup. Every check you run (preflight, usage, browser
 tools) gets its machine-and-date line in Setup once it passes.
+
+**Read the status file and the plan's checklist, never the whole plan**
+(`awk '/^\| ID \|/{f=1} f&&!/^\|/{exit} f' <plan>`): score, route, phase, dependencies and status
+are all you schedule from, and a whole plan stays in your context every turn. A unit's section is
+its implementor's to read; open one yourself (`sed -En '/^### <unit> ·/,/^#{1,3} /p'`) only when a
+decision, blocker or finding on that unit turns on it.
 
 **Before the first codex unit**, run the preflight. The server reads
 `~/.config/opencode/opencode.jsonc` and its model catalogue at startup only, so a stale server
@@ -87,20 +93,24 @@ Choosing "full" for a small plan is the error, not the safe default.
 
 1. **You own decisions**: goal, acceptance criteria, decomposition, scoring, routing, resource
    assignment, evaluating results, resolving blockers, acceptance.
-2. **Four concurrent agents, hard cap, both vendors** — codex sessions, reviewers, scouts,
-   `bee-sonnet-medium` and `bee-consultant` all count, because every running agent is one more
-   stream of events you absorb. Briefs say "do not spawn sub-agents". A fifth unit is queued.
-   Only the user changes the cap. A scout runs in a free slot **before** the implementors start,
-   never queued behind one.
-3. **One driver per exclusive resource, named in the brief.** A Unity project is one resource
-   across editor, batch test host, project lock *and every source it compiles* (`file:` packages
-   included): driving `nono4u/Game` locks `game-core` and `game-build` sources. Every other
-   slot does read-only work or work no editor compiles — or waits. There is no lock mechanism; your
-   roster and the briefs' held/off-limits lines are it. Disjoint file sets inside one compile
-   domain are not enough: sequence the units. A second orchestrator session reads the plan's
-   status file (Resources) and `git status` in each repo before touching any project, because the
-   slot table is per plan. A codex worktree is outside every compile domain; **validating its
-   diff** against the real project is not.
+2. **Six concurrent agents and four lanes, hard caps, both vendors** — codex sessions, reviewers,
+   scouts, `bee-sonnet-medium` and `bee-consultant` all count toward six, because every running
+   agent is one more stream of events you absorb; at most four of them hold a lane at once. Briefs
+   say "do not spawn sub-agents". A seventh agent, or a fifth lane unit, is queued. Only the user
+   changes the caps. The starting shape is up to four lane implementors plus two review or scout
+   slots; lanes share the Unity host cap (`workspaces` skill).
+   A scout runs in a free slot **before** the implementors start, never queued behind one.
+3. **One driver per Unity resource, named in the brief by its slot.** What one resource covers is
+   unity-cli "One driver per project"; this rule only names the slots. In nono4u a slot is a
+   **lane** (`lane-1`, `lane-2`, …: one worktree under `~/code/workspaces/`, its `Game/` and
+   `GameCore/` together) or **`integration`** (the owner's checkout, held only to merge and run the
+   final check). A brief holding `lane-1` holds both projects of that worktree and no other; its
+   holder claims and releases it as nono4u's `workspaces` skill says (reuse a warm lane first). A
+   shared runtime claim the plan names (e.g. `perf-tests-<project>`) is held the same way. Every
+   other agent does read-only work, works in another slot or a blind worktree no editor loads — or
+   waits. Disjoint files inside one slot are not enough: sequence the units. A second orchestrator
+   session reads the plan's status file (Resources) and `tools/workspace.sh list` before touching
+   any slot. A blind codex worktree is outside every slot; **validating its diff** in a lane is not.
 4. **Session budget, both vendors: continue below 160k, finish below 200k, retire at 200k.** The
    figure is the harness's token count on a Claude agent's final notification, or `context_tokens`
    in the codex wrapper's `.usage` — never the agent's own estimate, which runs low. Between 160k
@@ -124,7 +134,7 @@ Choosing "full" for a small plan is the error, not the safe default.
 8. **Status is three committed files** (full mode): the plan's checklist, `<plan>.status.md` and
    `<plan>.log.md`. Accepting a unit updates the checklist and the log; the status file is written
    at a pause ("Status and acceptance").
-9. **The orchestrator hands off at phase end, or at 200k at a safe point**
+9. **The orchestrator hands off at phase end, or at the first safe point past 170k, by 200k**
    (`reference/handoff.md`). Compaction is the fallback, never the plan.
 10. **Delegate execution — including reading.** Inspect directly only when cheaper than a spawn:
     one diff, a few definitions, reconciling two reports. More than two file reads or a grep
@@ -160,7 +170,7 @@ because a bug found mid-unit costs a block, a decision and a resumed session eac
 **Buckets** — the score picks the row; codex is preferred. Codex is `codex-implementor` with
 `-m openai/gpt-6.1-sol` and the row's `-e`:
 
-| scores | codex (preferred) | Claude (the unit must drive an editor / hold a resource) |
+| scores | codex (preferred) | Claude (needs live judgment, or codex is out of usage) |
 |---|---|---|
 | 1 2 | `-e medium` | `bee-opus-low` |
 | 3 | `-e medium` | `bee-opus-medium` |
@@ -179,6 +189,9 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
   worktree would need its own Library) with `opencode-implement -C <real checkout>`, holding that
   project's slot, and **put the editor card in the brief** (codex-implementor "What the session
   loads, and what it doesn't") — without it, codex cannot know the command surface exists.
+- **Lanes.** In a repo that runs lanes (nono4u), who runs where — codex in place in a lane or `bee-*`
+  sub-agents holding one for units that edit or drive an editor, sub-agents for read-only work and the gate — is its
+  `workspaces` skill "Who works where"; accept, then integrate, each unit before reusing its lane.
 - **Claude instead of codex** only when the unit needs judgment a batch run cannot settle (a
   screenshot read, a live Play-mode check), or codex is out of usage. Before routing for browser
   judgment, verify the assigned bee can open the target with a browser tool; otherwise make the
@@ -235,25 +248,27 @@ known floor before the loop; put open owner questions into one decision packet w
 
 ## Briefing an agent
 
-A brief holds: objective; scope (items with their **scores and bucket**); acceptance criteria;
-what it may change; **resources held and resources off-limits**; verification expected; the role's
-standing rules and return contract from `templates/` (**read `reference/briefs.md` before writing
-any brief** — how to compose one, the report files and the last-line contract); "do not spawn
-sub-agents".
+A Claude bee's brief is built by `~/.claude/skills/bees/scripts/bees-brief` (**read
+`reference/briefs.md` before writing any brief**): you write only the unit's own lines —
+objective, decisions and overrides made since the plan was written, what it may change, verification
+beyond the plan's — and the script adds the units and BEES order, the plan-section pointers that
+carry acceptance, the repo's slot block, the role's standing rules and, for an implementor or
+reviewer, its return contract.
 
 - Include load-bearing constants earlier agents reported (paths, profiles, last suite counts).
   **Cite the contract file, never paraphrase values from memory.** Quote a count only with the
   command that produced it; take timestamps from `date +%H:%M`. Never send transcripts or source
   dumps.
-- **Point, don't paste.** Problem and diagnosis are cited as the plan section and report file, a fix
-  or recheck as the review file and the ids to close; the brief adds only what is not written down
-  yet (acceptance, resources, decisions), since every pasted line is paid again in your context.
+- **Point, don't paste.** Problem, diagnosis and acceptance are the plan section and report file, a
+  fix or recheck the review file and the ids to close; the brief adds only what is not written down
+  yet (resources, decisions, overrides), since every pasted line is paid again in your context —
+  and restating a section means reading it first.
 - A **codex** brief gives passages, not documents (codex-implementor "What the session loads, and
   what it doesn't"), and runs with `-C` set to the repo the unit edits — the session is
   pinned to it for life. Pass every other repo it names, a read-only one too, as an absolute
   `--repo` to the OpenCode wrapper so preflight checks the fence allows it.
-- A **worktree** codex brief states it cannot run Unity and must report what it could not verify;
-  an **in-place** codex brief carries the editor card and requires live verification.
+- A **blind-worktree** codex brief states it cannot run Unity and must report what it could not
+  verify; an **in-place lane** codex brief carries the editor card and requires live verification.
 - Every brief with a live check says: never substitute an emulation for it without saying so in
   `Outcome`.
 
@@ -261,8 +276,9 @@ Examples:
 
 - Bad: "Investigate this and tell me what you think."
 - Bad: "Check the lock before running the suite and retry if another agent is using it."
-- Good: "You drive `game-core` alone. Another agent drives `nono4u/Game`; do not run or edit
-  anything against it. If a command fails because the project is held, stop and report."
+- Good: "You hold `lane-1` (`~/code/workspaces/lane-1`, its `Game/` and `GameCore/`). Another
+  agent holds `lane-2`, and `integration` is off-limits; do not run or edit anything there. If a
+  command fails because the project is held, stop and report."
 
 A **scout brief** is one question, the area to look in, what "answered" looks like, and
 "read-only, no editor, no sub-agents, stop when answered, `Needs diagnosis` if it needs a run or a
@@ -284,19 +300,15 @@ pausing.
 
 Full mode only. State is plain markdown, hand-written, committed with the plan; nothing derives
 it, no hook writes it, nothing lives only in `.work/` (gitignored, disposable codex out-files for
-`bees-watch`). The file formats and templates are the `plan` skill's "Status and log files".
+`bees-watch`). The file formats are the `plan` skill's "Status and log files"; a new status file
+starts from `cat ~/.claude/skills/plan/templates/status.md`.
 
-**Acceptance** — accepting a unit is two edits, then a commit of the plan and the log by path
-(`git commit -m … -- <paths>`, so another agent's staged files are never swept in), and a done line:
+**Acceptance** — accepting a unit is two edits and a commit (see "Commit cadence"):
 
 ```text
 - [ ] Checklist: Status ✅.
 - [ ] Log: - <date '+%F %H:%M'> [<unit>] accept: <evidence — suite count, review verdict, commit>
-- [ ] Your text, on a line of its own: BEES: done=<unit>[,<unit>…]
 ```
-
-The done line lets the `bees-prune` mod drop every turn about that unit from your context between
-turns, so write it only once the plan and log hold the unit's record.
 
 The status file is not part of an acceptance, because the log line already carries the evidence:
 write it at a pause, a handoff, or when a resource changes holder.
@@ -306,8 +318,22 @@ impl-<unit>-r2.txt`), each review verdict, each owner decision (`decision: …`,
 while it applies), each tooling gap (`gap: …`). A session id worth resuming goes in status.md. A
 log entry that needs more than one line is a checklist row or a plan section instead.
 
-Commit the plan and the log at every decision or acceptance, and the status file with them at
-every pause. A plan that predates this
+**Commit cadence** — commit the plan, log and status at every decision, acceptance and pause, by
+path (`git commit -m … -- <paths>`, so another agent's staged files are never swept in). A run of
+`docs(plans)` commits buries the real work, so when HEAD is already a `docs(plans)` commit on no
+other branch, fold into it instead — checked right before, since another agent may have committed
+since; a pushed commit, or one a lane branched from, would diverge:
+
+```bash
+git log -1 --format=%s | grep -q '^docs(plans)' && [ "$(git branch -a --contains HEAD | wc -l)" -eq 1 ] \
+  && git commit --amend -m "<subject covering both>" -- <paths> \
+  || git commit -m "<subject>" -- <paths>
+```
+
+Starts, rounds and review launches are logged but never committed on their own; they ride along
+with the next commit.
+
+A plan that predates this
 format gets a status file written from what is known, the old notes moved into the log verbatim,
 and the checklist brought to the `plan` skill's columns — an unknown fact is written `unknown`,
 never reconstructed.
@@ -348,5 +374,5 @@ Should read like:
 | [`reference/review.md`](reference/review.md) | before choosing or briefing a reviewer |
 | [`reference/watching.md`](reference/watching.md) | before the session's first codex round, and on any flag or termination |
 | [`reference/handoff.md`](reference/handoff.md) | at phase end or when the context hook fires |
-| `templates/standing-rules-{implementor,reviewer,consultant}.txt`, `templates/successor-brief.txt` | `cat` into the brief verbatim — never retype |
-| `templates/return-{implementor,reviewer}.txt` | `sed` `<report>` into Claude implementor and reviewer briefs (`reference/briefs.md` "Reports") |
+| `templates/standing-rules-*.txt`, `templates/return-*.txt` | assembled into every Claude brief by `scripts/bees-brief` — never retyped |
+| `templates/successor-brief.txt` | `cat` into the successor's first prompt at a handoff |

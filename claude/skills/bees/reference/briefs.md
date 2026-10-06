@@ -7,6 +7,7 @@ report.
 
 - Return format
 - Reports
+- Composing a brief
 - Repeated findings
 - Standing rules
 - The last line is a contract
@@ -14,9 +15,10 @@ report.
 
 ## Return format
 
-A Claude implementor or reviewer brief carries its role's return contract, `sed`-ed from
-`templates/return-implementor.txt` or `templates/return-reviewer.txt` with `<report>` set: the full
-report goes to that file and the hand-back is a few lines ending in the BEES line. Codex returns
+A Claude implementor or reviewer brief carries its role's return contract
+(`templates/return-implementor.txt` or `templates/return-reviewer.txt`, which `bees-brief` fills
+with the report path): the full report goes to that file and the hand-back is a few lines ending in
+the BEES line. Codex returns
 its final message in the out-file, and you fill the same fields from the diff and `.usage`.
 
 A suite count is evidence only with the `report: … · finished <HH:MM>` line quoted beside it:
@@ -33,28 +35,44 @@ later turn:
   scratchpad in light mode. The `report-` prefix keeps it out of `bees-watch --dir`.
 - Read finished reports and codex out-files with
   `~/.claude/skills/bees/scripts/bees-report <file>...`: outcome, suite lines, what it needs from
-  you, finding ids, BEES and verdict, in a few lines. Open a file only for the detail a decision
-  needs, and then only that part (`grep -n -A3 MAJ-02 <file>`).
+  you, blocker and options, each finding's first line, BEES and verdict, in a few lines. Open a
+  file only for the detail a decision needs, and then only that part (`grep -n -A3 MAJ-02 <file>`).
 - A hand-back that ignores the contract is acted on as it is; the next brief to that agent says so
   in one line.
 
-Compose a brief file without retyping the shared parts, then hand the agent only its path
+## Composing a brief
+
+Run `bees-brief` with only the unit's own lines on stdin, then hand the agent the path it prints
 (`Read <brief> and do what it says.`):
 
 ```sh
-W="$PWD/docs/plans/<plan>.work"
-brief="$W/brief-<unit>-r<N>.txt"
-report="$W/report-<unit>-impl-r<N>.md"
-escaped_report=$(printf '%s\n' "$report" | sed 's/[\\&|]/\\&/g')
-{ cat <<'EOF'
-<the unit's own lines: objective, plan section link, acceptance, may change, resources>
+~/.claude/skills/bees/scripts/bees-brief --plan docs/plans/<plan>.md --units DR-02,DR-01 \
+  --kind impl --round 1 \
+  --include .claude/skills/workspaces/templates/lane-brief.txt \
+  --set lane=lane-1 --set 'task branch=task/lane-1-x' --set "full base sha=$B" \
+  --set 'target branch=feat/x' <<'EOF'
+Objective: <one sentence>
+Decision: <each owner decision or override since the plan was written, one line each>
+May change: <paths>; nothing else.
 EOF
-  cat ~/.claude/skills/bees/templates/standing-rules-implementor.txt
-  sed "s|<report>|$escaped_report|g" ~/.claude/skills/bees/templates/return-implementor.txt
-} > "$brief"
 ```
 
-A review brief does the same with the `reviewer` templates.
+- `--kind` is `impl`, `fix`, `review`, `recheck`, `consult` or `gate`; it picks the role's standing rules
+  and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor or reviewer also
+  gets its return contract; a consult answers directly, no report file or BEES line, ending
+  `CHANGES_REQUIRED`.
+- A `--plan` unit without a `### <ID> · ` section fails the run, so every pointer resolves.
+- A phase gate a `bee-sonnet-medium` runs is `--kind gate --units GATE-<phase>`: no plan section,
+  implementor rules and return contract, so its report lands in a file like any other — a
+  hand-written brief lacks the heredoc line, and the Write tool refuses subagent report files.
+- The brief points the agent at each unit's plan section as its acceptance, so write acceptance
+  only where it departs from the section. A fix or recheck names the review file and the ids.
+- `--include` adds a repo's slot block (nono4u: the workspaces lane brief) with its
+  `<placeholders>` filled by `--set`; an unfilled one fails the run.
+- Light mode has no plan: pass `--work <scratchpad dir>` instead of `--plan`, and include the
+  unit's acceptance criteria and all required verification on stdin, because no plan section
+  supplies them.
+- A codex brief is not built this way: it follows codex-implementor's `templates/brief.md`.
 
 ## Repeated findings
 
@@ -64,8 +82,8 @@ it is paid for again as a fix round on the next plan.
 
 ## Standing rules
 
-The bee agent files carry only model and effort; every Claude brief carries its role's block,
-`cat`-ed from `templates/` verbatim, never retyped:
+The bee agent files carry only model and effort; every Claude brief carries its role's block from
+`templates/`, added by `bees-brief`, never retyped:
 
 | role | template |
 |---|---|
