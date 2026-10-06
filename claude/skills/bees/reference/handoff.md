@@ -8,10 +8,10 @@ The orchestrator pays its context every turn like any agent, and compaction's su
 ways nobody chose. It hands off to a fresh orchestrator — one role, chained — at:
 
 - **Phase end**: every unit in phase N is ✅. You decide this; no tool does.
-- **Context**: the `PostToolUse` hook (`scripts/context-nudge`) injects "Context at 200k: … hand
-  off" once per session. Finishing the running unit past 200k is fine; not handing off is not. The
-  hook reads the transcript, which can lag: if your context is clearly past 200k and it has not
-  fired, act as if it had.
+- **Context**: the `PostToolUse` hook (`scripts/context-nudge`) injects "Context at 170k: … hand
+  off" once per session, since a handoff there costs least for the measured startup cost and
+  growth. Finish the running unit, then hand off by ~200k. The hook reads the transcript, which
+  can lag: if your context is clearly past 170k and it has not fired, act as if it had.
 
 ## Checklist
 

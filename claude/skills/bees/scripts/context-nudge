@@ -3,7 +3,8 @@
 # it once per session to finish the running unit and hand off (bees reference/handoff.md). Reads the transcript's
 # last main-chain assistant usage; no reading yet means no nudge, and the next tool call retries.
 # Its only write is the per-session marker in $TMPDIR, made after the nudge is emitted.
-#   BEES_NUDGE_AT   threshold in tokens (default 200000)
+#   BEES_NUDGE_AT   threshold in tokens (default 170000: the cheapest handoff point for the measured
+#                   startup cost and growth; the safe point after it lands by ~200k)
 set -uo pipefail
 input="$(cat)"
 sid="$(jq -r '.session_id // empty' <<<"$input")"
@@ -11,7 +12,7 @@ transcript="$(jq -r '.transcript_path // empty' <<<"$input")"
 [ -n "$sid" ] && [ -f "$transcript" ] || exit 0
 marker="${TMPDIR:-/tmp}/bees-context-nudge-$sid"
 [ -e "$marker" ] && exit 0
-at="${BEES_NUDGE_AT:-200000}"
+at="${BEES_NUDGE_AT:-170000}"
 ctx="$(tail -n 400 "$transcript" | jq -Rr 'fromjson? | select(.type == "assistant" and (.isSidechain | not)) | .message.usage // empty
   | (.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)' 2>/dev/null | tail -1)"
 [ -n "$ctx" ] && [ "$ctx" -ge "$at" ] || exit 0
