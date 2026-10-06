@@ -31,7 +31,7 @@ expect_rules() { # expect_rules <name> <brief> <want-skill> <want-section> <want
 for kind in impl fix; do
   expect_rules "$kind gets the four hygiene rules" "$(brief --plan "$PLAN" --units U-01 --kind $kind)" 1 1 1 1
 done
-expect_rules "gate gets the four hygiene rules" "$(brief --plan "$PLAN" --units GATE-1 --kind gate)" 1 1 1 1
+b=$(brief --plan "$PLAN" --units GATE-1 --kind gate); expect_rules "gate gets the four hygiene rules" "$b" 1 1 1 1; if [ -f "$b" ] && ! grep -q "sed -En" "$b"; then ok "plan-mode gate has no section pointer"; else bad "plan-mode gate: brief [$b]"; fi
 for kind in review recheck; do
   expect_rules "$kind gets the first three" "$(brief --plan "$PLAN" --units U-01 --kind $kind)" 1 1 1 0
 done
