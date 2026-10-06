@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Say whether the next unit should be split, from the plan log's evidence on units like it.
+
+  bees-split-check --log <plan>.log.md --like STEP-01[,STEP-03…]
+
+Reads the `round:` and `accept:` lines of the listed units (`- <date> <time> [<units>] <kind>: …`).
+Prints the verdict on the first line, then one line per unit:
+  split    exit 1  a listed unit recorded Paused or a ctx of 200k or more (wins over missing evidence)
+  unknown  exit 2  a listed unit has no usable ctx: get the evidence or log a decomposition decision
+  ok       exit 0  every listed unit has a ctx below 200k and none paused
+"""
+import argparse, pathlib, re, sys
+
+PAUSE_LINE = 200_000  # the implementor pause line (reference/budgets.md)
+ENTRY = re.compile(r"^- \S+ \S+ \[([^\]]+)\] (round|accept): (.*)$")
+CTX = re.compile(r"\bctx (\d[\d,]*(?:\.\d+)?)(k?)\b")
+PAUSED = re.compile(r"\bpaused\b", re.I)
+
+
+def tokens(m):
+    n = float(m.group(1).replace(",", ""))
+    return int(n * 1000 if m.group(2) else n)
+
+
+ap = argparse.ArgumentParser()
+ap.add_argument("--log", required=True, type=pathlib.Path)
+ap.add_argument("--like", required=True)
+a = ap.parse_args()
+like = a.like.split(",")
+ctx = {u: [] for u in like}
+paused = set()
+for line in a.log.read_text().splitlines():
+    m = ENTRY.match(line)
+    if not m:
+        continue
+    for unit in set(m.group(1).split(",")) & set(like):
+        ctx[unit] += [tokens(c) for c in CTX.finditer(m.group(3))]
+        if PAUSED.search(m.group(3)):
+            paused.add(unit)
+
+split = [u for u in like if u in paused or any(c >= PAUSE_LINE for c in ctx[u])]
+unknown = [u for u in like if not ctx[u]]
+verdict, code = ("split", 1) if split else ("unknown", 2) if unknown else ("ok", 0)
+print(verdict)
+for u in like:
+    peak = f"ctx {max(ctx[u]) // 1000}k" if ctx[u] else "no ctx"
+    print(f"{u}: {peak}{', paused' if u in paused else ''}")
+sys.exit(code)

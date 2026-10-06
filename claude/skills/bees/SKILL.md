@@ -149,10 +149,13 @@ Choosing "full" for a small plan is the error, not the safe default.
 
 ## Routing
 
-Score each item on the `plan` skill's scale. **The score buys model effort, nothing else**: a
-long, mechanical unit is a 1 or 2; a long unit gets split, not promoted. Above 13, split. A fix
-round is scored by the difficulty of the findings it closes: applying a reviewer's exact fixes is
-a 1; a finding whose cause is unknown is an 8.
+Score each item on the `plan` skill's scale. **The score buys model effort, nothing else**: a long,
+mechanical unit is a 1 or 2; a long unit gets split, not promoted. Before briefing a unit that has
+like units (same area, same kind of work), run `~/.claude/skills/bees/scripts/bees-split-check
+--log <plan>.log.md --like <IDs>`: on `split`, split the unit; on `unknown`, get the missing
+evidence or log an explicit decomposition decision, never treating it as `ok`. Above 13, split. A
+fix round is scored by the difficulty of the findings it closes: applying a reviewer's exact fixes
+is a 1; a finding whose cause is unknown is an 8.
 
 An item whose score you cannot name is a **diagnosis** unit: read-only, it judges causes and
 usually needs a run, and returns the split and real scores. In one area it is unscored support
