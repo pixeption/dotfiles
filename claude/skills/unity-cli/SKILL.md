@@ -111,6 +111,15 @@ active; report the active scene and its `rootCount`. Why each step exists:
   and then moves there); `editor_log` in `_common.sh` picks the right one, tested offline by
   `tests/editor-log.sh`. `unity pipeline list` has a `safeMode` field too, but it reads `null`
   again ~60 s after launch, so don't poll it.
+- **An editor whose Pipeline server failed to bind looks like no editor too.** It logs `Failed to
+  start Pipeline Server: Address already in use` and runs on with no server, absent from `unity
+  status`. Keep `m_Port` at `0` (auto-assign) in `ProjectSettings/Packages/com.unity.pipeline/
+  EditorPipelineConfig.json`, so two copies of a project (a lane worktree) get distinct ports, and
+  read the port from `unity status` or the descriptor rather than assuming one. Auto-assign probes
+  and then binds, so two editors starting at the same moment can race for one port: `unity-wait
+  ready` exits 3 on that log line, and `up` force-closes and relaunches once, which probes again. A
+  second failure means a pinned port in use; `up` closes the editor and exits 1. Both checks read
+  only log written since this launch, so a previous session's failure never counts.
 - **`unity status` is `ready` only once the main thread answers.** A listener that bound its port
   while the editor is still importing/compiling reports `starting` and the command exits non-zero.
   `unity-wait ready` polls `editor_status` itself. An empty `unity status` still needs diagnosis:
@@ -196,12 +205,12 @@ Editor forward. `compilationFailed` can be null in the CLI's `up_to_date` result
 `console_status.groundTruth.compilationFailed` is the native flag.
 
 ```bash
-unity-wait [--project-path <dir>] ready      [deadline]   # editor answers; exit 1 fast on Safe Mode
+unity-wait [--project-path <dir>] ready      [deadline]   # editor answers; exit 1 fast on Safe Mode, 3 on a failed server
 unity-wait [--project-path <dir>] recompile  [deadline]   # editor_stop if playing, trigger, wait, settle
 unity-wait [--project-path <dir>] job <id>   [deadline]   # ui_* job record on disk, readable through Play Mode
 ```
 
-Exit 0 success, 1 failure, 2 deadline. Use `unity-wait recompile` when you need its Play Mode stop
+Exit 0 success, 1 failure, 2 deadline, 3 Pipeline server failed to start (`ready`). Use `unity-wait recompile` when you need its Play Mode stop
 and post-reload settling; the details it handles:
 
 - `recompile_status` has **two completion terminals**, `completed` and `up_to_date` (a trivial
