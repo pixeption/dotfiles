@@ -42,6 +42,14 @@ Tests are durable specifications, not implementation scaffolding.
 `nono4u` — not frozen third-party dependencies. When an issue, blocker or missing capability shows
 up in a consumer, find the root cause and **fix it in the owning package, with a test**.
 
+- **game-core** lives in `nono4u/GameCore/` (a git subtree; `~/code/game-core` is a frozen export
+  mirror — never implement there). Fix it under `GameCore/Packages/<pkg>/`, in the same lane and
+  commit series as the game change that needs it; a change under `GameCore/` still gets its own
+  review (e.g. codex). Syncing the old repo is owner-triggered, per nono4u's ADR-016.
+- **game-build** is a git package pinned to a full commit SHA in `Game/Packages/manifest.json`. Fix
+  it in a game-build clone, verify it there, give it its own review, publish the accepted commit,
+  then bump the manifest's full SHA on purpose.
+
 - Read the package's CLAUDE.md/README/spec before deciding where the fix belongs.
 - Never patch a generated or scratch artifact (e.g. a converter's workspace file) to get past a
   blocker — it regenerates and hides the real gap. Fix the source so the result is reproducible
