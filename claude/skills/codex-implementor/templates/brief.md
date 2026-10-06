@@ -9,10 +9,10 @@ Touch: <files, with line ranges where the change is local>. Do not touch: <files
 or cited as `path:start-end`. No whole documents.>
 
 ## Where it runs
-<worktree: you cannot run Unity here; report exactly what you could not verify.>
-<in place: you alone drive <project>. Do not run or edit anything against <sibling projects>.
-The project compiles at the start.>
-Read first: <the CLAUDE.md of the one sibling package the unit edits, by absolute path, or "nothing">.
+<blind worktree: you cannot run Unity here; report exactly what you could not verify.>
+<in place: you hold <lane> (its Game/ and GameCore/), claimed for you. Do not run or edit anything
+in <the other slots, e.g. lane-2 and integration>. The projects compile at the start.>
+Read first: <the CLAUDE.md of the one game-core package the unit edits, by absolute path, or "nothing">.
 
 ## Editor-drive contract (in place only)
 <`cat` templates/editor-card.md here and fill <project>. A `ui_*` unit adds the one skill section

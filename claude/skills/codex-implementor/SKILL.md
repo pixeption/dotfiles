@@ -39,22 +39,24 @@ Default to sol at medium; raise `-e` only when capability changes the outcome. E
 
 | unit needs | run it | verify |
 |---|---|---|
-| a diff only (pure C#, docs, data, a tool with its own tests) | **worktree**: `git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD` | you compile/test the diff on the real project afterward — a worktree has no `Library`, so Unity cannot run there |
-| Unity: compile, a suite, the live editor, a prefab/scene, a screenshot | **in place**: `-C ~/code/<project>` | the implementor verifies itself in the editor and reports counts; you re-run once |
+| a diff only (pure C#, docs, data, a tool with its own tests) | **blind worktree**: `git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD` | you compile/test the diff in a prepared lane afterward — a blind worktree has no `Library`, so Unity cannot run there |
+| Unity: compile, a suite, the live editor, a prefab/scene, a screenshot | **in place, in a prepared lane**: `-C ~/code/workspaces/<lane>` | the implementor verifies itself in that lane's editor and reports counts; you re-run once |
 
-An in-place unit **holds that Unity project** like a Claude agent would: one driver per compile
-domain (nono4u/Game compiles game-core and game-build sources through `file:` packages, so those
-three are one domain). Before launching, check nothing else drives the domain — another agent's
-uncommitted edits surface as a Safe-Mode compile error in your run. Edits land on the real branch;
-the fence and the brief carry the git discipline.
+A **prepared lane** is a nono4u worktree created by `tools/workspace.sh new`, with its own
+`Library` per project, and claimed for the unit with `tools/workspace.sh claim` before launch. The
+unit holds that lane like a Claude agent would (bees "Rules", rule 3; what the lane covers is
+unity-cli "One driver per project"). Run `tools/workspace.sh preflight <lane>` first: a source path
+escaping the worktree would reach another slot's editor. Edits land on the lane's branch; the
+fence and the brief carry the git discipline. A **blind worktree** holds no slot and must edit no
+source a held editor loads.
 
 ## Run it
 
 ```bash
 # in place (editor-drive) — the common Unity case
 ~/.claude/skills/codex-implementor/scripts/opencode-implement \
-  -C ~/code/game-core -p "$T/brief.md" -u <unit> -o "$W/impl-<unit>-r1.txt" --title <unit>
-# worktree (pure diff)
+  -C ~/code/workspaces/lane-1 -p "$T/brief.md" -u <unit> -o "$W/impl-<unit>-r1.txt" --title <unit>
+# blind worktree (pure diff)
 git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
 ~/.claude/skills/codex-implementor/scripts/opencode-implement -C "$T/wt-<unit>" -p "$T/brief.md" -u <unit> -o "$W/impl-<unit>-r1.txt"
 # follow-up round: same session, same -C, context < 200k
@@ -77,8 +79,8 @@ them already. Everything it reads stays in its context for every later turn, so 
   the whole plan is read;
 - a spec or doc contract **quoted, or cited as `path:start-end`**, and task files with line ranges
   where the change is local;
-- the **`CLAUDE.md` of the one sibling package** the unit edits
-  (`../game-core/Packages/<package>/CLAUDE.md`) — nothing under the directory points there;
+- the **`CLAUDE.md` of the one game-core package** the unit edits
+  (`GameCore/Packages/<package>/CLAUDE.md`) — nothing under the directory points there;
 - for an in-place unit, the **editor card** ([`templates/editor-card.md`](templates/editor-card.md)):
   the unity-cli helpers by absolute path and their rules, in place of the whole `unity-cli` skill.
 
@@ -99,7 +101,7 @@ that produced it. Never send transcripts or source dumps.
 ```text
 - [ ] Read the report and the diff.
 - [ ] Re-run the acceptance suite once yourself (or hand it to a bee-sonnet-medium holding the
-      resource): a worktree diff is unverified until compiled on the real project; an in-place
+      resource): a blind-worktree diff is unverified until compiled in a lane; an in-place
       report is checked, not trusted.
 - [ ] Findings go back as the next round's prompt in the same session (-s).
 - [ ] Review: under bees, bee-reviewer for scores 1–5, bee-reviewer-high for 8–13.

@@ -2,7 +2,8 @@
 # Safe runner for a codex NON-INTERACTIVE IMPLEMENTATION (codex edits files), with session reuse.
 #
 # Sibling of the codex-review wrapper, but codex WRITES here: --sandbox workspace-write, a chosen
-# model/effort, and it runs inside a directory you pass (a git worktree, so the edits are isolated).
+# model/effort, and it runs inside a directory you pass: a git worktree (edits isolated) or, with
+# -s danger-full-access, a prepared lane in place so it can drive the live editor.
 #
 # FOUR JOBS OF THIS WRAPPER:
 #
@@ -23,10 +24,9 @@
 #    stdout stream never exposes a bounded current-context figure, only a cumulative session
 #    total (see that script for the real numbers that proved this).
 #
-# codex CANNOT run Unity / a build / project-specific validation. This wrapper only produces a DIFF.
-# Validate the result yourself afterward (compile check, tests) — for Unity, drive the LIVE editor
-# (`unity command recompile`/`run_tests`), never batch `unity test` while a GUI editor holds the
-# project.
+# In a blind worktree, codex produces a diff; validate it afterward in a prepared project.
+# In a prepared lane with the editor card and -s danger-full-access, codex can drive the live
+# editor and verify its changes. Never batch `unity test` while a GUI editor holds the project.
 #
 # Usage:
 #   codex-implement -C <workdir> -p <prompt-file> -o <out-file> \
@@ -35,9 +35,9 @@
 #
 #   -o  the out-file, taken verbatim (its directory is created); refused if it already holds a round.
 #       Under bees: docs/plans/<plan>.work/impl-<unit>-r<N>.txt.
-#   -C  the directory codex runs in and may write to (create a git worktree first:
-#         git worktree add -b <arm> <path> HEAD   — DO NOT rely on any auto-worktree basing on the
-#         branch tip; base it explicitly on HEAD).
+#   -C  the directory codex runs in and may write to: a prepared lane for live validation, or a
+#       blind worktree created first with `git worktree add -b <arm> <path> HEAD` — DO NOT rely
+#       on any auto-worktree basing on the branch tip; base it explicitly on HEAD.
 #   -m  model (default gpt-6.1-sol). Raise -e rather than switch model when capability
 #       changes the outcome.
 #   -e  reasoning effort (default medium).
