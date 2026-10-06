@@ -10,8 +10,9 @@
 #   Prefix any mode with --project-path <dir> (default: $UNITY_PROJECT_PATH, else the cwd).
 #
 #   unity-wait ready [deadline]               wait until the editor answers at all; exit 1 fast
-#                                             if it opened into Safe Mode (prints the compile errors),
-#                                             exit 3 fast if its Pipeline server failed to start
+#                                             on compile errors (Safe Mode, or a headless editor that
+#                                             exited on them; prints the errors), exit 3 fast if its
+#                                             Pipeline server failed to start
 #
 # For tests, use `unity-test` (--detach + `unity job wait`) instead of this script.
 #
@@ -35,9 +36,10 @@ status_json() { result_json "$PROJECT" "$1"; }
 
 case "$MODE" in
   ready)
-    # Three ways a launch never answers, none worth waiting out: the editor opened into Safe Mode
-    # (compile error - no server will ever start; exit 1 with the errors), its server could not
-    # bind a port (exit 3 - a relaunch may get one), or the process is gone.
+    # Three ways a launch never answers, none worth waiting out: a compile error (a windowed editor
+    # opens into Safe Mode, where no server will ever start; a headless one exits; exit 1 with the
+    # errors), its server could not bind a port (exit 3 - a relaunch may get one), or the process
+    # is gone.
     DEADLINE=${2:-$DEADLINE_DEFAULT}; START=$SECONDS
     while (( SECONDS - START < DEADLINE )); do
       [[ "$(status_json editor_status)" != unreachable ]] && { echo "editor ready"; exit 0; }
@@ -50,7 +52,13 @@ case "$MODE" in
         echo "editor is up but its Pipeline server never started, so it will not answer: $FAILED" >&2
         exit 3
       fi
-      not_running && die "editor process for $PROJECT exited before answering - see $(editor_log)"
+      if not_running; then
+        ERRORS=$(compile_errors)
+        [[ -z "$ERRORS" ]] && die "editor process for $PROJECT exited before answering - see $(editor_log)"
+        echo "headless editor exited on compile errors:" >&2
+        printf '%s\n' "$ERRORS" >&2
+        exit 1
+      fi
       sleep 3
     done
     echo "timed out after ${DEADLINE}s" >&2

@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# unity-editor up [project] [--scene <path.unity>]   open (or reuse) a live editor
-# unity-editor down [project] [--force]              close it
-# unity-editor restart [project] [--scene <s>]       force-close, then up
-# unity-editor ensure [project] [--deadline 30]      restart only if editor_status stays silent
+# unity-editor up [project] [--scene <path.unity>] [--windowed]   open (or reuse) a live editor
+# unity-editor down [project] [--force]                           close it
+# unity-editor restart [project] [--scene <s>] [--windowed]       force-close, then up
+# unity-editor ensure [project] [--deadline 30]                   restart only if editor_status stays silent
+#
+# A new editor is headless (-batchmode without -quit, logging to <project>/Logs/Editor.log): a window
+# takes the user's focus on every launch, and nothing stops it. --windowed opens today's GUI editor
+# for anything that needs a visible window. restart and ensure keep a windowed editor windowed.
 #
 # ensure: an editor that answers nothing for the deadline is hung (a modal dialog, a main-thread
 # deadlock - "/api/exec ... Main thread operation timed out"), and no further command will get
@@ -12,10 +16,11 @@
 # up: skips `unity open` if the project already has a live editor (checked via `unity status`,
 # never assumed from a prior run), waits for it with unity-wait, enables autotick (an unfocused
 # GUI editor stalls recompiles/tests without it), clears the console, then reports the active
-# scene — opening --scene first when a different one is active (a fresh editor restores whatever
-# was last open, rarely the boot scene). A compile error opens the editor into Safe Mode, where no
-# pipeline server ever starts: up then fails within seconds, prints the errors, and closes that
-# editor (exit 1) instead of waiting out the deadline. An editor whose Pipeline server could not
+# scene — opening --scene first when a different one is active (a headless editor always starts on
+# an untitled scene, a windowed one restores whatever was last open). A compile error makes a
+# headless editor exit 1 and opens a windowed one into Safe Mode, where no pipeline server ever
+# starts: either way up fails within seconds, prints the errors, closes any Safe Mode editor and
+# exits 1 instead of waiting out the deadline. An editor whose Pipeline server could not
 # bind a port ("Failed to start Pipeline Server") is closed and relaunched once: with an
 # auto-assigned port (m_Port 0) that is a lost probe-then-bind race against an editor starting at
 # the same moment, and the relaunch probes again. A second failure closes it and exits 1.
@@ -25,11 +30,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 source "$HERE/_common.sh"
 
 MODE="${1:-}"
-case "$MODE" in up|down|restart|ensure) ;; *) die "usage: unity-editor up|down|restart|ensure [project] [--scene <s>] [--force] [--deadline <s>]";; esac
+case "$MODE" in up|down|restart|ensure) ;; *) die "usage: unity-editor up|down|restart|ensure [project] [--scene <s>] [--windowed] [--force] [--deadline <s>]";; esac
 shift
-ARG="."; SCENE=""; FORCE=""; DEADLINE=30
+ARG="."; SCENE=""; FORCE=""; DEADLINE=30; WINDOWED=""
 while [[ $# -gt 0 ]]; do case "$1" in
   --scene) SCENE=$2; shift 2;;
+  --windowed) WINDOWED=1; shift;;
   --force) FORCE=--force; shift;;
   --deadline) DEADLINE=$2; shift 2;;
   -*) die "unknown option $1";;
@@ -56,12 +62,18 @@ force_close() {
   wait_for 30 not_running || die "unity close --force left the editor running - check: pgrep -fl 'Unity -projectpath'"
 }
 
-[[ "$MODE" == restart ]] && force_close
+if [[ "$MODE" == restart ]]; then
+  editor_windowed && WINDOWED=1
+  force_close
+fi
 
 export LAUNCH_MARKER; LAUNCH_MARKER=$(mktemp); trap 'rm -f "$LAUNCH_MARKER"' EXIT
 launch() {
   touch "$LAUNCH_MARKER"
-  unity open "$PROJECT" --args "-automated" >/dev/null || die "unity open failed"
+  local args="-batchmode -automated -logFile $PROJECT/Logs/Editor.log"
+  [[ -n "$WINDOWED" ]] && args="-automated"
+  mkdir -p "$PROJECT/Logs"
+  unity open "$PROJECT" --args "$args" >/dev/null || die "unity open failed"
   UNITY_PROJECT_PATH="$PROJECT" "$HERE/unity-wait" ready
 }
 
@@ -73,9 +85,9 @@ if ! editor_open "$PROJECT"; then
   fi
   case $RC in
     0) ;;
-    1) # Safe Mode: nothing to drive, and a lingering process only blocks the next `unity open`.
+    1) # Compile errors: a Safe Mode editor has nothing to drive and only blocks the next `unity open`.
        force_close
-       die "closed the Safe Mode editor - fix the compile errors above, then re-run unity-editor up";;
+       die "fix the compile errors above, then re-run unity-editor up";;
     3) force_close
        die "closed the editor - its Pipeline server failed twice; is m_Port in ProjectSettings/Packages/com.unity.pipeline/EditorPipelineConfig.json pinned to a port in use?";;
     *) exit 2;;

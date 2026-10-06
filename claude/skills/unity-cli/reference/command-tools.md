@@ -73,4 +73,4 @@ unity command wait_for --project-path <dir> --result-only -- \
 ```
 
 `met: true` with `framesObserved` above 0 is the proof; `timedOut: true` means a frozen player
-loop, so check `set_autotick` first.
+loop, so check `set_autotick` first on a windowed editor (a headless one always ticks).

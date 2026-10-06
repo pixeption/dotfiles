@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Offline test for _common.sh's editor_log / in_safe_mode / compile_errors / server_failed (Unity 6.6
-# project logs) and not_running.
+# project logs), not_running and editor_windowed.
 set -uo pipefail
 COMMON="$(cd "$(dirname "$0")/.." && pwd)/scripts/_common.sh"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
@@ -43,9 +43,18 @@ echo "$FAILED" >>"$PROJ/Logs/Editor.log"
 check "failure since launch seen"    "$FAILED" "$(LAUNCH_MARKER=$TMP/launch probe server_failed)"
 
 # not_running matches the whole project path: a live .../GameCore says nothing about .../Game.
-bash -c 'sleep 30; :' "Unity -projectpath $TMP/GameCore -automated" & SLEEPER=$!
+bash -c 'sleep 30; :' "Unity -projectpath $TMP/GameCore -batchmode -automated" & SLEEPER=$!
 check "sibling project's editor ignored" yes "$(probe 'not_running && echo yes' "$TMP/Game")"
 check "own editor seen"              no "$(probe 'not_running && echo yes || echo no' "$TMP/GameCore")"
+check "headless editor not windowed" no "$(probe 'editor_windowed && echo yes || echo no' "$TMP/GameCore")"
+kill $SLEEPER
+
+# A direct launch spells it -projectPath; a just-launched editor must not read as gone.
+bash -c 'sleep 30; :' "Unity -projectPath $TMP/Game -batchmode -automated" & SLEEPER=$!
+check "-projectPath spelling seen"   no "$(probe 'not_running && echo yes || echo no' "$TMP/Game")"
+kill $SLEEPER
+bash -c 'sleep 30; :' "Unity -projectpath $TMP/Game -automated" & SLEEPER=$!
+check "windowed editor seen"         yes "$(probe 'editor_windowed && echo yes' "$TMP/Game")"
 kill $SLEEPER
 
 # No project log (pre-6.6 editor): the global log is the only one.

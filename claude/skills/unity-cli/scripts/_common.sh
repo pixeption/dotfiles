@@ -24,8 +24,12 @@ sys.exit(0 if any(i.get("project") == sys.argv[1] for i in (d.get("data") or {})
 ' "$1"
 }
 
-# Anchored at a word end: a bare prefix match takes a running .../GameCore for a gone .../Game.
-not_running() { ! pgrep -f "Unity -projectpath ${PROJECT:?}( |$)" >/dev/null; }
+# The project's editor command line. Anchored at a word end: a bare prefix match takes a running
+# .../GameCore for a gone .../Game. Case-blind: `unity open` spells it -projectpath, a direct launch
+# often -projectPath.
+editor_process() { pgrep -ilf "Unity -projectpath ${PROJECT:?}( |$)"; }
+not_running() { ! editor_process >/dev/null; }
+editor_windowed() { editor_process | grep -qv -- " -batchmode"; }
 
 # Unity rotates Editor.log on every launch; the header names its project on a line of its own,
 # which is how we know it is ours. Unity 6.6 writes that header to the global log, then moves the
@@ -46,8 +50,9 @@ log_is_ours() { names_project "$(editor_log)" && log_is_fresh; }
 # Prints the distinct `error CS...` lines of the project's current Editor.log (nothing if none).
 compile_errors() { log_is_ours && grep -E "error CS[0-9]+" "$(editor_log)" | grep -v "^##utp" | sort -u | head -20; }
 
-# 0 when the project's editor opened into Safe Mode - a compile error at launch. Such an editor
-# never starts the pipeline server, writes no descriptor, and answers nothing, forever.
+# 0 when the project's windowed editor opened into Safe Mode - a compile error at launch. Such an
+# editor never starts the pipeline server, writes no descriptor, and answers nothing, forever. A
+# headless editor has no Safe Mode: it exits 1 on the same errors.
 in_safe_mode() { log_is_ours && grep -q "^Safe Mode: Only loading a subset of assemblies" "$(editor_log)"; }
 
 # Prints the line when the project's editor could not bind its Pipeline server's port: another

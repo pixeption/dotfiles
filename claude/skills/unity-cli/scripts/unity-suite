@@ -129,9 +129,10 @@ MERGE
 
 run_batch() {
   answers() { [[ "$(result_json "$PROJECT" editor_status)" != unreachable ]]; }
-  local was_open=0 scene="" test_json test_rc errors
+  local was_open=0 scene="" windowed="" test_json test_rc errors
   if editor_open "$PROJECT"; then
     was_open=1
+    editor_windowed && windowed=--windowed
     scene=$(result_json "$PROJECT" list_open_scenes | python3 -c '
 import sys, json
 print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] and s["path"]), ""))' 2>/dev/null)
@@ -146,7 +147,7 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
   test_rc=$?
 
   # A compile error aborts the batch run in seconds with no report; reopening the editor would only
-  # put it into Safe Mode, so report the errors and leave it closed.
+  # fail on the same errors, so report them and leave it closed.
   if [[ ! -s "$REPORT" ]] && errors=$(compile_errors) && [[ -n "$errors" ]]; then
     echo "scripts have compiler errors - no tests ran; editor left closed. Fix, then unity-editor up:" >&2
     printf '%s\n' "$errors" >&2
@@ -154,7 +155,7 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
   fi
 
   if [[ $was_open -eq 1 ]]; then
-    "$HERE/unity-editor" up "$PROJECT" ${scene:+--scene "$scene"} \
+    "$HERE/unity-editor" up "$PROJECT" ${scene:+--scene "$scene"} $windowed \
       || echo "WARNING: could not reopen the editor that was open before this run" >&2
   fi
 

@@ -60,7 +60,7 @@ at the end, through `unity-suite`.
 resolved sources overlap are one resource. A worktree's `Game/` and `GameCore/` are one resource;
 separate worktrees are separate resources.
 
-The resource covers the project's GUI editor, a batch `unity test`, `unity command`, the
+The resource covers the project's live editor, a batch `unity test`, `unity command`, the
 `Temp/UnityLockfile`, its own `Assets/` and every package it resolves by `file:` path (a pinned git
 package is immutable, so it adds nothing). A second driver on the same resource fails ("another
 instance is running", a refused `run_tests`, a mid-reload socket); editing *any* source in it while
@@ -77,7 +77,7 @@ The rule is organisational; the `bees` orchestrator assigns resources and nono4u
 - **"Held" means a lock error on *your* project.** `unity status` listing a GUI editor on a
   *different* project is not a held project: batch `unity test` spins its own headless editor.
 - **Always name the project.** A bare `unity command <tool>` connects to *whatever* editor is
-  running, so with no editor on the project you meant it lands on another project's GUI editor.
+  running, so with no editor on the project you meant it lands on another project's editor.
   Pass `--project-path <dir>` on every `unity command`, or `unity run <project> --command …` for
   batch. The helper scripts already do.
 - **No background retry loops, ever.** A `run_in_background` shell that re-launches `unity test`
@@ -87,33 +87,41 @@ The rule is organisational; the `bees` orchestrator assigns resources and nono4u
 ## Bring up an editor: `unity-editor up`
 
 ```bash
-unity-editor up [project] [--scene <path.unity>]
+unity-editor up [project] [--scene <path.unity>] [--windowed]
 unity-editor down [project] [--force]
-unity-editor restart [project] [--scene <path.unity>]     force-close, then up
+unity-editor restart [project] [--scene <path.unity>] [--windowed]   force-close, then up
 unity-editor ensure [project] [--deadline 30]             restart only if it stays silent
 ```
 
 `up` does, in order: skip `unity open` if `unity status` already shows a live editor for the
-project; otherwise `unity open <project> --args "-automated"` and wait for it; `set_autotick
+project (headless or windowed, whichever it is); otherwise `unity open <project> --args
+"-batchmode -automated -logFile <project>/Logs/Editor.log"` and wait for it; `set_autotick
 --enable true`; `clear_console`; `open_scene` the `--scene` you named if a different one is
 active; report the active scene and its `rootCount`. Why each step exists:
 
+- **Headless by default.** A windowed editor takes the user's focus on every launch, and `open
+  -g`/`-j` do not stop it. A `-batchmode` editor started without `-quit` stays up with no window and
+  serves every `unity command`, `unity-test`, recompile and `unity-suite` run. `--windowed` opens
+  the GUI editor (`--args "-automated"`) for what needs a visible window: someone watching it, or a
+  capture of the real screen. `restart` and `ensure` relaunch a windowed editor windowed.
+  Offline test: `tests/unity-editor-up.sh`.
 - **`-automated`**: without it a modal dialog (import prompt, safe-mode prompt, API updater) can
-  block the main thread with nothing to dismiss it, silently hanging every later `unity command`.
-  Batch runs (`unity test`/`run`/`build`) can't show modals, so this only matters for a GUI editor
-  kept open for a live session. Cheap check for a hung command: `editor_status.status ==
-  "blocked_by_dialog"` names `dialog.title`/`buttons`; `GET /api/dialog` is the deeper check.
-- **A Safe Mode editor looks exactly like no editor at all.** A compile error opens the project
-  into Safe Mode: the Pipeline server never starts, no descriptor is written, `unity status` shows
-  nothing, and every call answers "No Pipeline instance found" while the process is plainly
-  running (`pgrep`). Nothing you wait for will arrive, so `up` doesn't wait: `unity-wait ready`
-  checks the editor log between status polls for `Safe Mode: Only loading a subset of
-  assemblies`, prints the `error CS` lines and exits 1; `unity-editor up` then force-closes that
-  editor. Fix the errors and re-run `up`; leaving Safe Mode by hand never starts the server. The log is
-  `<project>/Logs/Editor.log` (Unity writes the launch header to `~/Library/Logs/Unity/Editor.log`
-  and then moves there); `editor_log` in `_common.sh` picks the right one, tested offline by
-  `tests/editor-log.sh`. `unity pipeline list` has a `safeMode` field too, but it reads `null`
-  again ~60 s after launch, so don't poll it.
+  block a windowed editor's main thread with nothing to dismiss it, silently hanging every later
+  `unity command`. Batch editors can't show modals. Cheap check for a hung command:
+  `editor_status.status == "blocked_by_dialog"` names `dialog.title`/`buttons`; `GET /api/dialog`
+  is the deeper check.
+- **A compile error at launch never answers, so `up` doesn't wait.** A headless editor logs the
+  `error CS` lines and exits 1 (it has no Safe Mode). A windowed one opens into Safe Mode instead:
+  the Pipeline server never starts, no descriptor is written, `unity status` shows nothing, and
+  every call answers "No Pipeline instance found" while the process is plainly running (`pgrep`).
+  `unity-wait ready` checks the editor log between status polls — the `error CS` lines once a
+  headless editor's process is gone, `Safe Mode: Only loading a subset of assemblies` for a
+  windowed one — prints the errors and exits 1; `unity-editor up` then force-closes any Safe Mode
+  editor and exits 1. Fix the errors and re-run `up`; leaving Safe Mode by hand never starts the
+  server. The log is `<project>/Logs/Editor.log` (a windowed Unity writes the launch header to
+  `~/Library/Logs/Unity/Editor.log` and then moves there); `editor_log` in `_common.sh` picks the
+  right one, tested offline by `tests/editor-log.sh`. `unity pipeline list` has a `safeMode` field
+  too, but it reads `null` again ~60 s after launch, so don't poll it.
 - **An editor whose Pipeline server failed to bind looks like no editor too.** It logs `Failed to
   start Pipeline Server: Address already in use` and runs on with no server, absent from `unity
   status`. Keep `m_Port` at `0` (auto-assign) in `ProjectSettings/Packages/com.unity.pipeline/
@@ -129,19 +137,21 @@ active; report the active scene and its `rootCount`. Why each step exists:
   `unity pipeline list` can show a running Editor whose Pipeline server is unreachable.
 - **`unity status --until-ready` is not a substitute for `unity-wait ready`.** It blocks until a
   matching editor reports `ready` (`--timeout`, default 300 s, exit 6 at the deadline), but it
-  cannot see Safe Mode, and right after `editor_play` it returns `ready` at once while the next
-  `unity command` still fails with a bare network error.
+  cannot see a compile error, and right after `editor_play` it returns `ready` at once while the
+  next `unity command` still fails with a bare network error.
 - **Never `unity open` a project that may already be open.** It does not check: it starts a second
   editor process on the same project, without `-automated`, and reports success with a
   `launchedPid`. `unity-editor up` checks `unity status` first.
-- **`set_autotick --enable true`**: an unfocused GUI editor throttles its update loop, so
-  `recompile`/`run_tests` make no progress, a full-deadline symptom with no editor activity. Batch
-  editors always tick.
-- **Check the active scene before `editor_play`.** `unity open` restores whatever scene was last
-  open, not necessarily the boot scene. Playing the wrong one boots nothing: `editor_status` says
-  `playing`, the hierarchy is bare, and view-dependent commands fail with a misleading "not
-  booted". `list_open_scenes` → the boot scene must be `isActive` **and** `isLoaded`; a low
-  `rootCount` on the active scene is the tell.
+- **`set_autotick --enable true`**: an unfocused windowed editor throttles its update loop, so
+  `recompile`/`run_tests` make no progress, a full-deadline symptom with no editor activity. A
+  headless editor reports it already enabled; the call is harmless there.
+- **Check the active scene before `editor_play`.** A headless editor always starts on an untitled
+  scene and leaves `Library/LastSceneManagerSetup.txt` empty when it exits; a windowed one restores
+  whatever scene was last open, not necessarily the boot scene. Playing the wrong one boots
+  nothing: `editor_status` says `playing`, the hierarchy is bare, and view-dependent commands fail
+  with a misleading "not booted". Pass `--scene`, which works headless too. `list_open_scenes` →
+  the boot scene must be `isActive` **and** `isLoaded`; a low `rootCount` on the active scene is
+  the tell.
 
 **Check active work before diagnosing a silent editor.** `editor_status`/`test_status` queue behind
 command execution, even for detached work. Read the job/progress endpoint or the `ui_*` disk job
@@ -210,7 +220,7 @@ Editor forward. `compilationFailed` can be null in the CLI's `up_to_date` result
 `console_status.groundTruth.compilationFailed` is the native flag.
 
 ```bash
-unity-wait [--project-path <dir>] ready      [deadline]   # editor answers; exit 1 fast on Safe Mode, 3 on a failed server
+unity-wait [--project-path <dir>] ready      [deadline]   # editor answers; exit 1 fast on compile errors, 3 on a failed server
 unity-wait [--project-path <dir>] recompile  [deadline]   # editor_stop if playing, trigger, wait, settle
 unity-wait [--project-path <dir>] job <id>   [deadline]   # ui_* job record on disk, readable through Play Mode
 ```
@@ -231,7 +241,8 @@ and post-reload settling; the details it handles:
 - A recompile is **deferred while the Editor is in Play Mode**: the request hangs until Play
   exits, and the editor silently keeps running old code. `unity-wait recompile` does `editor_stop`
   first (`UNITY_WAIT_NO_STOP=1` to fail fast instead) and does not resume Play; call `editor_play`
-  yourself if you still need it.
+  yourself if you still need it. A headless editor enters Play and advances frames like a windowed
+  one, so this holds for both.
 
 ## Full clean suite: `unity-suite`
 
@@ -264,10 +275,10 @@ a batch editor: <why>`. Offline test: `tests/unity-suite-live.sh`.
 **Batch editor.** A Play Mode session poisons a live editor for full-suite runs, so everything else
 runs in a fresh batch editor holding no lock. The script closes any live editor (force-closing one that stays silent for 30 s; one that answers
 but will not close stops the run), runs `unity test` with an explicit
-`--output` and `--timeout` (default 1800 s; the CLI's own default is *no* timeout), reopens the editor afterward if one was open, and parses the NUnit XML for pass/fail
+`--output` and `--timeout` (default 1800 s; the CLI's own default is *no* timeout), reopens the editor afterward if one was open (windowed again if it was), and parses the NUnit XML for pass/fail
 rather than guessing from the exit code. Under the count line it prints
 `report: <path> · finished <HH:MM>`, so a quoted result shows which run it came from. With a compile error it exits 2 in ~10 s listing the
-`error CS` lines and does **not** reopen the editor (that would only enter Safe Mode): fix, then
+`error CS` lines and does **not** reopen the editor (it would only fail on the same errors): fix, then
 `unity-editor up`.
 
 ### Running `unity test` by hand
