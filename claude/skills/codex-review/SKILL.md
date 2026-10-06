@@ -170,5 +170,6 @@ anything the fix introduced; a clean review is valid.
 
 Reviews the repository's uncommitted changes as a diff, without a prompt you write. Use this
 skill's prompt flow for a **document or design**, `codex exec review` for a **raw diff** when you
-want no framing. Run it with `< /dev/null` when backgrounded (codex-implementor
-`reference/codex-cli.md`, the stdin trap).
+want no framing. Run it as
+`codex="$("$HOME/.claude/skills/codex-implementor/scripts/resolve-codex")" && "$codex" exec review < /dev/null`
+(the `< /dev/null` avoids codex-implementor `reference/codex-cli.md`'s stdin trap).

@@ -8,7 +8,8 @@ only a weekly limit reports the weekly as `primary` and no secondary. This reads
 snapshot; it is from the last codex turn, not a live query.
 
 Exit 0 = ROUTE: codex ok · 1 = over a threshold or limit reached (route to Claude) ·
-2 = no usable reading (no snapshot, or a STALE one — re-run with --refresh).
+2 = no usable reading (no snapshot, or a STALE one — re-run with --refresh) ·
+127 = codex not found (apply the printed fix).
 
 --refresh first spends one cheap codex turn so the reading is fresh, running the codex that
 codex-implementor's resolve-codex finds (the Bash tool's PATH lacks ~/.local/bin).
@@ -31,7 +32,7 @@ def resolve_codex():
     found = subprocess.run([os.path.expanduser("~/.claude/skills/codex-implementor/scripts/resolve-codex")],
                            stdout=subprocess.PIPE, text=True)
     if found.returncode:
-        sys.exit(2)
+        sys.exit(found.returncode)
     return found.stdout.strip()
 
 
