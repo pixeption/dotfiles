@@ -205,9 +205,8 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
   snapshot and ends in a `ROUTE:` line. Exit 0: route to codex. Exit 1 (a window at 100% or the
   limit reported): the unit goes to the Claude column of its bucket, same score, and its review to
   the Claude reviewer. Exit 2 (`ROUTE: unknown` — no snapshot, or one older than two hours; a
-  stale reading has said "ok" at 100%): spend one cheap codex turn and re-run —
-  `codex exec --skip-git-repo-check --sandbox read-only "reply ok" < /dev/null` (OpenCode rounds
-  write no snapshot). Log the reading when it changed the routing
+  stale reading has said "ok" at 100%): re-run as `codex-usage --refresh`, which spends one
+  cheap codex turn first (OpenCode rounds write no snapshot). Log the reading when it changed the routing
   (`[G1] decision: codex weekly window 100% → bee-opus-medium`). OpenCode reports `cost: 0`; the
   token figures are for the budget rule only.
 

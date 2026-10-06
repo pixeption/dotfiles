@@ -86,7 +86,8 @@ done
 [ -n "$workdir" ] && [ -d "$workdir" ] || { echo "codex-implement: need -C <existing workdir>" >&2; exit 2; }
 [ -n "$promptfile" ] && [ -f "$promptfile" ] || { echo "codex-implement: need -p <prompt-file>" >&2; exit 2; }
 [ -n "$outfile" ] || { echo "codex-implement: need -o <out-file>" >&2; exit 2; }
-command -v codex >/dev/null 2>&1 || { echo "codex-implement: 'codex' not on PATH" >&2; exit 127; }
+# The Bash tool's non-interactive shell lacks ~/.local/bin, so look there first.
+codex="$HOME/.local/bin/codex"; [ -x "$codex" ] || codex="$(command -v codex)" || { echo "codex-implement: codex not found at ~/.local/bin/codex or on PATH — install codex or symlink its binary there" >&2; exit 127; }
 command -v jq >/dev/null 2>&1 || { echo "codex-implement: 'jq' not on PATH" >&2; exit 127; }
 
 [ -n "$tier" ] || { [ "$model" = "gpt-6-luna" ] && tier="fast" || tier="standard"; }
@@ -125,12 +126,12 @@ echo $$ > "${outfile}.pid"
 # < /dev/null is the whole point — never remove it.
 if [ -n "$session" ]; then
   # `codex exec resume` has no -C; the session's cwd is what it was, so run from the workdir.
-  (cd "$workdir" && codex exec resume "$session" \
+  (cd "$workdir" && "$codex" exec resume "$session" \
     -m "$model" -c model_reasoning_effort="$effort" "${tier_args[@]}" \
     --skip-git-repo-check --json --output-last-message "$outfile" \
     "$prompt" < /dev/null > "$logfile" 2>&1) || true
 else
-  codex exec -C "$workdir" \
+  "$codex" exec -C "$workdir" \
     -m "$model" -c model_reasoning_effort="$effort" "${tier_args[@]}" \
     -c 'project_doc_fallback_filenames=["CLAUDE.md"]' \
     --sandbox "$sandbox" \

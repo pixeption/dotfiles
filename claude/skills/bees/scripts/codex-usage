@@ -8,11 +8,14 @@ only a weekly limit reports the weekly as `primary` and no secondary. This reads
 snapshot; it is from the last codex turn, not a live query.
 
 Exit 0 = ROUTE: codex ok · 1 = over a threshold or limit reached (route to Claude) ·
-2 = no usable reading (no snapshot, or a STALE one — refresh with one cheap codex turn).
+2 = no usable reading (no snapshot, or a STALE one — re-run with --refresh).
 
-  codex-usage [--five-hour 100] [--weekly 100] [--max-age-min 120]
+--refresh first spends one cheap codex turn so the reading is fresh. It resolves codex itself
+(~/.local/bin/codex, then PATH) because the Bash tool's non-interactive shell lacks ~/.local/bin.
+
+  codex-usage [--refresh] [--five-hour 100] [--weekly 100] [--max-age-min 120]
 """
-import argparse, calendar, glob, json, os, sys, time
+import argparse, calendar, glob, json, os, shutil, subprocess, sys, time
 
 WEEK_MIN = 7 * 24 * 60
 
@@ -20,7 +23,26 @@ p = argparse.ArgumentParser()
 p.add_argument("--five-hour", type=float, default=100, help="max used%% of a window shorter than a week")
 p.add_argument("--weekly", type=float, default=100, help="max used%% of the weekly window")
 p.add_argument("--max-age-min", type=float, default=120, help="older snapshots are STALE: no route")
+p.add_argument("--refresh", action="store_true", help="spend one cheap codex turn before reading")
 a = p.parse_args()
+
+
+def resolve_codex():
+    local = os.path.expanduser("~/.local/bin/codex")
+    found = local if os.access(local, os.X_OK) else shutil.which("codex")
+    if not found:
+        print("codex-usage: codex not found at ~/.local/bin/codex or on PATH — install codex or "
+              "symlink its binary to ~/.local/bin/codex", file=sys.stderr)
+        sys.exit(2)
+    return found
+
+
+if a.refresh:
+    turn = subprocess.run([resolve_codex(), "exec", "--skip-git-repo-check", "--sandbox", "read-only", "reply ok"],
+                          stdin=subprocess.DEVNULL, capture_output=True, text=True)
+    if turn.returncode:
+        print(f"codex-usage: refresh turn failed ({turn.returncode}):\n{turn.stderr[-2000:]}", file=sys.stderr)
+        sys.exit(2)
 
 home = os.environ.get("CODEX_HOME") or os.path.expanduser("~/.codex")
 files = sorted(glob.glob(os.path.join(home, "sessions", "**", "*.jsonl"), recursive=True),
@@ -44,7 +66,7 @@ for f in files[:20]:
         break
 if not snap:
     print(f"codex-usage: no rate_limits snapshot found under {home}/sessions", file=sys.stderr)
-    print("ROUTE: unknown (no snapshot — run one cheap codex turn)")
+    print("ROUTE: unknown (no snapshot — re-run with --refresh)")
     sys.exit(2)
 
 ts, rl = snap
@@ -69,7 +91,7 @@ stale = age_min > a.max_age_min
 print(" · ".join(reading(w)[0] for w in windows) + f" · plan {rl.get('plan_type')} · snapshot {age_min:.0f} min old"
       + (" (STALE)" if stale else ""))
 if stale:
-    print("ROUTE: unknown (STALE snapshot is not a reading — run one cheap codex turn, then re-run)")
+    print("ROUTE: unknown (STALE snapshot is not a reading — re-run with --refresh)")
     sys.exit(2)
 if rl.get("rate_limit_reached_type"):
     print(f"codex reports limit reached: {rl['rate_limit_reached_type']}")

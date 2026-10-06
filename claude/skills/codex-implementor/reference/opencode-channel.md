@@ -123,6 +123,5 @@ that point as a summary: reopen source before trusting an exact claim or citatio
 Before every unit, implementation or review, run `~/.claude/skills/bees/scripts/codex-usage`.
 Exit 0 (`ROUTE: codex ok`): go. Exit 1: a window is used up — route to Claude (bees "Routing").
 Exit 2 (`ROUTE: unknown`): the snapshot is missing or older than two hours, and a stale reading has
-said "ok" at 100% — spend one cheap codex turn
-(`codex exec --skip-git-repo-check --sandbox read-only "reply ok" < /dev/null`; OpenCode rounds
-write no snapshot) and re-run.
+said "ok" at 100% — re-run as `codex-usage --refresh`, which spends one cheap codex turn first
+(OpenCode rounds write no snapshot).
