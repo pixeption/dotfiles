@@ -9,7 +9,7 @@
 #   infra     - a term's job result cannot be read, a stale result from an aborted run lies
 #               beside the report: exit 2, editor left open.
 #   hang      - a term's run never starts: exit 2, editor neither restarted nor closed.
-#   taint     - the first term enters Play: the second never starts, exit 2.
+#   taint     - the first term enters Play: the second never starts live, the whole filter reruns in batch.
 #   nolist    - list_tests does not answer while checking --category: exit 2, nothing runs.
 #   full      - no filter: batch.
 #   playmode  - --mode PlayMode: batch.
@@ -80,7 +80,7 @@ check() { # check <stub> <want-path live|batch> <want-exit> <want-live-runs> <wa
   got=$(grep -q '^test$' "$TMP/calls" 2>/dev/null && echo batch || echo live)
   [[ $got == live && -s $TMP/editor-calls ]] && got="live+lifecycle($(tr '\n' ' ' <"$TMP/editor-calls"))"
   ran=$(grep -c '^run_tests' "$TMP/calls" 2>/dev/null); ran=${ran:-0}
-  if [[ $got == "$path" && $code == "$exit" && ( $path == batch || $ran == "$runs" ) \
+  if [[ $got == "$path" && $code == "$exit" && $ran == "$runs" \
         && ( -z $count || ( $out == *"$count"* && $out == *"report: $report"* && -s $report ) ) ]]; then echo "ok   $stub"
   else echo "FAIL $stub (path $got, exit $code, $ran live runs): $out"; fail=1; fi
 }
@@ -90,7 +90,7 @@ check overlap  live  1 2 "1/2 passed, 1 failed" --filter 'FooTests|N.Foo' --cate
 check clean    live  0 1 "1/1 passed, 0 failed" --filter BarTests
 check infra    live  2 1 ""                     --filter BarTests
 check hang     live  2 1 ""                     --filter BarTests
-check taint    live  2 1 ""                     --filter 'FooTests|BarTests'
+check taint    batch 0 1 "3/3 passed"           --filter 'FooTests|BarTests'
 check nolist   live  2 0 ""                     --filter FooTests --category '!Integration'
 check full     batch 0 0 "3/3 passed"           --category '!Integration'
 check playmode batch 0 0 "3/3 passed"           --filter FooTests --mode PlayMode

@@ -7,7 +7,8 @@
 # excluded_tests). Everything else follows Game/CLAUDE.md's clean-suite rule: a Play-mode session
 # poisons a live editor, so the run happens in a fresh batch editor with nothing holding the project
 # lock. That path closes any live editor first, runs `unity test`, and reopens the editor if one was
-# open. Both paths end in an NUnit XML report (--output, else a temp file) whose pass/fail this
+# open; a live run whose term enters Play before the last term falls back to it for the whole
+# filter. Both paths end in an NUnit XML report (--output, else a temp file) whose pass/fail this
 # parses — `unity test`'s exit code collapses every failure into a plain 6, so it only tells you
 # the run started, never why it ended.
 # Exit 0 all passed, 1 some failed, 2 the run never produced a report or ran 0 tests.
@@ -90,24 +91,31 @@ print(next((t["FullName"] for t in tests if any(x in t["FullName"].lower() for x
 }
 
 # Once the live path is chosen a failure ends the run: a batch fallback would close the held editor.
+# A term entering Play is the exception (run_live): the editor is poisoned for the terms after it.
 live_die() { die "$*
 editor left open; rerun once it is fixed"; }
 
 # run_term <term> <result.json>: one unity-test run. A test failure still writes a fresh result.
 run_term() {
-  played && live_die "the editor entered Play during this run, before '$1'"
   "$HERE/unity-test" "$1" --project-path "$PROJECT" --deadline "$TIMEOUT" --no-restart --result "$2" >/dev/null
   local rc=$?
   (( rc <= 1 )) && [[ -s "$2" ]] || live_die "the live run of '$1' did not finish (unity-test exit $rc)"
 }
 
 # One run per --filter term, into a private directory so no earlier attempt's result can count. A
-# test two terms match is counted once, and a failure under either term is kept.
+# test two terms match is counted once, and a failure under either term is kept. Returns 1 when a
+# term entered Play: the open editor is poisoned for the rest, so the caller reruns it all in batch.
 run_live() {
   local terms i
   PARTS=$(mktemp -d) && trap 'rm -rf "$PARTS"' EXIT || live_die "cannot create a temp directory"
   IFS='|' read -ra terms <<<"$FILTER"
-  for i in "${!terms[@]}"; do run_term "${terms[$i]}" "$PARTS/$i.json"; done
+  for i in "${!terms[@]}"; do
+    if played; then
+      echo "the editor entered Play during this run, before '${terms[$i]}'; rerunning the whole filter in a batch editor" >&2
+      return 1
+    fi
+    run_term "${terms[$i]}" "$PARTS/$i.json"
+  done
   python3 - "$REPORT" "$PARTS"/*.json <<'MERGE' || live_die "could not merge the live results into $REPORT"
 import json, sys, xml.etree.ElementTree as ET
 lower = lambda d: {k.lower(): v for k, v in d.items()}
@@ -177,7 +185,7 @@ $ERRORS"
 fi
 if [[ -z "$WHY" ]]; then
   echo "running in the open editor" >&2
-  run_live
+  run_live || run_batch
 else
   echo "running in a batch editor: $WHY" >&2
   run_batch

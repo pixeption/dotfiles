@@ -267,8 +267,12 @@ recompiles first (compile errors exit 2, editor left open; an editor whose serve
 no command for 30 s exits 2 with `editor hung - unity-editor ensure`), runs each `--filter` term as
 `unity-test`'s case-insensitive substring with `--no-restart`, merges the results into the
 `--output` report, and counts a test two terms match once, keeping a failure under either. Once it
-has started, anything but a test result (a start hang, an unreadable result or test list, a Play
-entry before the next term) exits 2 with the editor left open — never a batch fallback. It falls back to batch when the editor's log shows a Play entry this
+has started, anything but a test result (a start hang, an unreadable result or test list) exits 2
+with the editor left open — never a batch fallback. The exception is a term that enters Play (a
+fixture whose `[UnitySetUp]` enters Play Mode): it poisons the editor for the terms after it, so the
+script drops the live results and reruns the whole filter in a batch editor, closing and reopening
+the open one. **Put Play-entering classes last in `--filter`, or run them alone**, to stay live and
+skip that rerun. It falls back to batch when the editor's log shows a Play entry this
 session (`Entering Playmode…`/`Reloading assemblies for play mode`) or is not provably its own, or
 when `list_tests` shows a test the terms match in the excluded category — the live runner knows no
 categories. The first stderr line names the path taken: `running in the open editor` or `running in
