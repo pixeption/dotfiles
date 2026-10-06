@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <seconds>]
-#             [--filter <A|B>] [--assemblies <A;B>]
+#             [--filter <A|B>] [--assemblies <A;B>] [--category <expr>]
 #
 # Game/CLAUDE.md's clean-suite rule: a Play-mode session poisons a live editor, so the full suite
 # must run in a fresh batch editor with nothing holding the project lock. This closes any live
@@ -15,14 +15,15 @@ DIE_CODE=2
 
 # TIMEOUT: 30 min is many times a full suite (Pipeline.UI runs ~2 min) yet still ends a hung batch
 # editor, which `unity test` alone would wait on forever.
-ARG="."; MODE=EditMode; REPORT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""
+ARG="."; MODE=EditMode; REPORT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""; CATEGORY=""
 while [[ $# -gt 0 ]]; do case "$1" in
   --failed-only) REPORT=$2; shift 2;;
   --mode) MODE=$2; shift 2;;
   --timeout) TIMEOUT=$2; shift 2;;
   --filter) FILTER=$2; shift 2;;
   --assemblies) ASSEMBLIES=$2; shift 2;;
-  -*) die "usage: unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>]";;
+  --category) CATEGORY=$2; shift 2;;
+  -*) die "usage: unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>] [--category <expr>]";;
   *) ARG=$1; shift;;
 esac; done
 PROJECT=$(resolve_project "$ARG") || exit 2
@@ -52,8 +53,9 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
 fi
 
 # `unity test --timeout` is disabled by default, so a hung batch editor would wait forever.
+NUNIT=(${ASSEMBLIES:+-assemblyNames "$ASSEMBLIES"} ${CATEGORY:+-testCategory "$CATEGORY"})
 TEST_JSON=$(unity test --mode "$MODE" "$PROJECT" --output "$REPORT" --timeout "$TIMEOUT" $RERUN \
-  ${FILTER:+--filter "$FILTER"} --format json ${ASSEMBLIES:+-- -assemblyNames "$ASSEMBLIES"})
+  ${FILTER:+--filter "$FILTER"} --format json ${NUNIT[@]:+-- "${NUNIT[@]}"})
 TEST_RC=$?
 
 # A compile error aborts the batch run in seconds with no report; reopening the editor would only

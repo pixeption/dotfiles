@@ -223,12 +223,14 @@ and post-reload settling; the details it handles:
 
 ```bash
 unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>]
-            [--filter <A|B>] [--assemblies <A;B>]
+            [--filter <A|B>] [--assemblies <A;B>] [--category <expr>]
 ```
 
 `--filter` joins class names with `|` and `--assemblies` joins assembly names with `;`, e.g.
-`--assemblies "Pipeline.UI.Tests;Pipeline.UI.CoreTests;Pipeline.UI.Live.Tests"`. The script refuses a
-comma in either and exits 2 when the report holds 0 tests, since `unity test` itself exits 0 then.
+`--assemblies "Pipeline.UI.Tests;Pipeline.UI.CoreTests;Pipeline.UI.Live.Tests"`. `--category` is
+NUnit's `-testCategory` expression, e.g. `--category '!Integration'` for a fast lane. The script
+refuses a comma in `--filter` or `--assemblies` and exits 2 when the report holds 0 tests, since
+`unity test` itself exits 0 then.
 
 A Play Mode session poisons a live editor for full-suite runs, so the suite runs in a fresh batch
 editor holding no lock. The script closes any live editor (force-closing one that stays silent for 30 s; one that answers
