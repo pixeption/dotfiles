@@ -2,7 +2,7 @@ You alone drive <project>. The helpers are not on PATH; run them by absolute pat
 
 ```sh
 S=~/.claude/skills/unity-cli/scripts P=<project>
-$S/unity-editor up "$P"                       # open or reuse the live editor, headless
+$S/unity-editor up "$P"                       # open or reuse the live editor; new launches are headless
 $S/unity-wait --project-path "$P" recompile   # after every edit; exit 1 prints the compile errors
 $S/unity-test <filter> --project-path "$P"    # while iterating; exit 1 lists the failing tests
 $S/unity-suite "$P" --filter 'A|B'            # the acceptance run, once, at the end
