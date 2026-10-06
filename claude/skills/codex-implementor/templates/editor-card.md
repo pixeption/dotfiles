@@ -22,6 +22,6 @@ $S/unity-suite "$P" --filter 'A|B'            # the acceptance run, once, at the
   editor left running. Fix them, then `unity-editor up` again.
 - A failure because another instance holds the project is not transient: stop and report. No
   retry, sleep or polling loop.
-- `unity close` before reporting; never kill the editor.
+- `unity close "$P"` before reporting (positional: `close`, `open` and `test` reject `--project-path`); never kill the editor.
 - Open `~/.claude/skills/unity-cli/SKILL.md` only for a command this card does not cover, and read
   only that section.
