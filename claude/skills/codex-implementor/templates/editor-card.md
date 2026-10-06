@@ -2,7 +2,7 @@ You alone drive <project>. The helpers are not on PATH; run them by absolute pat
 
 ```sh
 S=~/.claude/skills/unity-cli/scripts P=<project>
-$S/unity-editor up "$P"                       # open or reuse the live editor
+$S/unity-editor up "$P"                       # open or reuse the live editor, headless
 $S/unity-wait --project-path "$P" recompile   # after every edit; exit 1 prints the compile errors
 $S/unity-test <filter> --project-path "$P"    # while iterating; exit 1 lists the failing tests
 $S/unity-suite "$P" --filter 'A|B'            # the acceptance run, once, at the end
@@ -18,8 +18,8 @@ $S/unity-suite "$P" --filter 'A|B'            # the acceptance run, once, at the
   ignore stdout and the exit code.
 - Pass `--project-path "$P"` on every `unity command`: a bare one lands on whatever editor is
   running.
-- A compile error leaves the editor in Safe Mode, which looks like no editor at all. Fix the
-  `error CS` lines the helper printed, then `unity-editor up` again.
+- A compile error at launch makes `unity-editor up` exit 1 with the `error CS` lines printed and no
+  editor left running. Fix them, then `unity-editor up` again.
 - A failure because another instance holds the project is not transient: stop and report. No
   retry, sleep or polling loop.
 - `unity close` before reporting; never kill the editor.
