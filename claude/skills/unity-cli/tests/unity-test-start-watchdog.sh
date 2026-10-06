@@ -11,6 +11,10 @@
 #   normal - the run starts and completes: must print the summary, exit 0.
 #   retry-big, normal-big - as retry and normal, with ~1 MB of editor output after the markers, which a
 #                grep -q under pipefail would misread as no match (SIGPIPE in tail).
+#   untitled   - the active untitled scene is dirty, so the framework's save prompt would cancel the run:
+#                it must be replaced by an empty scene first, then the run starts, exit 0.
+#   titled     - a titled scene is dirty: it must be left alone (no eval), and the hang names the
+#                cancelled dialog, the scene and unity-editor ensure, without restarting, exit 2.
 set -uo pipefail
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 cp -R "$(cd "$(dirname "$0")/.." && pwd)/scripts" "$TMP/scripts"
@@ -24,13 +28,22 @@ PROJ=$(cd "$PROJ" && pwd)
 cat >"$TMP/home/.unity/bin/unity" <<EOF
 #!/usr/bin/env bash
 S=\${STUB%-big}
+dirty() { [[ \$S == titled || ( \$S == untitled && ! -e "$TMP/evals" ) ]]; }
 case "\$1 \$2" in
+  "command list_open_scenes")
+    path=""; [[ \$S == titled ]] && path=Assets/Scenes/Work.unity
+    dirty && d=true || d=false
+    echo '{"data":{"result":{"scenes":[{"path":"'\$path'","isActive":true,"isDirty":'\$d'}]}}}';;
+  "command eval") echo eval >>"$TMP/evals"; echo '{"data":{"result":null}}';;
   "status "*)             echo '{"data":{"instances":[{"project":"$PROJ"}]}}';;
   "command editor_status") echo '{"data":{"result":{"playMode":"stopped"}}}';;
   "command run_tests")
     log="$PROJ/Logs/Editor.log"; [[ -f \$log ]] || log="$TMP/home/Library/Logs/Unity/Editor.log"
     echo '[PipelineTestRunner] Running 3 tests' >>"\$log"
-    [[ \$S == normal || ( \$S != stuck && -s "$TMP/restarts" ) ]] && echo '[TestResultCollector] Run started: 3 test(s)' >>"\$log"
+    if dirty; then echo 'Canceling DisplayDialog: Scene(s) Have Been Modified Do you want to save the changes' >>"\$log"
+    elif [[ \$S == normal || \$S == untitled || ( \$S != stuck && -s "$TMP/restarts" ) ]]; then
+      echo '[TestResultCollector] Run started: 3 test(s)' >>"\$log"
+    fi
     [[ \$STUB == *-big ]] && head -c 1000000 /dev/zero | tr '\\0' x >>"\$log"
     [[ -s "$TMP/restarts" ]] && echo '{"data":{"jobId":"j2"}}' || echo '{"data":{"jobId":"j1"}}';;
   "job status")
@@ -46,7 +59,7 @@ fail=0
 check() { # check <name> <want-exit> <want-output-regex> <max-seconds> <want-restarts> <args...>
   local name=$1 want=$2 re=$3 max=$4 restarts_want=$5; shift 5
   local start=$SECONDS out code
-  rm -f "$TMP/restarts"
+  rm -f "$TMP/restarts" "$TMP/evals"
   [[ $name == transition ]] && rm "$PROJ/Logs/Editor.log"
   out=$(STUB=$name HOME="$TMP/home" "$SCRIPT" X --project-path "$PROJ" "$@" 2>&1); code=$?
   local restarts=$(cat "$TMP/restarts" 2>/dev/null | wc -l)
@@ -62,4 +75,7 @@ check unreadable 2 "within 4s; cancellation requested" 10 0 --start-deadline 4
 check normal 0 "3/3 passed"                        5  0 --start-deadline 4
 check retry-big  0 "3/3 passed"                    14 1 --start-deadline 4
 check normal-big 0 "3/3 passed"                    5  0 --start-deadline 4
+check untitled   0 "3/3 passed"                    5  0 --start-deadline 4
+check titled 2 "'Scene.s. Have Been Modified' dialog.*Assets/Scenes/Work.unity has unsaved changes.*unity-editor ensure" 10 0 --start-deadline 4
+[[ -e $TMP/evals ]] && { echo "FAIL titled: the user's dirty titled scene was replaced"; fail=1; }
 exit $fail

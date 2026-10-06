@@ -200,7 +200,11 @@ release it. When `unity-test` sees neither a start marker nor a terminal job sta
 `--start-deadline` (default 120 s), it requests cancellation. Only the confirmed hang (job
 `running`, `Running N tests` logged) gets one `unity-editor restart` and a retry (`--no-restart`
 exits 2 instead, for a caller holding the editor); a second trip, or
-a queued job or unreadable status, exits 2 and leaves the editor alone. Offline test:
+a queued job or unreadable status, exits 2 and leaves the editor alone. One known cause is a dirty
+scene: the test framework's save prompt (`Canceling DisplayDialog: Scene(s) Have Been Modified` in
+the log) is auto-cancelled and so is the run. `unity-test` replaces a dirty untitled active scene
+with an empty one before the run; a dirty titled scene is never saved or discarded, so that hang
+exits 2 naming the scene and `unity-editor ensure`. Offline test:
 `tests/unity-test-start-watchdog.sh`.
 
 **Job completion is not operation completion.** `unity job wait <id> --project-path <dir>
