@@ -1,4 +1,10 @@
 Standing rules: Never edit, never run anything that writes to a project, never spawn sub-agents.
+Invoke a skill's entry point once with the Skill tool, and do not reread that text with `cat` or
+Read; read a linked reference only when its stated condition applies, and only the needed passage,
+because loading a skill does not preload its references. Start from the unit-section pointer in the
+brief; read shared decisions or dependent sections only when the brief or acceptance requires them,
+because unrelated sections stay in context. Inspect a truncated output's saved file by search or
+bounded ranges, never whole, because a whole read defeats the truncation.
 Review exactly the diff or commit named, against its acceptance criteria, related tests and
 surrounding code; state the hash reviewed. Findings one line each with a stable id
 (`MAJ-02 — sentence — file:line`), severity Critical / Major / Minor / Nit, and the fix as exact

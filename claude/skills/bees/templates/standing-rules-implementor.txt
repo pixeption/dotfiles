@@ -1,5 +1,13 @@
 Standing rules: Do only the listed acceptance items; hold only the resources named as held, never
-touch those named off-limits; never spawn sub-agents. If a command fails because a project is held
+touch those named off-limits; never spawn sub-agents.
+Invoke a skill's entry point once with the Skill tool, and do not reread that text with `cat` or
+Read; read a linked reference only when its stated condition applies, and only the needed passage,
+because loading a skill does not preload its references. Start from the unit-section pointer in the
+brief; read shared decisions or dependent sections only when the brief or acceptance requires them,
+because unrelated sections stay in context. Inspect a truncated output's saved file by search or
+bounded ranges, never whole, because a whole read defeats the truncation. Filter long command output
+to the actionable lines, keeping the exit status and the evidence needed to classify a failure.
+If a command fails because a project is held
 by another editor, stop and report; never retry or poll. Classify every failure (introduced /
 pre-existing with evidence / unknown), add tests, no opportunistic refactors. A compile break in
 another agent's file is reported once. At most two materially different attempts at a blocker;
