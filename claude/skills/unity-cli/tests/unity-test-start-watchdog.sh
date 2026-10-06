@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Offline test for unity-test's start watchdog: a stub `unity` stands in for the editor.
 #   stuck      - the job is `running` and logs "Running N tests" but never "Run started" (the confirmed
-#                hang): must restart the editor once, then fail fast, exit 2.
+#                hang): must restart the editor once, then fail fast, exit 2; with --no-restart, exit 2
+#                without restarting.
 #   retry      - stuck until the editor restarts once, then the run starts: must restart, retry, exit 0.
 #   transition - like retry, but the editor writes the global log until the restart and its project
 #                log after it: the retry must read the new log, exit 0.
@@ -55,6 +56,7 @@ check() { # check <name> <want-exit> <want-output-regex> <max-seconds> <want-res
 check stuck  2 "within 4s; cancellation requested" 20 1 --start-deadline 4
 check retry  0 "3/3 passed"                        14 1 --start-deadline 4
 check transition 0 "3/3 passed"                    14 1 --start-deadline 4
+check stuck  2 "editor left alone .--no-restart."  10 0 --start-deadline 4 --no-restart
 check queued     2 "within 4s; cancellation requested" 10 0 --start-deadline 4
 check unreadable 2 "within 4s; cancellation requested" 10 0 --start-deadline 4
 check normal 0 "3/3 passed"                        5  0 --start-deadline 4

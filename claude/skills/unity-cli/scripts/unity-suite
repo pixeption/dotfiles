@@ -56,59 +56,66 @@ fi
 # Unity logs one of these on every Play entry, with and without domain reload.
 PLAY_ENTRY='^(Entering Playmode|Reloading assemblies for play mode)'
 
-# Prints why the run cannot go to the open editor; nothing when it can. The editor log covers its
-# whole session, so an editor whose log is not provably its own counts as having played.
+# 0 when the editor's session log shows a Play entry, or cannot be read as its own: the log covers
+# the whole session, so only a readable log of ours without one shows the editor never played.
+played() {
+  log_is_ours || return 0
+  grep -Eiq "$PLAY_ENTRY" "$(editor_log)"
+  (( $? != 1 ))
+}
+
+# Prints why the run cannot go to the open editor; nothing when it can.
 live_blocker() {
   if [[ "$MODE" != EditMode ]]; then echo "a $MODE run"
   elif [[ -z "$FILTER" ]]; then echo "no --filter: the full suite"
   elif [[ -n "$RERUN$ASSEMBLIES" ]]; then echo "--failed-only and --assemblies are batch-only"
   elif [[ -n "$CATEGORY" && ! "$CATEGORY" =~ ^![A-Za-z0-9_]+$ ]]; then echo "--category other than !<Name>"
   elif ! editor_open "$PROJECT"; then echo "no open editor"
-  elif ! log_is_ours; then echo "its editor log cannot show it never entered Play"
-  elif grep -Eiq "$PLAY_ENTRY" "$(editor_log)"; then echo "the open editor entered Play this session"
+  elif played; then echo "the open editor entered Play this session, or its log cannot show it did not"
   fi
 }
 
 # The live runner matches each --filter term as a substring and knows no categories, so it is exact
-# only when no test those terms match carries the excluded category. Prints why not, else nothing.
-excluded_tests() {
+# only when no test those terms match carries the excluded category. Prints the first such test;
+# fails when the editor's test list cannot be read.
+excluded_test() {
   [[ -z "$CATEGORY" ]] && return
   result_json "$PROJECT" list_tests --mode editor | python3 -c '
 import sys, json
-try: tests = json.load(sys.stdin)["Tests"]
-except Exception: print("list_tests did not answer"); sys.exit()
+tests = json.load(sys.stdin)["Tests"]
 terms, cat = sys.argv[1].lower().split("|"), sys.argv[2].lower()
-hits = [t["FullName"] for t in tests if any(x in t["FullName"].lower() for x in terms)
-        and cat in (c.lower() for c in t.get("Categories") or [])]
-if hits: print(f"--filter matches {len(hits)} test(s) in category {sys.argv[2]}, e.g. {hits[0]}")
-' "$FILTER" "${CATEGORY#!}"
+print(next((t["FullName"] for t in tests if any(x in t["FullName"].lower() for x in terms)
+            and cat in (c.lower() for c in t["Categories"])), ""))
+' "$FILTER" "${CATEGORY#!}" 2>/dev/null
 }
 
-compile_live() {
-  local errors
-  errors=$(UNITY_PROJECT_PATH="$PROJECT" "$HERE/unity-wait" recompile) && return
-  echo "scripts have compiler errors or the recompile did not finish - no tests ran; editor left open:" >&2
-  printf '%s\n' "$errors" >&2
-  exit 2
+# Once the live path is chosen a failure ends the run: a batch fallback would close the held editor.
+live_die() { die "$*
+editor left open; rerun once it is fixed"; }
+
+# run_term <term> <result.json>: one unity-test run. A test failure still writes a fresh result.
+run_term() {
+  played && live_die "the editor entered Play during this run, before '$1'"
+  "$HERE/unity-test" "$1" --project-path "$PROJECT" --deadline "$TIMEOUT" --no-restart --result "$2" >/dev/null
+  local rc=$?
+  (( rc <= 1 )) && [[ -s "$2" ]] || live_die "the live run of '$1' did not finish (unity-test exit $rc)"
 }
 
-# One unity-test run per --filter term; a test two terms match is counted once.
+# One run per --filter term, into a private directory so no earlier attempt's result can count. A
+# test two terms match is counted once, and a failure under either term is kept.
 run_live() {
-  local terms term part parts=()
+  local terms i
+  PARTS=$(mktemp -d) && trap 'rm -rf "$PARTS"' EXIT || live_die "cannot create a temp directory"
   IFS='|' read -ra terms <<<"$FILTER"
-  for term in "${terms[@]}"; do
-    part="$REPORT.${#parts[@]}.json"
-    "$HERE/unity-test" "$term" --project-path "$PROJECT" --deadline "$TIMEOUT" --result "$part" >/dev/null
-    [[ -s "$part" ]] || die "the live run of '$term' did not finish; editor left open"
-    parts+=("$part")
-  done
-  python3 - "$REPORT" "${parts[@]}" <<'MERGE'
+  for i in "${!terms[@]}"; do run_term "${terms[$i]}" "$PARTS/$i.json"; done
+  python3 - "$REPORT" "$PARTS"/*.json <<'MERGE' || live_die "could not merge the live results into $REPORT"
 import json, sys, xml.etree.ElementTree as ET
 lower = lambda d: {k.lower(): v for k, v in d.items()}
+bad = lambda t: t.get("status") not in ("Passed", "Skipped")
 cases = {}
 for path in sys.argv[2:]:
-    for t in lower(json.load(open(path))).get("results") or []:
-        t = lower(t); cases[t["fullname"]] = t
+    for t in map(lower, lower(json.load(open(path))).get("results") or []):
+        if t["fullname"] not in cases or not bad(cases[t["fullname"]]): cases[t["fullname"]] = t
 count = lambda status: sum(t.get("status") == status for t in cases.values())
 passed, skipped = count("Passed"), count("Skipped")
 run = ET.Element("test-run", total=str(len(cases)), passed=str(passed),
@@ -118,7 +125,6 @@ for name, t in cases.items():
     if t.get("message"): ET.SubElement(ET.SubElement(case, "failure"), "message").text = t["message"]
 ET.ElementTree(run).write(sys.argv[1], encoding="utf-8", xml_declaration=True)
 MERGE
-  rm -f "${parts[@]}"
 }
 
 run_batch() {
@@ -161,8 +167,11 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
 
 WHY=$(live_blocker)
 if [[ -z "$WHY" ]]; then
-  compile_live
-  WHY=$(excluded_tests)
+  ERRORS=$(UNITY_PROJECT_PATH="$PROJECT" "$HERE/unity-wait" recompile) \
+    || live_die "scripts have compiler errors or the recompile did not finish - no tests ran:
+$ERRORS"
+  HIT=$(excluded_test) || live_die "could not read the editor's test list to check --category $CATEGORY"
+  [[ -n "$HIT" ]] && WHY="--filter matches $HIT, in category ${CATEGORY#!}"
 fi
 if [[ -z "$WHY" ]]; then
   echo "running in the open editor" >&2

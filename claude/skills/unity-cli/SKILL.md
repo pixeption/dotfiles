@@ -154,7 +154,7 @@ it hangs again, stop and report rather than looping.
 
 ```bash
 unity-test <filter> [--type name|assembly|category] [--mode editmode|playmode] [--project-path <dir>]
-           [--deadline <s>] [--start-deadline <s>] [--result <file.json>]
+           [--deadline <s>] [--start-deadline <s>] [--result <file.json>] [--no-restart]
 ```
 
 EditMode detaches (`run_tests --detach` + `unity job wait <jobId>`), so the run survives the CLI's
@@ -188,7 +188,8 @@ run never begins (no `[TestResultCollector] Run started` in the editor log). The
 `running`, holds the exec gate (`editor_status` times out), and `unity job cancel` does not
 release it. When `unity-test` sees neither a start marker nor a terminal job state within
 `--start-deadline` (default 120 s), it requests cancellation. Only the confirmed hang (job
-`running`, `Running N tests` logged) gets one `unity-editor restart` and a retry; a second trip, or
+`running`, `Running N tests` logged) gets one `unity-editor restart` and a retry (`--no-restart`
+exits 2 instead, for a caller holding the editor); a second trip, or
 a queued job or unreadable status, exits 2 and leaves the editor alone. Offline test:
 `tests/unity-test-start-watchdog.sh`.
 
@@ -251,8 +252,10 @@ first) instead of a shared temp file — pass a lane-scoped one under `<project>
 **Open editor.** A filtered Edit-Mode run (no `--assemblies`/`--failed-only`, `--category` empty or
 `!<Name>`) runs in the open editor through `unity-test`, which stays open under the same PID: it
 recompiles first (compile errors exit 2, editor left open), runs each `--filter` term as
-`unity-test`'s case-insensitive substring, merges the results into the `--output` report, and counts
-a test two terms match once. It falls back to batch when the editor's log shows a Play entry this
+`unity-test`'s case-insensitive substring with `--no-restart`, merges the results into the
+`--output` report, and counts a test two terms match once, keeping a failure under either. Once it
+has started, anything but a test result (a start hang, an unreadable result or test list, a Play
+entry before the next term) exits 2 with the editor left open — never a batch fallback. It falls back to batch when the editor's log shows a Play entry this
 session (`Entering Playmode…`/`Reloading assemblies for play mode`) or is not provably its own, or
 when `list_tests` shows a test the terms match in the excluded category — the live runner knows no
 categories. The first stderr line names the path taken: `running in the open editor` or `running in
