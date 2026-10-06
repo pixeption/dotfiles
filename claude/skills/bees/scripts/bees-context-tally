@@ -1,0 +1,340 @@
+#!/usr/bin/env python3
+"""Tally the input context of sub-agent runs from their transcripts.
+
+  bees-context-tally <project-transcripts-dir> [--since <ISO>] [--manifest <tsv>]
+
+Reads <dir>/<session_id>/subagents/agent-<agent_id>.jsonl. --since keeps runs whose first timestamp
+is at or after it. --manifest selects exactly its rows (header: session_id agent_id plan unit score
+base_commit review_rounds; '#' lines skipped) and joins their columns; a duplicate row or a missing
+transcript fails the run, as does any selected run with no API response.
+
+Prints one JSON record per run, then the aggregate tables in Markdown. A response is one distinct
+message.id; its input context is input + cache read + cache creation tokens. The residual is each
+interval's context growth minus its visible content, and is unattributed: thinking is redacted, so
+it also holds reminders, framing and the error of the character estimate.
+"""
+import argparse, base64, json, math, re, shlex, statistics, struct, sys
+from datetime import datetime
+from pathlib import Path
+
+CHARS_PER_TOKEN = 3.5  # the measurement's estimate for transcript text and code
+IMAGE_TOKENS_MAX = 1600  # the API's cost of a full-size image, also used when the size is unreadable
+PAST = 200_000  # the implementor pause line
+MIN_INTERVALS = 30  # eligible intervals an effort level needs before its median counts
+# injected attachment text whose size is known, by the field that holds it
+MEASURED = {"total_tokens_reminder": "text", "hook_additional_context": "content", "queued_command": "prompt",
+            "edited_text_file": "snippet", "nested_memory": "content", "date": "date"}
+SILENT = {"deferred_tools_record", "prompt_snapshot", "credential_org", "hook_success"}  # never sent to the model
+HOOK_TEXT = re.compile(r"^Context at \d+k: ")
+PAUSE_TEXT = "stop at the next safe point and pause"
+READ_CLASSES = (("skill_entry", re.compile(r"(^|/)SKILL\.md$")),
+                ("plan_file", re.compile(r"(^|/)docs/plans/[^/]+(?<!\.log)(?<!\.status)\.md$")),
+                ("saved_output", re.compile(r"/tool-results/")))
+HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1([^\n]*)\n.*?\n\s*\2(?=\n|$)", re.S)
+CHAIN = re.compile(r"\|\||&&|;|\n")
+
+
+def die(msg):
+    sys.exit(f"bees-context-tally: {msg}")
+
+
+def when(ts):
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def context(usage):
+    return sum(usage.get(k) or 0 for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
+
+
+def tokens(chars):
+    return chars / CHARS_PER_TOKEN
+
+
+def image_tokens(source):
+    try:
+        head = base64.b64decode(source.get("data", "")[:32])
+        w, h = struct.unpack(">II", head[16:24]) if head[:8] == b"\x89PNG\r\n\x1a\n" else (0, 0)
+    except (ValueError, struct.error):
+        w = h = 0
+    return min(math.ceil(w * h / 750), IMAGE_TOKENS_MAX) if w * h else IMAGE_TOKENS_MAX
+
+
+def content_size(content):
+    """(characters, image tokens) of a message or tool-result content."""
+    if isinstance(content, str):
+        return len(content), 0
+    chars = images = 0
+    for block in content or []:
+        if block.get("type") == "image":
+            images += image_tokens(block.get("source") or {})
+        elif block.get("type") == "tool_result":
+            c, i = content_size(block.get("content"))
+            chars, images = chars + c, images + i
+        else:
+            chars += len(block.get("text") or "")
+    return chars, images
+
+
+def attachment_text(att):
+    value = att.get(MEASURED[att["type"]]) or ""
+    return "\n".join(value) if isinstance(value, list) else str(value)
+
+
+def read_class(path):
+    for name, rx in READ_CLASSES:
+        if rx.search(path):
+            return name
+    return "unknown" if re.search(r"[$*?`]", path) else None
+
+
+def whole_cats(command):
+    """The argument lists of every `cat` that prints whole files to the agent."""
+    for chain in CHAIN.split(HEREDOC.sub(r"<<\3", command)):
+        stages = chain.split("|")
+        try:
+            words = shlex.split(stages[0])
+        except ValueError:
+            words = stages[0].split()
+        if words[:1] == ["cat"] and len(stages) == 1 and not any(w.startswith(("<", ">")) for w in words):
+            yield [w for w in words[1:] if not w.startswith("-")]
+
+
+def reads(tool_uses, result_chars):
+    """Whole reads by class: {class: [count, tokens]}."""
+    out = {name: [0, 0.0] for name, _ in READ_CLASSES + (("unknown", None),)}
+    for use in tool_uses:
+        inp = use.get("input") or {}
+        if use.get("name") == "Read" and not ({"offset", "limit", "pages"} & inp.keys()):
+            paths = [[inp.get("file_path", "")]]
+        elif use.get("name") == "Bash":
+            paths = list(whole_cats(inp.get("command", "")))
+        else:
+            continue
+        for args in paths:
+            for path in args:
+                name = read_class(path)
+                if name:
+                    out[name][0] += 1
+                    out[name][1] += tokens(result_chars.get(use.get("id"), 0) / len(args))
+    return {k: {"count": c, "tokens": round(t)} for k, (c, t) in out.items()}
+
+
+def outcome(blocks):
+    found = []
+    for b in blocks:
+        texts = [b.get("text") or ""] if b.get("type") == "text" else \
+            [v for v in (b.get("input") or {}).values() if isinstance(v, str)] if b.get("type") == "tool_use" else []
+        for t in texts:
+            found += re.findall(r"^BEES: results=(\S+)", t, re.M)
+    if not found:
+        return "unknown"
+    statuses = [e.split(":")[1] for e in found[-1].split(";") if e.count(":") >= 1]
+    return ",".join(dict.fromkeys(statuses)) or "unknown"
+
+
+class Response:
+    def __init__(self):
+        self.ctx, self.thinking, self.thinks, self.chars, self.blocks = 0, None, False, 0, []
+        self.model = None
+
+
+class Interval:
+    def __init__(self):
+        self.chars, self.images, self.unknown, self.compaction = 0, 0, False, False
+
+
+def tally(path):
+    responses, order, intervals = {}, [], []
+    result_chars, stamps = {}, []
+    effort, hook_seen, pause_at, compactions, images = None, False, None, 0, 0
+    for raw in open(path, encoding="utf-8"):
+        try:
+            line = json.loads(raw)
+        except ValueError:
+            continue
+        if line.get("timestamp"):
+            stamps.append(line["timestamp"])
+        kind, msg = line.get("type"), line.get("message") or {}
+        if kind == "assistant" and msg.get("usage") and context(msg["usage"]) and msg.get("id"):
+            if msg["id"] not in responses:
+                responses[msg["id"]] = Response()
+                order.append(responses[msg["id"]])
+                intervals.append(Interval())
+                if effort is None:
+                    effort = line.get("effort")
+            r = responses[msg["id"]]
+            r.ctx, r.model = context(msg["usage"]), msg.get("model")
+            details = msg["usage"].get("output_tokens_details") or {}
+            if "thinking_tokens" in details:
+                r.thinking = details["thinking_tokens"]
+            for b in msg.get("content") or []:
+                r.blocks.append(b)
+                if b.get("type") == "thinking":
+                    r.thinks = True
+                elif b.get("type") == "text":
+                    r.chars += len(b.get("text") or "")
+                elif b.get("type") == "tool_use":
+                    r.chars += len(json.dumps(b.get("input"), separators=(",", ":"), ensure_ascii=False))
+            continue
+        if not order:
+            continue
+        iv = intervals[-1]
+        if kind == "system" and line.get("subtype") == "compact_boundary":
+            iv.compaction, compactions = True, compactions + 1
+        elif kind == "user":
+            content = msg.get("content")
+            chars, imgs = content_size(content)
+            iv.chars, iv.images, images = iv.chars + chars, iv.images + imgs, images + imgs
+            for b in content if isinstance(content, list) else []:
+                if b.get("type") == "tool_result":
+                    result_chars[b.get("tool_use_id")] = content_size(b.get("content"))[0]
+        elif kind == "attachment":
+            att = line.get("attachment") or {}
+            if att.get("type") in MEASURED:
+                text = attachment_text(att)
+                iv.chars += len(text)
+                if att["type"] == "hook_additional_context" and HOOK_TEXT.match(text):
+                    hook_seen = True
+                    if PAUSE_TEXT in text and pause_at is None:
+                        pause_at = len(order) - 1
+            elif att.get("type") not in SILENT:
+                iv.unknown = True
+    if not order:
+        die(f"no usable peak: {path}")
+
+    growth = own = 0.0
+    eligible, controls, visible = [], [], 0.0
+    for i in range(len(order) - 1):
+        iv = intervals[i]
+        if iv.compaction:
+            continue
+        grew = order[i + 1].ctx - order[i].ctx
+        seen = tokens(order[i].chars + iv.chars) + iv.images
+        growth, own = growth + grew, own + tokens(order[i].chars)
+        visible += seen
+        thinking = order[i].thinking
+        if not iv.unknown and thinking is not None:
+            (eligible.append([round(grew - seen), thinking]) if thinking > 0 else controls.append(round(grew - seen)))
+    residual = growth - visible
+    thinkers = sum(r.thinks for r in order)
+    if pause_at is not None:
+        reading = order[pause_at].ctx
+        after = max([r.ctx for r in order[pause_at + 1:]] or [reading])
+        pause = {"reading": reading, "peak_after": after, "overshoot": after - reading}
+    else:
+        pause = "not-delivered" if hook_seen else "unknown"
+    meta = path.with_name(path.stem + ".meta.json")
+    agent_type = json.loads(meta.read_text()).get("agentType", "unknown") if meta.exists() else "unknown"
+    tool_uses = [b for r in order for b in r.blocks if b.get("type") == "tool_use"]
+    return {
+        "session_id": path.parent.parent.name, "agent_id": path.stem[len("agent-"):], "agent_type": agent_type,
+        "model": order[0].model, "effort": effort,
+        "responses": len(order), "peak_context": max(r.ctx for r in order),
+        "first_ts": stamps[0] if stamps else None, "last_ts": stamps[-1] if stamps else None,
+        "cumulative_context": sum(r.ctx for r in order),
+        "outcome": outcome(order[-1].blocks),
+        "reads": reads(tool_uses, result_chars), "image_tokens": images, "compactions": compactions,
+        "pause": pause,
+        "unattributed": {"growth": round(growth), "visible": round(visible), "own_inputs": round(own),
+                         "results": round(visible - own), "residual": round(residual),
+                         "share": round(residual / growth, 3) if growth > 0 else None,
+                         "thinking_responses": thinkers,
+                         "per_thinking_response": round(residual / thinkers) if thinkers else None},
+        "validation": {"eligible": eligible, "controls": controls},
+    }
+
+
+def cell(value):
+    return None if value in ("", "-") else int(value) if value.isdigit() else value
+
+
+def manifest_rows(path):
+    rows = [l.rstrip("\n").split("\t") for l in open(path, encoding="utf-8") if l.strip() and not l.startswith("#")]
+    header, seen = rows[0], {}
+    for row in rows[1:]:
+        rec = dict(zip(header, row))
+        key = (rec["session_id"], rec["agent_id"])
+        if key in seen:
+            die(f"duplicate manifest row: {key[0]} {key[1]}")
+        seen[key] = {k: cell(v) for k, v in rec.items() if k not in ("session_id", "agent_id")}
+    return seen
+
+
+def k(n):
+    return f"{n // 1000}k"
+
+
+def table(title, head, rows):
+    print(f"\n## {title}\n\n| {' | '.join(head)} |\n|{'---|' * len(head)}")
+    for row in rows:
+        print(f"| {' | '.join(str(c) for c in row)} |")
+
+
+def quartiles(values):
+    return statistics.quantiles(values, n=4, method="inclusive") if len(values) > 1 else values * 3
+
+
+def aggregate(records):
+    by_type = {}
+    for r in records:
+        by_type.setdefault(r["agent_type"], []).append(r)
+    table("Peak input context by agent type", ["agent", "runs", f"past {k(PAST)}", "max"],
+          [[t, len(rs), sum(r["peak_context"] > PAST for r in rs), k(max(r["peak_context"] for r in rs))]
+           for t, rs in sorted(by_type.items())])
+    rows = []
+    for t, rs in sorted(by_type.items()):
+        u = [r["unattributed"] for r in rs]
+        growth, residual, thinkers = (sum(x[f] for x in u) for f in ("growth", "residual", "thinking_responses"))
+        responses = sum(r["responses"] for r in rs)
+        rows.append([t, len(rs), f"{growth / len(rs) / 1000:.0f}k",
+                     f"{residual / growth:.0%}" if growth > 0 else "-",
+                     f"{residual / thinkers / 1000:.1f}k" if thinkers else "-", f"{thinkers / responses:.0%}"])
+    table("Growth by agent type (unattributed residual)",
+          ["agent", "runs", "growth per run", "residual share", "residual per thinking response",
+           "responses with thinking"], rows)
+    table("Whole reads by class", ["class", "count", "tokens"],
+          [[c, sum(r["reads"][c]["count"] for r in records), sum(r["reads"][c]["tokens"] for r in records)]
+           for c in records[0]["reads"]] if records else [])
+    by_effort = {}
+    for r in records:
+        by_effort.setdefault(r["effort"] or "unknown", []).append(r)
+    rows = []
+    for e, rs in sorted(by_effort.items()):
+        ratios = sorted(res / th for r in rs for res, th in r["validation"]["eligible"])
+        controls = sum(len(r["validation"]["controls"]) for r in rs)
+        q = [f"{x:.2f}" for x in quartiles(ratios)] if ratios else ["-"] * 3
+        median = statistics.median(ratios) if ratios else None
+        verdict = "inconclusive" if len(ratios) < MIN_INTERVALS else "pass" if 0.8 <= median <= 1.2 else "fail"
+        rows.append([e, len(ratios), *q, controls, verdict])
+    table("Residual / thinking_tokens by effort (eligible intervals)",
+          ["effort", "eligible", "p25", "median", "p75", "zero controls", "verdict"], rows)
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("dir", type=Path)
+    ap.add_argument("--since")
+    ap.add_argument("--manifest", type=Path)
+    a = ap.parse_args()
+    if a.manifest:
+        meta = manifest_rows(a.manifest)
+        paths = [a.dir / sid / "subagents" / f"agent-{aid}.jsonl" for sid, aid in meta]
+        missing = [str(p) for p in paths if not p.exists()]
+        if missing:
+            die("missing transcript: " + ", ".join(missing))
+    else:
+        meta, paths = {}, sorted(a.dir.glob("*/subagents/agent-*.jsonl"))
+    records = []
+    for path in paths:
+        rec = tally(path)
+        if a.since and (not rec["first_ts"] or when(rec["first_ts"]) < when(a.since)):
+            continue
+        joined = meta.get((rec["session_id"], rec["agent_id"]), {})
+        rec.update({f: joined.get(f) for f in ("plan", "unit", "score", "base_commit", "review_rounds")})
+        records.append(rec)
+        print(json.dumps(rec))
+    aggregate(records)
+
+
+if __name__ == "__main__":
+    main()
