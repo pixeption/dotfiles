@@ -10,8 +10,8 @@ snapshot; it is from the last codex turn, not a live query.
 Exit 0 = ROUTE: codex ok · 1 = over a threshold or limit reached (route to Claude) ·
 2 = no usable reading (no snapshot, or a STALE one — re-run with --refresh).
 
---refresh first spends one cheap codex turn so the reading is fresh. It resolves codex itself
-(~/.local/bin/codex, then PATH) because the Bash tool's non-interactive shell lacks ~/.local/bin.
+--refresh first spends one cheap codex turn so the reading is fresh, running the codex that
+codex-implementor's resolve-codex finds (the Bash tool's PATH lacks ~/.local/bin).
 
   codex-usage [--refresh] [--five-hour 100] [--weekly 100] [--max-age-min 120]
 """
@@ -28,13 +28,11 @@ a = p.parse_args()
 
 
 def resolve_codex():
-    local = os.path.expanduser("~/.local/bin/codex")
-    found = local if os.access(local, os.X_OK) else shutil.which("codex")
-    if not found:
-        print("codex-usage: codex not found at ~/.local/bin/codex or on PATH — install codex or "
-              "symlink its binary to ~/.local/bin/codex", file=sys.stderr)
+    found = subprocess.run([os.path.expanduser("~/.claude/skills/codex-implementor/scripts/resolve-codex")],
+                           stdout=subprocess.PIPE, text=True)
+    if found.returncode:
         sys.exit(2)
-    return found
+    return found.stdout.strip()
 
 
 if a.refresh:

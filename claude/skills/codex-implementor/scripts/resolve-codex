@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Print the codex binary to run: ~/.local/bin/codex first, because the Bash tool's non-interactive
+# shell lacks ~/.local/bin, then PATH. Shared by codex-implement, codex-review and codex-usage.
+codex="$HOME/.local/bin/codex"
+[ -x "$codex" ] || codex="$(command -v codex)" || {
+  echo "codex not found at ~/.local/bin/codex or on PATH — install codex or symlink its binary there" >&2
+  exit 127
+}
+echo "$codex"

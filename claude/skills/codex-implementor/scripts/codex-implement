@@ -86,8 +86,7 @@ done
 [ -n "$workdir" ] && [ -d "$workdir" ] || { echo "codex-implement: need -C <existing workdir>" >&2; exit 2; }
 [ -n "$promptfile" ] && [ -f "$promptfile" ] || { echo "codex-implement: need -p <prompt-file>" >&2; exit 2; }
 [ -n "$outfile" ] || { echo "codex-implement: need -o <out-file>" >&2; exit 2; }
-# The Bash tool's non-interactive shell lacks ~/.local/bin, so look there first.
-codex="$HOME/.local/bin/codex"; [ -x "$codex" ] || codex="$(command -v codex)" || { echo "codex-implement: codex not found at ~/.local/bin/codex or on PATH — install codex or symlink its binary there" >&2; exit 127; }
+codex="$("$(dirname "$0")/resolve-codex")" || exit 127
 command -v jq >/dev/null 2>&1 || { echo "codex-implement: 'jq' not on PATH" >&2; exit 127; }
 
 [ -n "$tier" ] || { [ "$model" = "gpt-6-luna" ] && tier="fast" || tier="standard"; }
