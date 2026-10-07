@@ -254,7 +254,7 @@ and post-reload settling; the details it handles:
 ## Full clean suite: `unity-suite`
 
 ```bash
-unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>]
+unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>]
             [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
 ```
 

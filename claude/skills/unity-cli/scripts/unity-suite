@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <seconds>]
+# unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <seconds>]
 #             [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
 #
 # A filtered Edit-Mode run goes to the open editor through unity-test, leaving it open, when that
@@ -19,6 +19,9 @@ DIE_CODE=2
 
 # TIMEOUT: 30 min is many times a full suite (Pipeline.UI runs ~2 min) yet still ends a hung batch
 # editor, which `unity test` alone would wait on forever.
+USAGE="usage: unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]"
+# A bare call would close the editor and run the full suite, so it must name what to run.
+[[ $# -eq 0 ]] && die "$USAGE"
 ARG="."; MODE=EditMode; FAILED=""; OUTPUT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""; CATEGORY=""
 while [[ $# -gt 0 ]]; do case "$1" in
   --failed-only) FAILED=$2; shift 2;;
@@ -28,7 +31,7 @@ while [[ $# -gt 0 ]]; do case "$1" in
   --filter) FILTER=$2; shift 2;;
   --assemblies) ASSEMBLIES=$2; shift 2;;
   --category) CATEGORY=$2; shift 2;;
-  -*) die "usage: unity-suite [project] [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]";;
+  -*) die "$USAGE";;
   *) ARG=$1; shift;;
 esac; done
 PROJECT=$(resolve_project "$ARG") || exit 2
