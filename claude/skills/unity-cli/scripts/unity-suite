@@ -197,7 +197,14 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
 RUNNER_DIR=Assets/Editor/ShardRunner
 
 # 0 when no Unity process (editor or import worker) has <project> open, whatever its argument order.
-project_idle() { ! pgrep -if "/Unity( .*)? -projectpath \"?$1\"?( |$)" >/dev/null; }
+project_idle() {
+  ps -ax -o command= | python3 -c '
+import re, sys
+host = re.compile(r"(?:^|/)Unity\"?\s")
+project = re.compile(r"(?i)(?:^|\s)-projectpath\s+\"?" + re.escape(sys.argv[1]) + r"\"?(?=\s|$)")
+sys.exit(1 if any(host.search(line) and project.search(line) for line in sys.stdin) else 0)
+' "$1"
+}
 
 seed_shard() {                       # seed_shard <checkout> <shard project>
   project_idle "$PROJECT" || die "cannot seed $2: close the editor on $PROJECT first, so its Library clones whole"
@@ -269,11 +276,16 @@ run_shards() {
     run_shard "$k" "$shard" &
     pids+=($!)
   done
-  # The runner exits 2 when a test failed: a failure the merged report shows. Anything else
+  # The runner exits 2 when a test failed, which fails the run even if no report shows it. Anything else
   # non-zero is a crash or a timeout, which fails the run even after a report was written.
+  export UNITY_SUITE_SHARD_FAILED=0
   for p in "${pids[@]}"; do
     wait "$p"; rc=$?
-    [[ $rc == 0 || $rc == 2 ]] || { echo "shard worker $p exited $rc" >&2; broken=1; }
+    case $rc in
+      0) ;;
+      2) UNITY_SUITE_SHARD_FAILED=1;;
+      *) echo "shard worker $p exited $rc" >&2; broken=1;;
+    esac
   done
   trap - EXIT INT TERM
 
@@ -289,6 +301,9 @@ for k in range(1, shards + 1):
         problems.append(f"shard {k} wrote no report; see {log}" + "".join("\n    " + e for e in errors[:20]))
         continue
     plan, tree = json.load(open(part + ".plan.json")), ET.parse(part).getroot()
+    listed = plan["allTests"]
+    if len(listed) != plan["total"] or len(set(listed)) != len(listed):
+        problems.append(f"shard {k}: invalid or duplicate test inventory")
     totals.add(plan["total"])
     if inventory is None: inventory, explicit = plan["allTests"], plan["explicitTests"]
     elif (plan["allTests"], plan["explicitTests"]) != (inventory, explicit):
@@ -366,5 +381,5 @@ for tc in bad:
     msg = tc.find("./failure/message")
     print("FAIL", tc.get("fullname") or tc.get("name"))
     print("   ", (msg.text or "").strip()[:300] if msg is not None else "")
-sys.exit(1 if bad or failed not in ("0",) else 0)
+sys.exit(1 if bad or failed != "0" or os.environ.get("UNITY_SUITE_SHARD_FAILED") == "1" else 0)
 PY
