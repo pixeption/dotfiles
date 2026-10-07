@@ -143,9 +143,11 @@ for path in sys.argv[2:]:
 count = lambda status: sum(t.get("status") == status for t in cases.values())
 passed, skipped = count("Passed"), count("Skipped")
 run = ET.Element("test-run", total=str(len(cases)), passed=str(passed),
-                 failed=str(len(cases) - passed - skipped), skipped=str(skipped))
+                 failed=str(len(cases) - passed - skipped), skipped=str(skipped),
+                 duration=str(sum(float(t.get("duration") or 0) for t in cases.values())))
 for name, t in cases.items():
-    case = ET.SubElement(run, "test-case", fullname=name, result=t.get("status") or "")
+    case = ET.SubElement(run, "test-case", fullname=name, result=t.get("status") or "",
+                         duration=str(t.get("duration") or 0))
     if t.get("message"): ET.SubElement(ET.SubElement(case, "failure"), "message").text = t["message"]
 ET.ElementTree(run).write(sys.argv[1], encoding="utf-8", xml_declaration=True)
 MERGE
@@ -165,9 +167,11 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
   fi
 
   # `unity test --timeout` is disabled by default, so a hung batch editor would wait forever.
-  local nunit=(${ASSEMBLIES:+-assemblyNames "$ASSEMBLIES"} ${CATEGORY:+-testCategory "$CATEGORY"})
+  # The project's own -logFile: without it the batch editor writes the machine-wide Editor.log.
+  local nunit=(-logFile "$PROJECT/Logs/Editor.log" ${ASSEMBLIES:+-assemblyNames "$ASSEMBLIES"} ${CATEGORY:+-testCategory "$CATEGORY"})
+  mkdir -p "$PROJECT/Logs" || die "cannot create $PROJECT/Logs"
   test_json=$(unity test --mode "$MODE" "$PROJECT" --output "$REPORT" --timeout "$TIMEOUT" $RERUN \
-    ${FILTER:+--filter "$FILTER"} --format json ${nunit[@]:+-- "${nunit[@]}"})
+    ${FILTER:+--filter "$FILTER"} --format json -- "${nunit[@]}")
   test_rc=$?
 
   # A compile error aborts the batch run in seconds with no report; reopening the editor would only

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Offline test for unity-suite's NUnit pass-through (a stub `unity` records its arguments), and that
-# a bare call inside a project prints the usage instead of running the suite.
+# the batch editor logs to the project's own Editor.log, and that a bare call inside a project prints the usage instead of running the suite.
 set -uo pipefail
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/unity-suite"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
@@ -24,6 +24,12 @@ out=$(HOME="$TMP/home" "$SCRIPT" "$PROJ" --category '!Integration' --assemblies 
   printf '%s\n' "$out" >&2
   exit 1
 }
-want=$'--\n-assemblyNames\nA;B\n-testCategory\n!Integration'
-if [[ $(tail -5 "$TMP/args" 2>/dev/null) == "$want" ]]; then echo "ok   category and assemblies after --"
+want="--
+-logFile
+$PROJ/Logs/Editor.log
+-assemblyNames
+A;B
+-testCategory
+!Integration"
+if [[ $(tail -7 "$TMP/args" 2>/dev/null) == "$want" ]]; then echo "ok   project log, category and assemblies after --"
 else echo "FAIL: $out"; cat "$TMP/args" 2>/dev/null; exit 1; fi
