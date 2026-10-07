@@ -8,7 +8,7 @@
 #   unity-wait recompile [deadline_seconds]   trigger a recompile, wait, report errors; exit 4 fast
 #                                             when the editor's server is up but no command answers
 #   unity-wait job <job-id> [deadline]        wait on a ui_* job record on disk
-#   Prefix any mode with --project-path <dir> (default: $UNITY_PROJECT_PATH, else the cwd).
+#   Any mode takes --project-path <dir>, before or after it (default: $UNITY_PROJECT_PATH, else the cwd).
 #
 #   unity-wait ready [deadline]               wait until the editor answers at all; exit 1 fast
 #                                             on compile errors (Safe Mode, or a headless editor that
@@ -22,7 +22,13 @@
 set -uo pipefail
 source "$(dirname "$0")/_common.sh"
 
-[[ "${1:-}" == --project-path ]] && { UNITY_PROJECT_PATH=$2; shift 2; }
+ARGS=()
+while [[ $# -gt 0 ]]; do case "$1" in
+  --project-path) [[ $# -ge 2 ]] || die "--project-path needs a directory"; UNITY_PROJECT_PATH=$2; shift 2;;
+  -*) die "unknown option $1";;
+  *) ARGS+=("$1"); shift;;
+esac; done
+set -- ${ARGS[@]+"${ARGS[@]}"}
 MODE="${1:-}"
 DEADLINE_DEFAULT=300
 
