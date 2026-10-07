@@ -24,6 +24,7 @@ namespace UnitySuite
         private class Plan
         {
             public int total;
+            public string[] allTests;
             public string[] explicitTests;
             public string[] tests;
         }
@@ -54,11 +55,12 @@ namespace UnitySuite
                                   Dictionary<string, double> timings)
         {
             var leaves = Leaves(root).ToList();
-            var explicitTests = leaves.Where(IsExplicit).Select(t => t.FullName).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+            var allTests = SortedNames(leaves);
+            var explicitTests = SortedNames(leaves.Where(IsExplicit));
             var runnable = leaves.Where(t => !IsExplicit(t)).Select(t => (t.FullName, Fixture(t)));
             var mine = ShardPlan.Pack(runnable, timings, n)[k - 1].ToArray();
 
-            var plan = new Plan { total = leaves.Count, explicitTests = explicitTests, tests = mine };
+            var plan = new Plan { total = leaves.Count, allTests = allTests, explicitTests = explicitTests, tests = mine };
             File.WriteAllText(output + ".plan.json", JsonUtility.ToJson(plan));
             Debug.Log($"[ShardRunner] shard {k}/{n}: {mine.Length} of {leaves.Count} tests");
 
@@ -87,6 +89,9 @@ namespace UnitySuite
         public void RunStarted(ITestAdaptor testsToRun) { }
         public void TestStarted(ITestAdaptor test) { }
         public void TestFinished(ITestResultAdaptor result) { }
+
+        private static string[] SortedNames(IEnumerable<ITestAdaptor> tests) =>
+            tests.Select(t => t.FullName).OrderBy(x => x, StringComparer.Ordinal).ToArray();
 
         private static IEnumerable<ITestAdaptor> Leaves(ITestAdaptor test) =>
             test.IsSuite ? test.Children.SelectMany(Leaves) : new[] { test };

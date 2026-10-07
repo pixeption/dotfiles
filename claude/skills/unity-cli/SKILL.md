@@ -315,11 +315,13 @@ budget, so the caller sizes N. What each run does, and why:
 - **`[Explicit]` tests are not run** (a name filter would run them) but are merged in as
   skipped, as a full run reports them.
 - The editors are launched directly, not through `unity run`, which adds `-quit`; each is killed
-  after `--timeout`.
+  (SIGKILL) after `--timeout`, and stopping `unity-suite` kills them all.
 - **The merge** writes one report to `--output`, so the count line, `report: … · finished` and
   `--failed-only` work as for one editor. It exits 2 on a shard without a report (its compile
-  errors listed), a test two shards ran, a planned test that did not run, or shards that saw
-  different test lists. stderr names each shard's test count and seconds.
+  errors listed), a shard editor that crashed or timed out, a test two shards ran, a shard whose
+  run differs from its plan, or shards that listed different tests. A suite that failed in its
+  own setup or teardown fails the run like a failed test. stderr names each shard's test count and
+  seconds.
 - Sharding changes which tests run before which: a test failing only in a shard is an order
   dependence in the test, never a reason to pin shard contents.
 

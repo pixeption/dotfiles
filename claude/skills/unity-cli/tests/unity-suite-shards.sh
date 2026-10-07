@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Offline test for `unity-suite --shards`: a stub editor binary stands in for the shard runner. A
 # missing shard is seeded as a git checkout with the runner installed; the shard reports and the
-# explicit tests merge into one report, which also becomes the next run's -timings; a duplicate test
-# or a shard without a report fails the run.
+# explicit tests merge into one report, which also becomes the next run's -timings. A duplicate
+# test, a shard without a report, shards listing different tests, a crashed or hung shard editor, a
+# failed suite and an occupied shard fail the run; stopping the run stops its editors.
 set -uo pipefail
 SCRIPT="$(cd "$(dirname "$0")/.." && pwd)/scripts/unity-suite"
-TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+TMP=$(mktemp -d); trap 'pkill -KILL -f "$TMP/" 2>/dev/null; rm -rf "$TMP"' EXIT
 SRC="$TMP/src/GameCore"; ROOT="$TMP/shards"
 mkdir -p "$SRC/ProjectSettings" "$SRC/Assets/Editor" "$SRC/Packages" "$SRC/Library" "$TMP/home/.unity/bin" "$TMP/Unity.app/Contents/MacOS"
 echo "m_EditorVersion: 1.0f1" >"$SRC/ProjectSettings/ProjectVersion.txt"
@@ -15,19 +16,35 @@ cat >"$TMP/home/.unity/bin/unity" <<EOF
 #!/usr/bin/env bash
 echo '{"data":[{"version":"1.0f1","location":"$TMP/Unity.app"}]}'
 EOF
-# The stub runner: shard 1 runs A.a, shard 2 runs B.b (A.a too with STUB=dup, nothing with STUB=none).
+# The stub runner: shard 1 runs A.a, shard 2 runs B.b. STUB picks shard 2's misbehaviour: dup also
+# runs A.a, none writes nothing, drift lists and runs C.c in place of B.b, crash exits 3 after its
+# report, hang never ends and ignores SIGTERM; suitefail fails shard 1's suite in its teardown.
 cat >"$TMP/Unity.app/Contents/MacOS/Unity" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >>"${STUB_ARGS:?}"
 while [[ $# -gt 0 ]]; do case $1 in -shard) k=${2%/*}; shift 2;; -shardOut) out=$2; shift 2;; *) shift;; esac; done
-[[ $k == 2 && $STUB == none ]] && exit 3
-tests=$([[ $k == 1 ]] && echo A.a || echo B.b); [[ $k == 2 && $STUB == dup ]] && tests="B.b A.a"
-echo "{\"total\":3,\"explicitTests\":[\"E.x\"],\"tests\":[\"${tests// /\",\"}\"]}" >"$out.plan.json"
-{ echo '<test-run duration="1">'; for t in $tests; do echo "<test-case fullname=\"$t\" result=\"Passed\" duration=\"0.5\"/>"; done; echo '</test-run>'; } >"$out"
+if [[ $k == 2 ]]; then
+  case $STUB in
+    none) exit 3;;
+    hang) trap '' TERM; while :; do sleep 1; done;;
+  esac
+fi
+tests=$([[ $k == 1 ]] && echo A.a || echo B.b); all='"A.a","B.b","E.x"'
+[[ $k == 2 && $STUB == dup ]] && tests="B.b A.a"
+[[ $k == 2 && $STUB == drift ]] && { tests=C.c; all='"A.a","C.c","E.x"'; }
+echo "{\"total\":3,\"allTests\":[$all],\"explicitTests\":[\"E.x\"],\"tests\":[\"${tests// /\",\"}\"]}" >"$out.plan.json"
+suite=Passed; [[ $k == 1 && $STUB == suitefail ]] && suite='Failed" site="TearDown'
+{ echo "<test-run duration=\"1\"><test-suite fullname=\"S$k\" result=\"$suite\"><failure><message>teardown threw</message></failure>"
+  for t in $tests; do echo "<test-case fullname=\"$t\" result=\"Passed\" duration=\"0.5\"/>"; done
+  echo '</test-suite></test-run>'; } >"$out"
+[[ $k == 2 && $STUB == crash ]] && exit 3
+exit 0
 EOF
 chmod +x "$TMP/home/.unity/bin/unity" "$TMP/Unity.app/Contents/MacOS/Unity"
 
-suite() { HOME="$TMP/home" STUB_ARGS="$TMP/args" STUB=$1 "$SCRIPT" "$SRC" --shards 2 --shard-root "$ROOT" --output "$TMP/report.xml" 2>&1; }
+run() { HOME="$TMP/home" STUB_ARGS="$TMP/args" STUB=$1 exec "$SCRIPT" "$SRC" --shards 2 --shard-root "$ROOT" --output "$TMP/report.xml" "${@:2}"; }
+suite() { run "$@" 2>&1; }
+editors() { pgrep -f "$TMP/Unity.app" >/dev/null; }
 fail() { echo "FAIL $1"; printf '%s\n' "$out"; exit 1; }
 
 out=$(suite ok); code=$?
@@ -51,3 +68,29 @@ echo "ok   a test run by two shards fails the run"
 out=$(suite none); code=$?
 [[ $code == 2 && $out == *"shard 2 wrote no report"* ]] || fail "missing report (exit $code)"
 echo "ok   a shard without a report fails the run"
+
+out=$(suite drift); code=$?
+[[ $code == 2 && $out == *"shard 2: its test list differs from shard 1's"* ]] || fail "same-count test list drift (exit $code)"
+echo "ok   shards that list different tests of the same count fail the run"
+out=$(suite crash); code=$?
+[[ $code == 2 && $out == *"crashed or timed out"* ]] || fail "crash after the report (exit $code)"
+echo "ok   a shard editor that crashes after writing its report fails the run"
+start=$SECONDS; out=$(suite hang --timeout 2); code=$?
+[[ $code == 2 && $out == *"shard 2 timed out after 2s"* ]] && (( SECONDS - start < 8 )) && ! editors \
+  || fail "hung editor that ignores SIGTERM (exit $code, $((SECONDS - start)) s)"
+echo "ok   a hung shard editor is killed at the timeout and fails the run"
+out=$(suite suitefail); code=$?
+[[ $code == 1 && $out == *"FAIL S1"* && $out == *"teardown threw"* ]] || fail "suite-only failure (exit $code)"
+echo "ok   a suite that fails in its teardown fails the run, though its tests passed"
+
+run hang >/dev/null 2>&1 & pid=$!
+for _ in {1..50}; do editors && break; sleep 0.1; done
+kill -TERM "$pid"; wait "$pid"; sleep 1
+editors && { out="editor still running after the run was stopped"; fail "termination cleanup"; }
+echo "ok   stopping the run stops its shard editors"
+
+mkdir -p "$TMP/held"; printf '#!/usr/bin/env bash\nsleep 30\n' >"$TMP/held/Unity"; chmod +x "$TMP/held/Unity"
+"$TMP/held/Unity" -batchmode -projectPath "$ROOT/shard-1/GameCore" -logFile x & held=$!
+out=$(suite ok); code=$?; kill "$held"
+[[ $code != 0 && $out == *"shard-1/GameCore is held by a running editor"* ]] || fail "occupied shard (exit $code)"
+echo "ok   a shard held by a batch editor is refused"

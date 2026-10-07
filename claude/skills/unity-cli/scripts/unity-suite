@@ -196,8 +196,11 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
 # costs a recompile. The git init gives tests that need a checkout root one, outside any repo.
 RUNNER_DIR=Assets/Editor/ShardRunner
 
+# 0 when no Unity process (editor or import worker) has <project> open, whatever its argument order.
+project_idle() { ! pgrep -if "/Unity( .*)? -projectpath \"?$1\"?( |$)" >/dev/null; }
+
 seed_shard() {                       # seed_shard <checkout> <shard project>
-  not_running || die "cannot seed $2: close the editor on $PROJECT first, so its Library clones whole"
+  project_idle "$PROJECT" || die "cannot seed $2: close the editor on $PROJECT first, so its Library clones whole"
   mkdir -p "$2" && { [[ ! -d "$PROJECT/Library" ]] || cp -cR "$PROJECT/Library" "$2/Library"; } \
     && git init -q "$1" || die "could not seed $2"
 }
@@ -220,22 +223,34 @@ print(next((e["location"] + "/Contents/MacOS/Unity" for e in json.load(sys.stdin
             if e["version"] == sys.argv[1] and e.get("location")), ""))' "$version"
 }
 
-# run_shard <k> <shard project>: one batch editor running bin k, killed after --timeout. Launched
-# directly, since `unity run` adds -quit and would exit before the runner's asynchronous run starts.
+# run_shard <k> <shard project>: one batch editor running bin k; exits with the editor's status, or
+# 124 after --timeout. Whatever ends the worker kills its editor. Launched directly, since
+# `unity run` adds -quit and would exit before the runner's asynchronous run starts. Run it only
+# with `&`: it exits, and a ( ) body would fork a second process the stop signal never reaches.
 run_shard() {
-  local out="$2/Logs/unity-suite-shard.xml" deadline=$((SECONDS + TIMEOUT)) pid
-  mkdir -p "$2/Logs" && rm -f "$out" "$out.plan.json"
+  local out="$2/Logs/unity-suite-shard.xml" deadline=$((SECONDS + TIMEOUT)) pid="" rc
+  trap '[[ -z "$pid" ]] || { kill -KILL "$pid"; wait "$pid"; } 2>/dev/null' EXIT
+  trap 'exit 143' TERM
+  mkdir -p "$2/Logs" && rm -f "$out" "$out.plan.json" || die "could not prepare shard $1's reports"
   "$UNITY" -batchmode -projectPath "$2" -logFile "$2/Logs/Editor.log" -executeMethod UnitySuite.ShardRunner.Run \
     -shard "$1/$SHARDS" -shardOut "$out" ${TIMINGS[@]:+"${TIMINGS[@]}"} >/dev/null 2>&1 &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
-    (( SECONDS < deadline )) || { echo "shard $1 timed out after ${TIMEOUT}s" >&2; kill "$pid"; }
+    (( SECONDS < deadline )) || { echo "shard $1 timed out after ${TIMEOUT}s" >&2; exit 124; }
     sleep 1
   done
+  wait "$pid"; rc=$?; pid=""
+  exit "$rc"
+}
+
+stop_shards() {
+  local p
+  for p in "${pids[@]}"; do kill -TERM "$p" 2>/dev/null; done
+  for p in "${pids[@]}"; do wait "$p" 2>/dev/null; done
 }
 
 run_shards() {
-  local root k shard pids=() timings
+  local root k shard pids=() timings p rc broken=0
   mkdir -p "$SHARD_ROOT" && root=$(cd "$SHARD_ROOT" && pwd) || die "cannot create --shard-root $SHARD_ROOT"
   # The last merged report: its per-test durations balance the next split.
   timings="$root/timings.xml"
@@ -245,20 +260,27 @@ run_shards() {
   for ((k = 1; k <= SHARDS; k++)); do
     shard="$root/shard-$k/$(basename "$PROJECT")"
     [[ -d "$shard" ]] || seed_shard "$root/shard-$k" "$shard"
-    (PROJECT=$shard; not_running) || die "$shard is held by a running editor"
+    project_idle "$shard" || die "$shard is held by a running editor"
     sync_shard "$shard"
   done
+  trap stop_shards EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
   for ((k = 1; k <= SHARDS; k++)); do
     shard="$root/shard-$k/$(basename "$PROJECT")"
     run_shard "$k" "$shard" &
     pids+=($!)
   done
-  wait "${pids[@]}"
+  # The runner exits 2 when a test failed: a failure the merged report shows. Anything else
+  # non-zero is a crash or a timeout, which fails the run even after a report was written.
+  for p in "${pids[@]}"; do
+    wait "$p"; rc=$?
+    [[ $rc == 0 || $rc == 2 ]] || { echo "shard worker $p exited $rc" >&2; broken=1; }
+  done
+  trap - EXIT INT TERM
 
   python3 - "$REPORT" "$root" "$(basename "$PROJECT")" "$SHARDS" <<'MERGE' || exit 2
 import json, os, re, sys, xml.etree.ElementTree as ET
 report, root, name, shards = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
-run, seen, problems, totals, explicit = ET.Element("test-run"), {}, [], set(), []
+run, seen, problems, totals, inventory, explicit = ET.Element("test-run"), {}, [], set(), None, []
 for k in range(1, shards + 1):
     part = f"{root}/shard-{k}/{name}/Logs/unity-suite-shard.xml"
     if not (os.path.isfile(part) and os.path.isfile(part + ".plan.json")):
@@ -267,13 +289,18 @@ for k in range(1, shards + 1):
         problems.append(f"shard {k} wrote no report; see {log}" + "".join("\n    " + e for e in errors[:20]))
         continue
     plan, tree = json.load(open(part + ".plan.json")), ET.parse(part).getroot()
-    totals.add(plan["total"]); explicit = plan["explicitTests"]
+    totals.add(plan["total"])
+    if inventory is None: inventory, explicit = plan["allTests"], plan["explicitTests"]
+    elif (plan["allTests"], plan["explicitTests"]) != (inventory, explicit):
+        problems.append(f"shard {k}: its test list differs from shard 1's")
     ran = [tc.get("fullname") for tc in tree.iter("test-case")]
     for test in ran:
         if test in seen: problems.append(f"duplicate: {test} in shards {seen[test]} and {k}")
         seen[test] = k
-    missing = sorted(set(plan["tests"]) - set(ran))
-    if missing: problems.append(f"shard {k}: {len(missing)} planned tests did not run, e.g. {missing[0]}")
+    planned, actual = set(plan["tests"]), set(ran)
+    if planned != actual:
+        problems.append(f"shard {k}: planned tests did not run: {sorted(planned - actual)[:3]}, "
+                        f"unplanned tests ran: {sorted(actual - planned)[:3]}")
     print(f"shard {k}: {len(ran)} tests, {float(tree.get('duration', 0)):.0f} s", file=sys.stderr)
     run.extend(tree if tree.tag == "test-run" else [tree])
 if len(totals) > 1: problems.append(f"the shards saw different test lists: {sorted(totals)} tests")
@@ -282,6 +309,8 @@ for test in explicit:
     ET.SubElement(run, "test-case", fullname=test, name=test, result="Skipped", label="Explicit")
 if totals and len(seen) + len(explicit) != max(totals):
     problems.append(f"{len(seen)} ran + {len(explicit)} explicit != {max(totals)} tests listed")
+if inventory is not None and set(seen) | set(explicit) != set(inventory):
+    problems.append("the merged tests differ from the listed tests")
 for p in problems: print(p, file=sys.stderr)
 if problems: sys.exit(1)
 count = lambda result: str(sum(tc.get("result") == result for tc in run.iter("test-case")))
@@ -289,6 +318,7 @@ run.attrib.update(total=str(len(seen) + len(explicit)), passed=count("Passed"), 
                   inconclusive=count("Inconclusive"), skipped=count("Skipped"))
 ET.ElementTree(run).write(report, encoding="utf-8", xml_declaration=True)
 MERGE
+  (( broken == 0 )) || DIE_CODE=2 die "a shard editor crashed or timed out (see its Logs/Editor.log)"
   cp "$REPORT" "$timings"
 }
 
@@ -328,7 +358,10 @@ if total == "0":
     print("0 tests ran: the filter or assembly list matched nothing", file=sys.stderr)
     sys.exit(2)
 
-bad = [tc for tc in root.iter("test-case") if tc.get("result") not in ("Passed", "Skipped", "Warning")]
+# A suite fails on its own (site other than Child) when its OneTimeSetUp/TearDown throws, even when
+# every test case in it passed.
+bad = [n for n in root.iter() if (n.tag == "test-case" and n.get("result") not in ("Passed", "Skipped", "Warning"))
+       or (n.tag == "test-suite" and n.get("result") == "Failed" and n.get("site") != "Child")]
 for tc in bad:
     msg = tc.find("./failure/message")
     print("FAIL", tc.get("fullname") or tc.get("name"))
