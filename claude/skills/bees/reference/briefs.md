@@ -69,8 +69,7 @@ EOF
   only where it departs from the section. A fix or recheck names the review file and the ids.
 - `--include` adds a repo's slot block (nono4u: the workspaces lane brief) with its
   `<placeholders>` filled by `--set`; an unfilled one fails the run.
-- A lane brief names a skill or guidance file by skill name or by its lane path, never by the
-  integration checkout's path, because integration's copy can differ from the lane's base.
+- A lane brief names skills by name or lane path; the rule lives in the repo's slot block.
 - Light mode has no plan: pass `--work <scratchpad dir>` instead of `--plan`, and include the
   unit's acceptance criteria and all required verification on stdin, because no plan section
   supplies them.
