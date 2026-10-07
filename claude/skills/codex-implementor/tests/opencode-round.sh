@@ -37,10 +37,10 @@ server_parts() { # server_parts <reason-of-step-finish|none>
 }
 
 fail=0
-check() { # check <name> <want-exit> <want-last-line-regex>; the log to replay is $TMP/<name>.log
-  local name=$1 want=$2 re=$3 out code last
+check() { # check <name> <want-exit> <want-last-line-regex> [role]; the log to replay is $TMP/<name>.log
+  local name=$1 want=$2 re=$3 role=${4:-impl} out code last
   out="$TMP/$name.txt"
-  "$SCRIPT" --url "$url" -C "$TMP" --role impl -o "$out" -u STEP-05 -- cat "$TMP/$name.log" 2>/dev/null; code=$?
+  "$SCRIPT" --url "$url" -C "$TMP" --role "$role" -o "$out" -u STEP-05 -- cat "$TMP/$name.log" 2>/dev/null; code=$?
   last=$(tail -n 1 "$out")
   if [[ $code == "$want" && $last =~ $re ]]; then echo "ok   $name"
   else echo "FAIL $name (exit $code): $(head -1 "$out") … $last"; fail=1; fi
@@ -61,4 +61,14 @@ check cut-mid-step 1 '^BEES: results=STEP-05:blocked:-$'
 check tool-calls-last 1 '^BEES: results=STEP-05:blocked:-$'
 { cat "$FIXTURE"; step_finish "$msg" tool-calls; jq -c '{type: "step_start", sessionID, part: {type: "step-start", messageID: "msg_next", sessionID}}' <<<"$(head -1 "$FIXTURE")"; } > "$TMP/newer-step-open.log"; server_parts stop
 check newer-step-open 1 '^BEES: results=STEP-05:blocked:-$'
+# review: the answer's last line, bare or markdown-decorated, must be a verdict.
+review() { # review <name> <want-exit> <last-line> <want-out-last-line-regex>
+  { jq -c --arg t "Findings.
+
+$3" 'if .type == "text" then .part.text = $t else . end' "$FIXTURE"; step_finish "$msg" stop; } > "$TMP/$1.log"
+  check "$1" "$2" "$4" review
+}
+review verdict-heading 0 '## Verdict: APPROVE' '^APPROVE$'
+review verdict-bold 0 '**Verdict: REQUEST_CHANGES**' '^CHANGES_REQUIRED$'
+review verdict-prose 1 'I would approve this.' 'blocked'
 exit $fail

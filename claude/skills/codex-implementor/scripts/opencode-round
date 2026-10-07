@@ -139,7 +139,16 @@ final_finished() {
   [ -n "$final_msg" ] && final_message_is_latest &&
     { final_step_stopped "$final_msg" || [ -n "$server_finish" ]; }
 }
-ends_in_verdict() { grep -v '^[[:space:]]*$' "$outfile" | tail -n 1 | grep -qE '^[[:space:]]*(APPROVE|CHANGES_REQUIRED)[[:space:]]*$'; }
+# The last non-blank line, stripped of markdown (`## Verdict: X`, `**X**`); REQUEST_CHANGES means CHANGES_REQUIRED.
+final_verdict() {
+  grep -v '^[[:space:]]*$' "$outfile" | tail -n 1 |
+    sed -E 's/[#*`]//g; s/^[[:space:]]*(Verdict:)?[[:space:]]*//I; s/[[:space:]]*$//; s/^REQUEST_CHANGES$/CHANGES_REQUIRED/' |
+    grep -xE 'APPROVE|CHANGES_REQUIRED'
+}
+ends_in_verdict() {
+  local v; v=$(final_verdict) || return 1
+  [ "$(grep -v '^[[:space:]]*$' "$outfile" | tail -n 1)" = "$v" ] || printf '\n%s\n' "$v" >> "$outfile"
+}
 
 [ -z "$blocked" ] && [ -n "$apierr" ] && blocked="Blocked: opencode ${apierr}"
 [ -z "$blocked" ] && [ "$status" != 0 ] && blocked="Blocked: opencode run exited ${status}"
