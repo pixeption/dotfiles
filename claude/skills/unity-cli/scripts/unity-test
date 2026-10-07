@@ -35,7 +35,7 @@ esac; done
 
 if [[ "$FILTER" == *';'* ]]; then
   PARTS=$(mktemp -d) && trap 'rm -rf "$PARTS"' EXIT || die "cannot create a temp directory"
-  IFS=';' read -ra NAMES <<<"$FILTER"
+  IFS=';' read -r -a NAMES <<<"$FILTER"
   RC=0
   for i in "${!NAMES[@]}"; do
     echo "${NAMES[$i]}:"

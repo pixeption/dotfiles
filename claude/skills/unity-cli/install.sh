@@ -11,6 +11,6 @@ find . -type f ! -name .DS_Store | while read -r f; do
   cmp -s "$f" "$DEST/$f" && continue
   mkdir -p "$DEST/$(dirname "$f")"
   tmp="$DEST/$(dirname "$f")/.$(basename "$f").install.$$"
-  cp -p "$f" "$tmp" && mv -f "$tmp" "$DEST/$f"
+  cp -p "$f" "$tmp" && mv -f "$tmp" "$DEST/$f" || { rm -f "$tmp"; exit 1; }
   echo "installed $f"
 done
