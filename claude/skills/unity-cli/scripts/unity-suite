@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <seconds>]
 #             [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
+# unity-suite <project> --shards <N> --shard-root <dir> [--timeout <s>] [--output <report.xml>]
 #
+# --shards runs the full Edit-Mode suite across N warm copies <dir>/shard-<k>/<project name>, one
+# batch editor each, and leaves <project> and its editor alone (run_shards).
 # A filtered Edit-Mode run goes to the open editor through unity-test, leaving it open, when that
 # editor never entered Play this session and its run selects what a batch run would (live_blocker,
 # excluded_tests). Everything else follows Game/CLAUDE.md's clean-suite rule: a Play-mode session
@@ -19,11 +22,15 @@ DIE_CODE=2
 
 # TIMEOUT: 30 min is many times a full suite (Pipeline.UI runs ~2 min) yet still ends a hung batch
 # editor, which `unity test` alone would wait on forever.
-USAGE="usage: unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]"
+USAGE="usage: unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
+       unity-suite <project> --shards <N> --shard-root <dir> [--timeout <s>] [--output <report.xml>]"
 # A bare call would close the editor and run the full suite, so it must name what to run.
 [[ $# -eq 0 ]] && die "$USAGE"
 ARG="."; MODE=EditMode; FAILED=""; OUTPUT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""; CATEGORY=""
+SHARDS=""; SHARD_ROOT=""
 while [[ $# -gt 0 ]]; do case "$1" in
+  --shards) SHARDS=$2; shift 2;;
+  --shard-root) SHARD_ROOT=$2; shift 2;;
   --failed-only) FAILED=$2; shift 2;;
   --output) OUTPUT=$2; shift 2;;
   --mode) MODE=$2; shift 2;;
@@ -35,6 +42,12 @@ while [[ $# -gt 0 ]]; do case "$1" in
   *) ARG=$1; shift;;
 esac; done
 PROJECT=$(resolve_project "$ARG") || exit 2
+
+if [[ -n "$SHARDS$SHARD_ROOT" ]]; then
+  [[ "$SHARDS" =~ ^[1-9][0-9]*$ && -n "$SHARD_ROOT" ]] || die "--shards <N ≥ 1> and --shard-root <dir> go together"
+  [[ -z "$FAILED$FILTER$ASSEMBLIES$CATEGORY" && "$MODE" == EditMode ]] \
+    || die "--shards runs the whole Edit-Mode suite: no --mode, --failed-only, --filter, --assemblies or --category"
+fi
 
 # Unity reads neither list with commas: the run matches 0 tests and still exits 0.
 [[ "$FILTER$ASSEMBLIES" == *,* ]] && die "no commas: --filter joins names with |, --assemblies with ;"
@@ -177,21 +190,127 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
   fi
 }
 
-WHY=$(live_blocker)
-if [[ -z "$WHY" ]]; then
-  ERRORS=$(UNITY_PROJECT_PATH="$PROJECT" "$HERE/unity-wait" recompile) || {
-    [[ -n "$ERRORS" ]] && live_die "scripts have compiler errors - no tests ran:
-$ERRORS"
-    live_die "editor hung - unity-editor ensure '$PROJECT'; the recompile did not finish, no tests ran"; }
-  HIT=$(excluded_test) || live_die "could not read the editor's test list to check --category $CATEGORY"
-  [[ -n "$HIT" ]] && WHY="--filter matches $HIT, in category ${CATEGORY#!}"
-fi
-if [[ -z "$WHY" ]]; then
-  echo "running in the open editor" >&2
-  run_live || run_batch
+# The shard copies are warm projects reused run to run: a copy at a new path recompiles everything,
+# a reused one only what changed. Each run rsyncs the sources but never Library/, Temp/, Logs/ or
+# UserSettings/, and keeps the runner installed (excluded from --delete) so neither
+# costs a recompile. The git init gives tests that need a checkout root one, outside any repo.
+RUNNER_DIR=Assets/Editor/ShardRunner
+
+seed_shard() {                       # seed_shard <checkout> <shard project>
+  not_running || die "cannot seed $2: close the editor on $PROJECT first, so its Library clones whole"
+  mkdir -p "$2" && { [[ ! -d "$PROJECT/Library" ]] || cp -cR "$PROJECT/Library" "$2/Library"; } \
+    && git init -q "$1" || die "could not seed $2"
+}
+
+sync_shard() {                       # sync_shard <shard project>
+  rsync -a --delete --exclude "/$RUNNER_DIR/" --exclude "/$RUNNER_DIR.meta" \
+      "$PROJECT"/Assets "$PROJECT"/Packages "$PROJECT"/ProjectSettings "$1"/ \
+    && mkdir -p "$1/$RUNNER_DIR" \
+    && rsync -a --delete --exclude '*.meta' "$HERE/shard-runner/" "$1/$RUNNER_DIR/" \
+    || die "could not sync $1"
+}
+
+# The project's installed editor binary, from `unity editors`.
+editor_binary() {
+  local version
+  version=$(sed -n 's/^m_EditorVersion: //p' "$PROJECT/ProjectSettings/ProjectVersion.txt")
+  unity editors --installed --format json 2>/dev/null | python3 -c '
+import sys, json
+print(next((e["location"] + "/Contents/MacOS/Unity" for e in json.load(sys.stdin)["data"]
+            if e["version"] == sys.argv[1] and e.get("location")), ""))' "$version"
+}
+
+# run_shard <k> <shard project>: one batch editor running bin k, killed after --timeout. Launched
+# directly, since `unity run` adds -quit and would exit before the runner's asynchronous run starts.
+run_shard() {
+  local out="$2/Logs/unity-suite-shard.xml" deadline=$((SECONDS + TIMEOUT)) pid
+  mkdir -p "$2/Logs" && rm -f "$out" "$out.plan.json"
+  "$UNITY" -batchmode -projectPath "$2" -logFile "$2/Logs/Editor.log" -executeMethod UnitySuite.ShardRunner.Run \
+    -shard "$1/$SHARDS" -shardOut "$out" ${TIMINGS[@]:+"${TIMINGS[@]}"} >/dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    (( SECONDS < deadline )) || { echo "shard $1 timed out after ${TIMEOUT}s" >&2; kill "$pid"; }
+    sleep 1
+  done
+}
+
+run_shards() {
+  local root k shard pids=() timings
+  mkdir -p "$SHARD_ROOT" && root=$(cd "$SHARD_ROOT" && pwd) || die "cannot create --shard-root $SHARD_ROOT"
+  # The last merged report: its per-test durations balance the next split.
+  timings="$root/timings.xml"
+  TIMINGS=(); [[ -f "$timings" ]] && TIMINGS=(-timings "$timings")
+  UNITY=$(editor_binary); [[ -x "$UNITY" ]] || die "no installed editor for $PROJECT's ProjectVersion.txt (unity editors --installed)"
+  echo "running in $SHARDS shard editors under $root" >&2
+  for ((k = 1; k <= SHARDS; k++)); do
+    shard="$root/shard-$k/$(basename "$PROJECT")"
+    [[ -d "$shard" ]] || seed_shard "$root/shard-$k" "$shard"
+    (PROJECT=$shard; not_running) || die "$shard is held by a running editor"
+    sync_shard "$shard"
+  done
+  for ((k = 1; k <= SHARDS; k++)); do
+    shard="$root/shard-$k/$(basename "$PROJECT")"
+    run_shard "$k" "$shard" &
+    pids+=($!)
+  done
+  wait "${pids[@]}"
+
+  python3 - "$REPORT" "$root" "$(basename "$PROJECT")" "$SHARDS" <<'MERGE' || exit 2
+import json, os, re, sys, xml.etree.ElementTree as ET
+report, root, name, shards = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+run, seen, problems, totals, explicit = ET.Element("test-run"), {}, [], set(), []
+for k in range(1, shards + 1):
+    part = f"{root}/shard-{k}/{name}/Logs/unity-suite-shard.xml"
+    if not (os.path.isfile(part) and os.path.isfile(part + ".plan.json")):
+        log = f"{root}/shard-{k}/{name}/Logs/Editor.log"
+        errors = sorted({l.strip() for l in open(log, errors="replace") if re.search(r"error CS\d+", l)}) if os.path.isfile(log) else []
+        problems.append(f"shard {k} wrote no report; see {log}" + "".join("\n    " + e for e in errors[:20]))
+        continue
+    plan, tree = json.load(open(part + ".plan.json")), ET.parse(part).getroot()
+    totals.add(plan["total"]); explicit = plan["explicitTests"]
+    ran = [tc.get("fullname") for tc in tree.iter("test-case")]
+    for test in ran:
+        if test in seen: problems.append(f"duplicate: {test} in shards {seen[test]} and {k}")
+        seen[test] = k
+    missing = sorted(set(plan["tests"]) - set(ran))
+    if missing: problems.append(f"shard {k}: {len(missing)} planned tests did not run, e.g. {missing[0]}")
+    print(f"shard {k}: {len(ran)} tests, {float(tree.get('duration', 0)):.0f} s", file=sys.stderr)
+    run.extend(tree if tree.tag == "test-run" else [tree])
+if len(totals) > 1: problems.append(f"the shards saw different test lists: {sorted(totals)} tests")
+for test in explicit:
+    if test in seen: problems.append(f"duplicate: explicit test {test} ran in shard {seen[test]}")
+    ET.SubElement(run, "test-case", fullname=test, name=test, result="Skipped", label="Explicit")
+if totals and len(seen) + len(explicit) != max(totals):
+    problems.append(f"{len(seen)} ran + {len(explicit)} explicit != {max(totals)} tests listed")
+for p in problems: print(p, file=sys.stderr)
+if problems: sys.exit(1)
+count = lambda result: str(sum(tc.get("result") == result for tc in run.iter("test-case")))
+run.attrib.update(total=str(len(seen) + len(explicit)), passed=count("Passed"), failed=count("Failed"),
+                  inconclusive=count("Inconclusive"), skipped=count("Skipped"))
+ET.ElementTree(run).write(report, encoding="utf-8", xml_declaration=True)
+MERGE
+  cp "$REPORT" "$timings"
+}
+
+if [[ -n "$SHARDS" ]]; then
+  run_shards
 else
-  echo "running in a batch editor: $WHY" >&2
-  run_batch
+  WHY=$(live_blocker)
+  if [[ -z "$WHY" ]]; then
+    ERRORS=$(UNITY_PROJECT_PATH="$PROJECT" "$HERE/unity-wait" recompile) || {
+      [[ -n "$ERRORS" ]] && live_die "scripts have compiler errors - no tests ran:
+$ERRORS"
+      live_die "editor hung - unity-editor ensure '$PROJECT'; the recompile did not finish, no tests ran"; }
+    HIT=$(excluded_test) || live_die "could not read the editor's test list to check --category $CATEGORY"
+    [[ -n "$HIT" ]] && WHY="--filter matches $HIT, in category ${CATEGORY#!}"
+  fi
+  if [[ -z "$WHY" ]]; then
+    echo "running in the open editor" >&2
+    run_live || run_batch
+  else
+    echo "running in a batch editor: $WHY" >&2
+    run_batch
+  fi
 fi
 
 python3 - "$REPORT" <<'PY'

@@ -293,6 +293,38 @@ rather than guessing from the exit code. Under the count line it prints
 `error CS` lines and does **not** reopen the editor (it would only fail on the same errors): fix, then
 `unity-editor up`.
 
+**Sharded.** `unity-suite <project> --shards N --shard-root <dir> [--output <report.xml>]` runs the
+full Edit-Mode suite in N batch editors at once, one per warm copy `<dir>/shard-<k>/<project name>`,
+and never touches `<project>` or its editor. It takes no `--mode`, `--filter`, `--assemblies`,
+`--category` or `--failed-only`, and picks no N: one editor per shard counts against the host
+budget, so the caller sizes N. What each run does, and why:
+
+- **A missing shard is seeded once**: `cp -cR` of `<project>/Library` (refused while `<project>`'s
+  editor is open) plus `git init` in `shard-<k>`, so tests that need a checkout root have one,
+  outside any repo. A copy at a new path recompiles everything once; reused, only what changed.
+- **Every run rsyncs `Assets/ Packages/ ProjectSettings/`** with `--delete` (under 1 s), never
+  `Library/ Temp/ Logs/ UserSettings/`, so the shard stays warm and tests what is on disk. A shard
+  held by a running editor stops the run.
+- **The runner ships in `scripts/shard-runner/`** and is installed to each shard's
+  `Assets/Editor/ShardRunner/`, excluded from the sync so it never recompiles. Each editor runs
+  `-executeMethod UnitySuite.ShardRunner.Run -shard k/N`: it reads the current test list, packs it
+  into N bins by fixture, longest first, weighted by `<dir>/timings.xml` (the last merged report;
+  an unseen test weighs the median), splits only a fixture heavier than a bin, breaks ties by name,
+  and runs bin k by exact name. Every shard computes the same disjoint, covering split. `unity
+  test --filter`/`--shard` cost ~50 s of filter parsing per shard; exact names cost nothing.
+- **`[Explicit]` tests are not run** (a name filter would run them) but are merged in as
+  skipped, as a full run reports them.
+- The editors are launched directly, not through `unity run`, which adds `-quit`; each is killed
+  after `--timeout`.
+- **The merge** writes one report to `--output`, so the count line, `report: … · finished` and
+  `--failed-only` work as for one editor. It exits 2 on a shard without a report (its compile
+  errors listed), a test two shards ran, a planned test that did not run, or shards that saw
+  different test lists. stderr names each shard's test count and seconds.
+- Sharding changes which tests run before which: a test failing only in a shard is an order
+  dependence in the test, never a reason to pin shard contents.
+
+Offline tests: `tests/shard-plan.sh` (the planner, needs `dotnet`), `tests/unity-suite-shards.sh`.
+
 ### Running `unity test` by hand
 
 ```bash
