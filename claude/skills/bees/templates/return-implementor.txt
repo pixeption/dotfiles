@@ -11,7 +11,8 @@ Concerns: risks, assumptions, regressions.
 Need from orchestrator: only if a decision is required.
 BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]
 No report, no commit: if your fast-lane run produced no XML in this session, leave the tree dirty
-and report Blocked.
+and report Blocked. A unit touching only Integration-category tests gets 0/0 from the fast lane;
+its filtered Integration run's XML is the evidence instead.
 Then hand back only these lines, nothing else, since the orchestrator opens the file when it needs
 detail:
 Outcome: <Done|Blocked|Needs decision|Paused> — <one clause of substance>
