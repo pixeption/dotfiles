@@ -34,7 +34,8 @@ Run the helpers in `~/.claude/skills/unity-cli/scripts/` by absolute path: `unit
 `unity-test`, `unity-suite`, `unity-wait` (`_common.sh` is the helper library they source). Prefer
 them over a hand-rolled poll loop; the pitfalls below are exactly what they exist to absorb. Invoke
 them in normal use; read their source only to maintain or debug them. Offline tests for them are in
-`tests/`.
+`tests/`. Change them in a copy and run `install.sh <this skill dir>` from that copy: it renames each
+changed file over the old one, since rewriting a script in place breaks every run of it in flight.
 
 ## The loop
 
@@ -178,14 +179,15 @@ make no progress).
 
 The `testName` filter is a case-insensitive **substring of the full test name**
 (`Namespace.Class.Method(args)`), so a bare class name and a namespace-qualified one both work, and
-the bare one also matches any class whose name contains it. To cover several unrelated classes, pick
-a shared substring, pass `--type assembly <Name>`, or pass `A|B` to `unity-suite --filter`, which runs
-each term in the open editor when it can and otherwise in batch.
+the bare one also matches any class whose name contains it. To cover several unrelated classes, pass
+`A;B`: `unity-test` runs one filter per name and prints each summary and their union (`--result`
+gets the union). Or pass `A|B` to `unity-suite --filter`, which runs each term in the open editor
+when it can and otherwise in batch.
 
 | | `unity-test <filter>` (live editor) | `unity test --filter` / `unity-suite --filter` |
 |---|---|---|
 | match | one case-insensitive substring of the full name | a pattern over the full name |
-| several classes | `A\|B` is literal and matches nothing | `A\|B\|C` runs all three |
+| several classes | `A;B` runs each; `A\|B` is literal and matches nothing | `A\|B\|C` runs all three |
 | 0 tests matched | exits 1 | `unity test` exits 0 (`total` 0); `unity-suite` exits 2 |
 
 `run_tests` params must be **named flags**, never a JSON blob: `--json` is the *output-format*
@@ -199,7 +201,8 @@ run never begins (no `[TestResultCollector] Run started` in the editor log). The
 release it. When `unity-test` sees neither a start marker nor a terminal job state within
 `--start-deadline` (default 120 s), it requests cancellation. Only the confirmed hang (job
 `running`, `Running N tests` logged) gets one `unity-editor restart` and a retry (`--no-restart`
-exits 2 instead, for a caller holding the editor); a second trip, or
+exits 2 instead, for a caller holding the editor; it also runs `unity-wait recompile` first, so an
+edit since the last compile is never tested against the old assemblies); a second trip, or
 a queued job or unreadable status, exits 2 and leaves the editor alone. One known cause is a dirty
 scene: the test framework's save prompt (`Canceling DisplayDialog: Scene(s) Have Been Modified` in
 the log) is auto-cancelled and so is the run. `unity-test` replaces a dirty untitled active scene
@@ -225,10 +228,12 @@ Editor forward. `compilationFailed` can be null in the CLI's `up_to_date` result
 `console_status.groundTruth.compilationFailed` is the native flag.
 
 ```bash
-unity-wait [--project-path <dir>] ready      [deadline]   # editor answers; exit 1 fast on compile errors, 3 on a failed server
-unity-wait [--project-path <dir>] recompile  [deadline]   # editor_stop if playing, trigger, wait, settle
-unity-wait [--project-path <dir>] job <id>   [deadline]   # ui_* job record on disk, readable through Play Mode
+unity-wait ready      [deadline]   # editor answers; exit 1 fast on compile errors, 3 on a failed server
+unity-wait recompile  [deadline]   # editor_stop if playing, trigger, wait, settle
+unity-wait job <id>   [deadline]   # ui_* job record on disk, readable through Play Mode
 ```
+
+Each takes `--project-path <dir>` anywhere on the line; an unknown option fails.
 
 Exit 0 success, 1 failure, 2 deadline, 3 Pipeline server failed to start (`ready`), 4 editor hung
 (`recompile`: `unity status` still reads `ready` and nothing is compiling, but no command answers
@@ -282,7 +287,8 @@ skip that rerun. It falls back to batch when the editor's log shows a Play entry
 session (`Entering Playmode…`/`Reloading assemblies for play mode`) or is not provably its own, or
 when `list_tests` shows a test the terms match in the excluded category — the live runner knows no
 categories. The first stderr line names the path taken: `running in the open editor` or `running in
-a batch editor: <why>`. Offline tests: `tests/unity-suite-live.sh`, `tests/unity-wait-hang.sh`.
+a batch editor: <why>`. Either way the report keeps per-test `duration`s, and a batch editor logs
+to `<project>/Logs/Editor.log`. Offline tests: `tests/unity-suite-live.sh`, `tests/unity-wait-hang.sh`.
 
 **Batch editor.** A Play Mode session poisons a live editor for full-suite runs, so everything else
 runs in a fresh batch editor holding no lock. The script closes any live editor (force-closing one that stays silent for 30 s; one that answers

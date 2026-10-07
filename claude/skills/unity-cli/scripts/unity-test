@@ -5,6 +5,9 @@
 # PlayMode cannot detach — entering Play mode drops the request — so it runs --async_tests and polls
 # test_status. --result saves the run's result JSON (after the filter check) for a caller to merge;
 # --no-restart exits 2 on the start hang instead of restarting the editor, for a caller holding it.
+# A filter of several names joined with ; runs one unity-test per name (Pipeline's run_tests matches
+# one substring) and reports their union. --no-restart first waits out a pending recompile, so a
+# caller holding the editor never runs the assemblies from before its edit.
 # Exit 0 all passed, 1 failures / no tests matched / filter mismatch, 2 could not run.
 set -uo pipefail
 source "$(dirname "$0")/_common.sh"
@@ -29,10 +32,43 @@ while [[ $# -gt 0 ]]; do case "$1" in
   *) FILTER=$1; shift;;
 esac; done
 [[ -n "$FILTER" ]] || die "a test filter is required — an empty one runs the WHOLE suite"
+
+if [[ "$FILTER" == *';'* ]]; then
+  PARTS=$(mktemp -d) && trap 'rm -rf "$PARTS"' EXIT || die "cannot create a temp directory"
+  IFS=';' read -ra NAMES <<<"$FILTER"
+  RC=0
+  for i in "${!NAMES[@]}"; do
+    echo "${NAMES[$i]}:"
+    "$0" "${NAMES[$i]}" --type "$TYPE" --mode "$MODE" --project-path "$PROJECT_ARG" --deadline "$DEADLINE" \
+      --start-deadline "$START_DEADLINE" --result "$PARTS/$i.json" $( (( RESTART )) || echo --no-restart )
+    rc=$?; (( rc > RC )) && RC=$rc
+  done
+  python3 - "$RESULT_FILE" "$PARTS"/*.json <<'MERGE' || exit 2
+import json, sys
+lower = lambda d: {k.lower(): v for k, v in d.items()}
+bad = lambda t: (t.get("Status") or t.get("status")) not in ("Passed", "Skipped")
+name = lambda t: t.get("FullName") or t.get("fullName")
+cases = {}
+for path in sys.argv[2:]:
+    for t in lower(json.load(open(path))).get("results") or []:
+        if name(t) not in cases or not bad(cases[name(t)]): cases[name(t)] = t
+count = lambda s: sum((t.get("Status") or t.get("status")) == s for t in cases.values())
+passed, skipped = count("Passed"), count("Skipped")
+summary = dict(Total=len(cases), Passed=passed, Failed=len(cases) - passed - skipped, Skipped=skipped)
+print("all: %(Passed)s/%(Total)s passed, %(Failed)s failed, %(Skipped)s skipped" % summary)
+if sys.argv[1]: json.dump(dict(Summary=summary, Results=list(cases.values())), open(sys.argv[1], "w"))
+MERGE
+  exit "$RC"
+fi
 PROJECT=$(resolve_project "$PROJECT_ARG") || exit 2
 editor_open "$PROJECT" || die "no live editor for $PROJECT — unity-editor up '$PROJECT'"
-UNITY_PROJECT_PATH="$PROJECT" "$(dirname "$0")/unity-wait" ready 180 >/dev/null \
+"$(dirname "$0")/unity-wait" --project-path "$PROJECT" ready 180 >/dev/null \
   || die "editor not ready: editor_status silent for 180s (a stuck command holds the exec gate?) - unity-editor ensure '$PROJECT'"
+if (( ! RESTART )); then
+  COMPILE=$("$(dirname "$0")/unity-wait" --project-path "$PROJECT" recompile 2>&1) \
+    || die "the recompile before the run did not finish clean; no tests ran:
+$COMPILE"
+fi
 
 PM=$(result_json "$PROJECT" editor_status | field playMode)
 [[ "$MODE" == PlayMode || -z "$PM" || "$PM" == stopped ]] \

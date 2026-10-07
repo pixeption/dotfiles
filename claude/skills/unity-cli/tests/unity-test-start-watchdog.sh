@@ -40,6 +40,7 @@ case "\$1 \$2" in
   "command eval") echo eval >>"$TMP/evals"; while [[ \$1 != --code ]]; do shift; done; python3 "$TMP/scenes.py" eval "\$2";;
   "status "*)             echo '{"data":{"instances":[{"project":"$PROJ"}]}}';;
   "command editor_status") echo '{"data":{"result":{"playMode":"stopped"}}}';;
+  "command recompile_status") echo '{"data":{"result":{"status":"up_to_date","failed":false}}}';;
   "command run_tests")
     log="$PROJ/Logs/Editor.log"; [[ -f \$log ]] || log="$TMP/home/Library/Logs/Unity/Editor.log"
     echo '[PipelineTestRunner] Running 3 tests' >>"\$log"
