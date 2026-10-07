@@ -170,9 +170,10 @@ headings before spawning, scout; if the answer needs *why* or *which*, diagnosis
 anything, so a scout question that needs a run goes to `bee-sonnet-medium`.
 
 A unit that takes a pipeline somewhere no committed consumer has gone (a new kind of kit through
-extract → seed → apply → parity, say) gets a **path map** first: a diagnosis that runs a stub of
-the unit through every stage on one case and lists each stage that rejects or mis-measures it,
-with the owning repo. Each bug it returns is a checklist item fixed before the unit starts,
+extract → seed → apply → parity → live parity, say) gets a **path map** first: a diagnosis that
+runs a stub of the unit through every stage on one case — Play-Mode stages too (`ui_parity --live`
+inside unity-live-run), since an Edit-Mode-only map misses live blockers — and lists each stage
+that rejects or mis-measures it, with the owning repo. Each bug it returns is a checklist item fixed before the unit starts,
 because a bug found mid-unit costs a block, a decision and a resumed session each time.
 
 **Buckets** — the score picks the row; codex is preferred. Codex is `codex-implementor` with
