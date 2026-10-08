@@ -88,7 +88,7 @@ The bee agent files carry only model and effort; every Claude brief carries its 
 
 | role | template |
 |---|---|
-| implementor (`bee-opus-*`, `bee-sonnet-medium`) | `~/.claude/skills/bees/templates/standing-rules-implementor.txt` |
+| implementor (`bee-opus-*`, `bee-sonnet-medium`, `bee-haiku-runner`) | `~/.claude/skills/bees/templates/standing-rules-implementor.txt` |
 | reviewer (`bee-reviewer`, `bee-reviewer-high`) | `~/.claude/skills/bees/templates/standing-rules-reviewer.txt` |
 | consultant (`bee-consultant`, and the astra consult) | `~/.claude/skills/bees/templates/standing-rules-consultant.txt` |
 

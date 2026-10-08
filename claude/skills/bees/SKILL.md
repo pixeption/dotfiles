@@ -98,7 +98,7 @@ Choosing "full" for a small plan is the error, not the safe default.
 1. **You own decisions**: goal, acceptance criteria, decomposition, scoring, routing, resource
    assignment, evaluating results, resolving blockers, acceptance.
 2. **Six concurrent agents and four lanes, hard caps, both vendors** — codex sessions, reviewers,
-   scouts, `bee-sonnet-medium` and `bee-consultant` all count toward six, because every running
+   scouts, runners, `bee-sonnet-medium` and `bee-consultant` all count toward six, because every running
    agent is one more stream of events you absorb; at most four of them hold a lane at once. Briefs
    say "do not spawn sub-agents". A seventh agent, or a fifth lane unit, is queued. Only the user
    changes the caps. The starting shape is up to four lane implementors plus two review or scout
@@ -166,8 +166,9 @@ usually needs a run, and returns the split and real scores. In one area it is un
 work for `bee-sonnet-medium`; broader, a scored 3 for `bee-opus-medium` or codex sol medium. A
 **scout** (`bee-scout`, Haiku) answers one enumerable question — callers, writers, call path,
 tests, owners, evidence in a log — with no points and no judgment. If you can write the report's
-headings before spawning, scout; if the answer needs *why* or *which*, diagnosis. Haiku cannot run
-anything, so a scout question that needs a run goes to `bee-sonnet-medium`.
+headings before spawning, scout; if the answer needs *why* or *which*, diagnosis. A scout never
+runs anything: a question that needs a run goes to `bee-haiku-runner` when the brief can name the
+commands and the answer is their raw output, else to `bee-sonnet-medium`.
 
 A unit that takes a pipeline somewhere no committed consumer has gone (a new kind of kit through
 extract → seed → apply → parity → live parity, say) gets a **path map** first: a diagnosis that
@@ -186,7 +187,7 @@ because a bug found mid-unit costs a block, a decision and a resumed session eac
 | 5 | `-e high` | `bee-opus-high` |
 | 8 | `-e xhigh` | `bee-opus-high` |
 | 13 | `-e xhigh` | `bee-opus-xhigh` |
-| support, no points | — | `bee-sonnet-medium`: a baseline, a suite run, validating a codex diff against the real project, a scout that needs a run, a one-area diagnosis |
+| support, no points | — | `bee-haiku-runner`: a baseline, a suite run, evidence from a log — named commands, raw results. `bee-sonnet-medium`: validating a codex diff against the real project, a run whose result needs judgment, a one-area diagnosis |
 
 Model and effort live in the agent files under `~/.claude/agents/` and in the wrapper flags —
 **never pass `model:` on the Agent call**.
@@ -223,7 +224,7 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
   compact.
 - A codex unit's validation (compile, the fast lane) is part of its cost: do it
   yourself when the diff is small, otherwise hand it to `bee-sonnet-medium` holding the resource.
-  The same agent records a baseline before a unit whose acceptance compares against one.
+  A baseline before a unit whose acceptance compares against one goes to `bee-haiku-runner`.
 - Implementors run the repo's **fast lane** only (its CLAUDE.md names it), narrowed with a filter
   while iterating; the one exception is the slow tests they add or change, run filtered to just
   those, so their fail-before evidence comes from the implementor. The full suite runs once, at the end of the phase, launched by you in the
