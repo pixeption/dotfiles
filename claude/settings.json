@@ -8,13 +8,14 @@
     "sessionUrl": false
   },
   "permissions": {
-    "defaultMode": "auto",
     "allow": [
       "Edit(~/.claude/skills/**)",
       "Edit(~/.claude/agents/**)"
-    ]
+    ],
+    "defaultMode": "auto"
   },
   "model": "opus",
+  "enableArtifact": false,
   "statusLine": {
     "type": "command",
     "command": "~/.claude/statusline.sh",
@@ -33,6 +34,9 @@
       "effortLevel": "high"
     },
     "claude-opus-5": {
+      "effortLevel": "low"
+    },
+    "claude-opus-5-5": {
       "effortLevel": "low"
     }
   },
@@ -84,6 +88,5 @@
       "**Org-specific CLIs**: unity, dotnet, tools/gen-backlog.sh, tools/check-docs.sh, Game/tools/gamebuild — routine under this repo's own working directory",
       "routine actions under /Users/vbnn2/code/nono4u are treated as local/trusted for edits and reads"
     ]
-  },
-  "enableArtifact": false
+  }
 }
