@@ -27,10 +27,18 @@ const stepAs = async ($: Engine, agentId: string) => {
 const send = ($: Engine, text = 'next unit') =>
   $.session.send({ to: 'worker', text, origin: { kind: 'model' } })
 
-test('a warm bee under the retire line gets the message', async ($, on) => {
-  hive(on, { tokens: 150_000 })
+test('a warm bee under the continue line gets the message', async ($, on) => {
+  hive(on, { tokens: 149_000 })
   await stepAs($, 'a1')
   expect((await send($)).isDelivered).toBe(true)
+})
+
+test('a warm bee at the continue line is refused', async ($, on) => {
+  hive(on, { tokens: 150_000 })
+  await stepAs($, 'a1')
+  const sent = await send($)
+  expect(sent.isDelivered).toBe(false)
+  expect(sent.reason).toMatch(/continue line/)
 })
 
 test('a bee at the retire line is refused', async ($, on) => {
@@ -62,7 +70,7 @@ test('a cold bee under 100k gets the message', async ($, on) => {
 })
 
 test('a running bee is never cold', async ($, on) => {
-  const clock = hive(on, { tokens: 150_000, status: 'running' })
+  const clock = hive(on, { tokens: 120_000, status: 'running' })
   await stepAs($, 'a1')
   await clock.advance(30 * MINUTE)
   expect((await send($)).isDelivered).toBe(true)
@@ -88,12 +96,12 @@ const band = async ($: Engine) => {
 }
 
 test('the band shows a bee warm with its countdown, then cold past the clock', async ($, on) => {
-  const clock = hive(on, { tokens: 150_000 })
+  const clock = hive(on, { tokens: 120_000 })
   await stepAs($, 'a1')
   await clock.advance(2 * MINUTE)
-  expect(await band($)).toMatch(/claude opus-low worker 150k warm 3m/)
+  expect(await band($)).toMatch(/claude opus-low worker 120k warm 3m/)
   await clock.advance(4 * MINUTE)
-  expect(await band($)).toMatch(/worker 150k cold · spawn fresh/)
+  expect(await band($)).toMatch(/worker 120k cold · spawn fresh/)
 })
 
 type Codex = { id: string; label: string; tokens: number; at: number; createdAt?: number; isRunning: 0 | 1 }

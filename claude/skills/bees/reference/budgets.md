@@ -10,13 +10,13 @@
 
 One rule for both vendors (SKILL.md "Rules", the session budget), plus each vendor's cache clock:
 
-| | `bee-opus-*`, `bee-sonnet-medium` | `bee-reviewer*`, `bee-consultant` | `bee-scout` | codex session |
+| | `bee-opus-*`, `bee-sonnet-medium`, `bee-haiku-runner` | `bee-reviewer*`, `bee-consultant` | `bee-scout` | codex session |
 |---|---|---|---|---|
 | units per brief | one | one unit's diff / blocker | none (one question) | one |
 | units per session | as many as fit under the context lines below | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
-| continue freely below | 160k | 160k | never continued | 160k (`.usage` `context_tokens`) |
-| finish / one recheck below | 200k | 200k | — | 200k |
-| **no new brief at or past** | **200k** | **200k** | any — spawn a new scout | **200k**, or any other directory |
+| continue freely below | 150k | 150k | never continued | 150k (`.usage` `context_tokens`) |
+| finish the current round below | 200k | 200k | — | 200k |
+| **no new brief at or past** | **150k** | **150k** | any — spawn a new scout | **150k**, or any other directory |
 | **cache warm for** | **5 min** idle | **5 min** idle | irrelevant | **30 min** idle |
 | resumable after the cache | one cold turn | one cold turn | — | OpenCode: any time, same `--dir`, one cold turn · CLI: never |
 | **agent self-pauses at** | **200k (hook)** | unhooked | unhooked; reports `Needs diagnosis` at ~120k | — |
@@ -25,7 +25,7 @@ One rule for both vendors (SKILL.md "Rules", the session budget), plus each vend
 
 An implementor that needs more than 200k pauses when its context hook (`bee-context-nudge`) reaches
 200k (safe point, handover, `Outcome: Paused`), and its successor starts from the pause report. A
-brief sent to an agent already past 200k is a bug in the orchestration, not a judgment call. Every turn of a 400k agent re-reads 400k of cache.
+brief sent to an agent at or past 150k is a bug in the orchestration, not a judgment call. Every turn of a 400k agent re-reads 400k of cache.
 
 The arithmetic: a 20-step round on a 250k session reads ~5M of cache (~500k full-price-equivalent
 at 0.1×); the same round in a fresh session pays ~50k of onboarding at full price and then reads a
@@ -44,7 +44,7 @@ price instead of reading it at 0.1×.
   re-writes the whole context once — on a 200k agent that costs more than a fresh spawn's
   onboarding. So when an agent reports, decide and answer in the same turn. Past the clock,
   continue only an agent under ~100k; otherwise spawn.
-- **Spawn fresh** when: context at or past 200k; a different Claude agent, area, resource or repo;
+- **Spawn fresh** when: context at or past 150k; a different Claude agent, area, resource or repo;
   a review of that agent's own work; or the cache is cold and the context is over ~100k.
 - **Read context from every report.** Codex's lands in `.usage` by itself. A Claude bee's is the
   `<subagent_tokens>` on its **final** `completed` notification — the last turn's context, not a
@@ -56,7 +56,7 @@ price instead of reading it at 0.1×.
 - **Hand over instead of continuing** when a resource holder must be retired. Its last message is
   "[bees:handover] stop at a safe point; write the state a successor needs (suite command + last
   green count, uncommitted files, what is half-done, resources/Play-mode state) in your report" —
-  the prefix lets it past the 200k refusal (`bees-budget` mod, `opencode-budget`); you put its
+  the prefix lets it past the 150k refusal (`bees-budget` mod, `opencode-budget`); you put its
   facts in status.md's Now/Resources. The fresh agent's brief carries that text; it does not
   re-derive the area from the transcript.
 - **Scouts** are never continued and never asked a second question. ≤ 2 scouts per unit; a third

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Refuses to resume an OpenCode session past the bees session budget (bees reference/budgets.md):
-# context at or past the retire line, or a cold cache at or past the cold limit. The Claude side is
+# context at or past the continue line, or a cold cache at or past the cold limit. The Claude side is
 # the `bees-budget` mod's; this is the codex side, run by opencode-implement and opencode-review
 # (codex-review) on every -s, since only the wrapper sees the resolved session id.
 #
@@ -13,7 +13,7 @@
 set -euo pipefail
 sid="${1:?usage: opencode-budget <session-id> <prompt-file>}"
 promptfile="${2:?usage: opencode-budget <session-id> <prompt-file>}"
-retire_at=200000                    # bees: no new brief at 200k
+continue_line=150000                # bees: no new brief at 150k; a fix round past it outgrows 200k
 cold_limit=100000                   # bees: past the clock, continue only under ~100k
 cache_ttl_ms=$((30 * 60 * 1000))    # codex's cache clock is 30 minutes
 
@@ -38,8 +38,8 @@ row="$(sqlite3 -separator ' ' "$db" "
 read -r ctx completed <<< "$row"
 idle_ms=$(( $(date +%s) * 1000 - completed ))
 
-if (( ctx >= retire_at )); then
-  echo "opencode-budget: session $sid is at $((ctx / 1000))k context, past the $((retire_at / 1000))k retire line — start a fresh session and hand over (bees reference/budgets.md); a retirement brief may start with [bees:handover]" >&2
+if (( ctx >= continue_line )); then
+  echo "opencode-budget: session $sid is at $((ctx / 1000))k context, past the $((continue_line / 1000))k continue line — start a fresh session and hand over (bees reference/budgets.md); a retirement brief may start with [bees:handover]" >&2
   exit 1
 fi
 if (( idle_ms > cache_ttl_ms && ctx >= cold_limit )); then
