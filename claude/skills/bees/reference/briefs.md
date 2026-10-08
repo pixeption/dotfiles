@@ -43,7 +43,7 @@ later turn:
 ## Composing a brief
 
 Run `bees-brief` with only the unit's own lines on stdin, then hand the agent the path it prints
-(`Read <brief> and do what it says.`):
+(`Read <brief> and do what it says.`). Feed stdin from a quoted heredoc (`<<'EOF'`): an unquoted one runs the brief's backticks. In a lane repo, `reuse` the lane before dispatch — the bee only claims it:
 
 ```sh
 ~/.claude/skills/bees/scripts/bees-brief --plan docs/plans/<plan>.md --units DR-02,DR-01 \
