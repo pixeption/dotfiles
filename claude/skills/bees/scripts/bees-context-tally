@@ -39,7 +39,7 @@ def die(msg):
 
 
 def when(ts):
-    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    return datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone()  # naive --since means local time
 
 
 def context(usage):

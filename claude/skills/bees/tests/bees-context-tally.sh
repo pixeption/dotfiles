@@ -72,6 +72,8 @@ run "$P" --since 2026-10-03T00:00:00Z
 eq "since at boundary" alate "$(grep '^{' "$TMP/out" | jq -r .agent_id | tr '\n' ' ' | sed 's/ $//')"
 run "$P" --since 2026-10-03T00:00:00.001Z
 eq "since past boundary" 0 "$(grep -c '^{' "$TMP/out")"
+TZ=UTC run "$P" --since 2026-10-03T00:00:00
+eq "naive since is local time" alate "$(grep '^{' "$TMP/out" | jq -r .agent_id | tr '\n' ' ' | sed 's/ $//')"
 
 H=$'session_id\tagent_id\tplan\tunit\tscore\tbase_commit\treview_rounds'
 S1=11111111-1111-1111-1111-111111111111
