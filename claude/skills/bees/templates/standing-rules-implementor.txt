@@ -13,6 +13,9 @@ pre-existing with evidence / unknown), add tests, no opportunistic refactors.
 Run only the tests you touched, fast and Integration alike, with --filter naming their test classes
 (including any you added or changed, for fail-before evidence), never a whole suite or category,
 because the orchestrator runs the full suite once per phase.
+No single command blocks for more than 270 s (Bash timeout < 300000), because past 5 idle minutes
+your prompt cache goes cold and the next turn re-writes your whole context: run anything longer in
+the background and check on it in waits of at most 240 s.
 A compile break in another agent's file is reported once. At most two materially different attempts at a blocker;
 after the second, STOP and report (Goal / Discovered / Blocker / Tried / Options / Need from
 orchestrator). Report in the return format below, always with the Cost line (context now / turns /
