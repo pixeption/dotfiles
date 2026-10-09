@@ -64,13 +64,13 @@ PROJECT=$(resolve_project "$PROJECT_ARG") || exit 2
 editor_open "$PROJECT" || die "no live editor for $PROJECT — unity-editor up '$PROJECT'"
 "$(dirname "$0")/unity-wait" --project-path "$PROJECT" ready 180 >/dev/null \
   || die "editor not ready: editor_status silent for 180s (a stuck command holds the exec gate?) - unity-editor ensure '$PROJECT'"
-COMPILE=$("$(dirname "$0")/unity-wait" --project-path "$PROJECT" recompile 2>&1) \
-  || die "the recompile before the run did not finish clean; no tests ran:
-$COMPILE"
-
 PM=$(result_json "$PROJECT" editor_status | field playMode)
 [[ "$MODE" == PlayMode || -z "$PM" || "$PM" == stopped ]] \
   || die "editor is in Play Mode (playMode: $PM) — an EditMode run makes no progress; stop it first"
+
+COMPILE=$("$(dirname "$0")/unity-wait" --project-path "$PROJECT" recompile 2>&1) \
+  || die "the recompile before the run did not finish clean; no tests ran:
+$COMPILE"
 
 unity command clear_console --project-path "$PROJECT" --format json >/dev/null 2>&1
 
