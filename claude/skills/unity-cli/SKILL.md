@@ -170,8 +170,9 @@ unity-test <filter> [--type name|assembly|category] [--mode editmode|playmode] [
 
 EditMode detaches (`run_tests --detach` + `unity job wait <jobId>`), so the run survives the CLI's
 own HTTP timeout and the result is a real object keyed by job id, not a shared file another driver
-can stomp. Jobs are in-memory: a domain reload or editor restart discards them, so finish compiling
-(`unity-wait recompile`) before starting a run. PlayMode cannot detach (entering Play drops the
+can stomp. Jobs are in-memory: a domain reload or editor restart discards them, so every run first runs
+`unity-wait recompile`, which also keeps an edit since the last compile from being tested against
+the old assemblies. PlayMode cannot detach (entering Play drops the
 request), so it uses `--async_tests true` and polls `test_status`. The script refuses an **empty** filter (no filter =
 the whole suite, perf benchmarks included), exits 1 on a filter that matches **zero** tests
 (`FilterApplied` still echoes it), and refuses an EditMode run while `playMode != stopped` (it would
@@ -201,8 +202,7 @@ run never begins (no `[TestResultCollector] Run started` in the editor log). The
 release it. When `unity-test` sees neither a start marker nor a terminal job state within
 `--start-deadline` (default 120 s), it requests cancellation. Only the confirmed hang (job
 `running`, `Running N tests` logged) gets one `unity-editor restart` and a retry (`--no-restart`
-exits 2 instead, for a caller holding the editor; it also runs `unity-wait recompile` first, so an
-edit since the last compile is never tested against the old assemblies); a second trip, or
+exits 2 instead, for a caller holding the editor); a second trip, or
 a queued job or unreadable status, exits 2 and leaves the editor alone. One known cause is a dirty
 scene: the test framework's save prompt (`Canceling DisplayDialog: Scene(s) Have Been Modified` in
 the log) is auto-cancelled and so is the run. `unity-test` replaces a dirty untitled active scene

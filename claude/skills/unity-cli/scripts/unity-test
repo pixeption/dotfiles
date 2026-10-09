@@ -6,8 +6,8 @@
 # test_status. --result saves the run's result JSON (after the filter check) for a caller to merge;
 # --no-restart exits 2 on the start hang instead of restarting the editor, for a caller holding it.
 # A filter of several names joined with ; runs one unity-test per name (Pipeline's run_tests matches
-# one substring) and reports their union. --no-restart first waits out a pending recompile, so a
-# caller holding the editor never runs the assemblies from before its edit.
+# one substring) and reports their union. Every run first recompiles, so an edit since the last
+# compile is never tested against the old assemblies.
 # Exit 0 all passed, 1 failures / no tests matched / filter mismatch, 2 could not run.
 set -uo pipefail
 source "$(dirname "$0")/_common.sh"
@@ -64,11 +64,9 @@ PROJECT=$(resolve_project "$PROJECT_ARG") || exit 2
 editor_open "$PROJECT" || die "no live editor for $PROJECT — unity-editor up '$PROJECT'"
 "$(dirname "$0")/unity-wait" --project-path "$PROJECT" ready 180 >/dev/null \
   || die "editor not ready: editor_status silent for 180s (a stuck command holds the exec gate?) - unity-editor ensure '$PROJECT'"
-if (( ! RESTART )); then
-  COMPILE=$("$(dirname "$0")/unity-wait" --project-path "$PROJECT" recompile 2>&1) \
-    || die "the recompile before the run did not finish clean; no tests ran:
+COMPILE=$("$(dirname "$0")/unity-wait" --project-path "$PROJECT" recompile 2>&1) \
+  || die "the recompile before the run did not finish clean; no tests ran:
 $COMPILE"
-fi
 
 PM=$(result_json "$PROJECT" editor_status | field playMode)
 [[ "$MODE" == PlayMode || -z "$PM" || "$PM" == stopped ]] \

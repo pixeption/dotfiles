@@ -40,6 +40,7 @@ case "\$1 \$2" in
   "command eval") echo eval >>"$TMP/evals"; while [[ \$1 != --code ]]; do shift; done; python3 "$TMP/scenes.py" eval "\$2";;
   "status "*)             echo '{"data":{"instances":[{"project":"$PROJ"}]}}';;
   "command editor_status") echo '{"data":{"result":{"playMode":"stopped"}}}';;
+  "command recompile")    echo recompile >>"$TMP/recompiles"; echo '{"data":{}}';;
   "command recompile_status") echo '{"data":{"result":{"status":"up_to_date","failed":false}}}';;
   "command run_tests")
     log="$PROJ/Logs/Editor.log"; [[ -f \$log ]] || log="$TMP/home/Library/Logs/Unity/Editor.log"
@@ -119,7 +120,9 @@ check transition 0 "3/3 passed"                    14 1 --start-deadline 4
 check stuck  2 "editor left alone .--no-restart."  10 0 --start-deadline 4 --no-restart
 check queued     2 "within 4s; cancellation requested" 10 0 --start-deadline 4
 check unreadable 2 "within 4s; cancellation requested" 10 0 --start-deadline 4
+rm -f "$TMP/recompiles"
 check normal 0 "3/3 passed"                        5  0 --start-deadline 4
+[[ -s "$TMP/recompiles" ]] && echo "ok   recompiles before a run" || { echo "FAIL no recompile before a run"; fail=1; }
 check retry-big  0 "3/3 passed"                    14 1 --start-deadline 4
 check normal-big 0 "3/3 passed"                    5  0 --start-deadline 4
 check untitled   0 "3/3 passed"                    5  0 --start-deadline 4
