@@ -10,8 +10,9 @@ to the actionable lines, keeping the exit status and the evidence needed to clas
 If a command fails because a project is held
 by another editor, stop and report; never retry or poll. Classify every failure (introduced /
 pre-existing with evidence / unknown), add tests, no opportunistic refactors.
-Before handing back, run the touched area's Integration tests filtered to its test classes, because
-the fast lane skips them.
+Run only the tests you touched, fast and Integration alike, with --filter naming their test classes
+(including any you added or changed, for fail-before evidence), never a whole suite or category,
+because the orchestrator runs the full suite once per phase.
 A compile break in another agent's file is reported once. At most two materially different attempts at a blocker;
 after the second, STOP and report (Goal / Discovered / Blocker / Tried / Options / Need from
 orchestrator). Report in the return format below, always with the Cost line (context now / turns /

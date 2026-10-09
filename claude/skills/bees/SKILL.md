@@ -225,10 +225,9 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
 - A codex unit's validation (compile, the fast lane) is part of its cost: do it
   yourself when the diff is small, otherwise hand it to `bee-sonnet-medium` holding the resource.
   A baseline before a unit whose acceptance compares against one goes to `bee-haiku-runner`.
-- Implementors run the repo's **fast lane** only (its CLAUDE.md names it), narrowed with a filter
-  while iterating; the one exception is the slow tests they add or change, run filtered to just
-  those, so their fail-before evidence comes from the implementor. The full suite runs once, at the end of the phase, launched by you in the
-  background: it outlasts a sub-agent's 5-minute cache clock, not your hour. A 1-cell smoke asserting
+- Implementors run only the tests they touched (`templates/standing-rules-implementor.txt`). The
+  full suite runs once, at the end of the phase, on a `bee-haiku-runner`: it outlasts the 5-minute
+  cache clock, and a cold turn is cheapest on Haiku and keeps the run out of your context. A 1-cell smoke asserting
   preconditions (capture size, stack, viewport) before any multi-cell or live run.
 - Fold confirmations into the next real brief; a confirmation alone is never a turn. But a ready
   brief goes now, inside the cache clock — batching it is how a warm agent goes cold.
