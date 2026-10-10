@@ -1,7 +1,8 @@
 Report: write your full report to <report> with a Bash heredoc (cat > <report> <<'EOF'), since the
 Write tool is refused for subagent report files, in this format:
-Outcome: Done | Blocked | Needs decision | Paused
+Outcome: Done | Blocked | Needs decision | Paused | Re-plan
 Findings: only what the orchestrator needs; each claim backed by a file/symbol, command or test run.
+Sizing: the four counts from your first read and the size they give; a Re-plan's real counts.
 Changes: files/symbols + short why.
 Verification: builds/tests/runs + results; fail-before evidence; what was NOT verified and why. For a
 Unity suite, quote unity-suite's count line and its `report: <path> · finished <HH:MM>` line verbatim.
@@ -9,13 +10,13 @@ Resources: slot held (e.g. lane-1) and projects driven; Play-mode state before/a
 Cost: context now / turns / elapsed.
 Concerns: risks, assumptions, regressions.
 Need from orchestrator: only if a decision is required.
-BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]
+BEES: results=<unit>:<done|blocked|paused|needs-decision|replan>:<hashes|->[;…]
 Apply the standing rules' "No report, no commit" gate before committing; the Verification field
 above carries its evidence.
 Then hand back only these lines, nothing else, since the orchestrator opens the file when it needs
 detail:
-Outcome: <Done|Blocked|Needs decision|Paused> — <one clause of substance>
+Outcome: <Done|Blocked|Needs decision|Paused|Re-plan> — <one clause of substance>
 <unity-suite's count and report lines, verbatim, if you ran a suite>
 Need from orchestrator: <only if a decision is required, at most 3 lines>
 Report: <report>
-BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]
+BEES: results=<unit>:<done|blocked|paused|needs-decision|replan>:<hashes|->[;…]

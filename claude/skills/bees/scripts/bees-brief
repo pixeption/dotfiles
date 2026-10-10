@@ -3,6 +3,7 @@
 
   bees-brief --plan <plan.md> --units DR-02,DR-01 --kind impl [--round N]
   bees-brief --plan <plan.md> --units GATE-1 --kind gate < gate-lines
+  bees-brief --plan <plan.md> --units STEP-07 --kind plan < planner-lines
              [--include <file> --set 'lane=lane-1' --set 'task branch=…' …] < unit-lines
 
 Writes <plan>.work/brief-<units>-<kind>-r<N>.txt and prints its path and the hand-off line. The
@@ -10,6 +11,7 @@ brief is: stdin, the units line (BEES order), a pointer to each unit's plan sect
 with its <placeholders> filled by --set, the role's standing rules, and its return contract with
 the report path. --work <dir> replaces --plan in light mode, where there is no plan to point at.
 --kind gate is the phase gate: implementor rules and return contract, no plan section to point at.
+--kind plan is the read-only planner that expands items under the P-03 budget (planner rules).
 Exit 1 on a missing template, an existing brief (rounds are never overwritten), an unfilled
 placeholder in an include, or a --set that fills nothing.
 """
@@ -17,7 +19,7 @@ import argparse, pathlib, re, shlex, sys
 
 TEMPLATES = pathlib.Path(__file__).resolve().parent.parent / "templates"
 ROLE = {"impl": "implementor", "fix": "implementor", "review": "reviewer", "recheck": "reviewer",
-        "consult": "consultant", "gate": "implementor"}
+        "consult": "consultant", "gate": "implementor", "plan": "planner"}
 PLACEHOLDER = re.compile(r"<([a-z][a-z -]*)>")
 
 
@@ -37,6 +39,7 @@ SPEC = {
                    "acceptance holds unless this brief overrides it:",
     "reviewer": "Spec: each unit's section in {plan} is the acceptance the diff is reviewed against:",
     "consultant": "Context: each unit's section in {plan}; diagnose, never implement:",
+    "planner": "Expand: each unit's section in {plan} is the item or phase you expand, read-only:",
 }
 
 

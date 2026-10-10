@@ -18,6 +18,16 @@ Read first: <the CLAUDE.md of the one game-core package the unit edits, by absol
 <`cat` templates/editor-card.md here and fill <project>. A `ui_*` unit adds the one skill section
 it needs as `path:start-end`.>
 
+## Size check (first read)
+Before editing, compare the code with the item's Reach and Sizing below against the `plan` skill's
+size table; an item without counts gets them here, in your report, since a size label with no counts
+behind it is a guess. A count you cannot produce is `unknown`, never M. A file outside the Reach, a
+count past the item's size, or any `unknown`: stop without editing and report `Outcome: Re-plan` with
+the real counts. An S that turns out M continues and reports the new size. Scope found later returns
+the same way from a safe point — tree builds, verified work committed, unverified WIP left in place
+and named — never mid-edit; an item is re-planned, never split during execution.
+Reach: <the item's Reach, or "none — count it">. Sizing: <the item's counts and size, or "none">.
+
 ## Commit gate
 When the required verification includes a Unity test run and no suite XML was produced in this
 session → no commit: leave the tree dirty and report `Blocked`. Verification that is not a Unity run
@@ -38,7 +48,7 @@ Short and obviously correct; no restating comments; no unrelated refactors. Clas
 as introduced / pre-existing (with evidence) / unknown.
 
 ## Return
-Outcome / Findings / Changes / Verification (commands verbatim + parsed counts) / Resources
+Outcome / Findings / Sizing (the counts from your first read) / Changes / Verification (commands verbatim + parsed counts) / Resources
 (editor state before/after) / Cost / Concerns / Need from orchestrator. Every commit subject names
 <unit>. Your final message's last line is exactly
-`BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->`
+`BEES: results=<unit>:<done|blocked|paused|needs-decision|replan>:<hashes|->`

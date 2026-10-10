@@ -43,4 +43,21 @@ if [ "$got" == "U-02 U-01 " ]; then ok "plan mode points at each named unit only
 
 b=$(brief --work "$TMP/work" --units GATE-1 --kind gate)
 if [ -f "$b" ] && ! grep -q "sed -En" "$b"; then ok "light-mode gate has no section pointer"; else bad "light-mode gate: brief [$b]"; fi
+
+SIZE="On first read, before editing, compare the code with the item's Reach and Sizing"
+REPLAN="BEES: results=<unit>:replan:-"
+has() { if [ "$(count "$2" "$3")" == "$4" ]; then ok "$1"; else bad "$1: want $4 of [$3] got $(count "$2" "$3")"; fi; }
+b=$(brief --plan "$PLAN" --units U-03 --kind impl)
+has "impl rules carry the first-read size check" "$b" "$SIZE" 1
+has "impl rules carry the Re-plan return" "$b" "$REPLAN" 1
+has "impl return vocabulary lists replan" "$b" "<done|blocked|paused|needs-decision|replan>" 2
+
+b=$(brief --plan "$PLAN" --units U-01 --kind plan)
+expect_rules "plan gets the four hygiene rules" "$b" 1 1 1 1
+has "plan rules expand one item or phase" "$b" "Expand one item or one phase per brief" 1
+has "plan rules stop at 120k and return the rest as to expand" "$b" "Stop at 120k context" 1
+has "plan rules never default to M" "$b" "\`unknown\`, never M" 1
+has "plan return names the items to expand" "$b" "To expand:" 1
+has "plan brief points at the unit section" "$b" "sed -En '/^### U-01 ·" 1
+has "plan brief carries no implementor size check" "$b" "$SIZE" 0
 exit $fail

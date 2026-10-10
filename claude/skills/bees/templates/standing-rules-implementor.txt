@@ -10,6 +10,14 @@ to the actionable lines, keeping the exit status and the evidence needed to clas
 If a command fails because a project is held
 by another editor, stop and report; never retry or poll. Classify every failure (introduced /
 pre-existing with evidence / unknown), add tests, no opportunistic refactors.
+On first read, before editing, compare the code with the item's Reach and Sizing against the `plan`
+skill's size table; an item without counts gets them here, in your report, because a size label
+with no counts behind it is a guess. A count you cannot produce is `unknown`, never M. A file
+outside the Reach, a count past the item's size, or any `unknown` means stop without editing and
+report `Outcome: Re-plan` with the real counts, ending `BEES: results=<unit>:replan:-`; an S that
+turns out M continues and reports the new size. Scope found later returns the same way from a safe
+point — tree builds, verified work committed on the task branch, unverified WIP left in place and
+named in the report — never mid-edit, because an item is re-planned, never split during execution.
 Run, once at the end of the round, the fail-before for every test you added or changed and the
 item's test filter — its own test classes and its callers', as the brief names them — with --filter,
 fast and Integration alike, never a whole suite or category, because the orchestrator runs the

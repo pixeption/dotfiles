@@ -57,10 +57,25 @@ May change: <paths>; nothing else.
 EOF
 ```
 
-- `--kind` is `impl`, `fix`, `review`, `recheck`, `consult` or `gate`; it picks the role's standing rules
-  and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor or reviewer also
-  gets its return contract; a consult answers directly, no report file or BEES line, ending
-  `CHANGES_REQUIRED`.
+- `--kind` is `impl`, `fix`, `review`, `recheck`, `consult`, `gate` or `plan`; it picks the role's
+  standing rules and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor,
+  reviewer or planner also gets its return contract; a consult answers directly, no report file or
+  BEES line, ending `CHANGES_REQUIRED`.
+- "May change" is the item's Reach *changes* entries and the test filter its Reach's test classes
+  (the `plan` skill's item fields), copied, not re-derived. An item without a Reach (every live plan)
+  gets one from a `bee-scout` first: when the section names one side of a pair (writer/reader,
+  export/import, check/apply, seed/parity), the scout lists the readers, validators and lowerings of
+  what changes, and its `Answer` lines become the brief's "May change" and filter.
+- A fix round (`--kind fix`) goes back to the implementor by SendMessage while it is under 120k and
+  inside its cache clock (`reference/budgets.md` "Continue, spawn or hand over"), because a fresh
+  bee re-reads what the implementor still holds; spawn fresh only past either line.
+- `--kind plan` is the read-only planner: it expands one item or phase into the `plan` skill's
+  fields (Reach, Sizing, Tests, Test filter, Done when), stops at 120k and returns the items done
+  plus the rest as `to expand` with the reads not made; a count it cannot produce is `unknown`,
+  never M. You write its `Expanded` text into the plan. Under batch A a live item scored 5 or more
+  gets this planner, recording Reach and Sizing; one below 5 is sized by its implementor's first-read
+  check, since a planner round per 2-point item costs more than the overrun it prevents. Either way
+  no item proceeds on an inherited M or `unknown`: that is a `Re-plan`.
 - A `--plan` unit without a `### <ID> · ` section fails the run, so every pointer resolves.
 - A phase gate a `bee-sonnet-medium` runs is `--kind gate --units GATE-<phase>`: no plan section,
   implementor rules and return contract, so its report lands in a file like any other — a
@@ -91,6 +106,7 @@ The bee agent files carry only model and effort; every Claude brief carries its 
 | implementor (`bee-opus-*`, `bee-sonnet-medium`, `bee-haiku-runner`) | `~/.claude/skills/bees/templates/standing-rules-implementor.txt` |
 | reviewer (`bee-reviewer`, `bee-reviewer-high`) | `~/.claude/skills/bees/templates/standing-rules-reviewer.txt` |
 | consultant (`bee-consultant`, and the astra consult) | `~/.claude/skills/bees/templates/standing-rules-consultant.txt` |
+| planner (`--kind plan`, a read-only `bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-planner.txt` |
 
 The consultant's terminal `CHANGES_REQUIRED` is there because `opencode-review` fails an answer
 without a verdict; it carries no meaning in a consult.
@@ -98,9 +114,17 @@ without a verdict; it carries no meaning in a consult.
 ## The last line is a contract
 
 Codex and bee alike; a Claude brief's return template carries it. Every implementor brief ends with: *"Your final message's last line is exactly
-`BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]`"* — one entry per unit
-the round serves (the wrapper's `-u` list), hashes comma-separated, `-` for none: a round that
-finishes F2 and blocks LV-02 ends `BEES: results=F2:done:4a31ceeb;LV-02:blocked:-`.
+`BEES: results=<unit>:<done|blocked|paused|needs-decision|replan>:<hashes|->[;…]`"* — one entry
+per unit the round serves (the wrapper's `-u` list), hashes comma-separated, `-` for none: a round
+that finishes F2 and blocks LV-02 ends `BEES: results=F2:done:4a31ceeb;LV-02:blocked:-`.
+
+`replan` is the implementor's `Re-plan` return: on first read it found a file outside the Reach, a
+count past the item's size or an `unknown`, or it hit new scope later and stopped at a safe point
+(tree builds, verified work committed on the task branch, WIP named in the report). Its report's
+`Sizing` carries the real counts; the item goes back to a `--kind plan` round that rewrites its
+Sizing and pieces before any implementor resumes, and the `Re-plan` is logged on the unit, since it
+means planning missed something. A planner ends `BEES: results=<unit>:<done|partial|blocked>:-`;
+`partial` lists the items still `to expand`, and an incomplete expansion never becomes `ready`.
 
 Every review brief keeps the terminal `APPROVE`/`CHANGES_REQUIRED` as the last line and puts
 `BEES: reviews=<unit>:<open-ids|->[;…]` on the line directly above it.
