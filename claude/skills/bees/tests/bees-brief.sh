@@ -83,7 +83,12 @@ names() { # names <kind> <units>: the brief is brief-<units>-<kind>-r<N>.txt and
 names plan-ac U-01
 names plan-expand U-02,U-03
 for kind in plan-ac plan-expand impl; do
-  out=$(echo x | "$SCRIPT" --plan "$PLAN" --units U-09 --kind $kind --round 99 2>&1)
-  if [[ "$out" == *"no '### <ID> · ' section for U-09"* ]]; then ok "$kind rejects a unit without a plan section"; else bad "$kind missing section: [$out]"; fi
+  if out=$(echo x | "$SCRIPT" --plan "$PLAN" --units U-09 --kind "$kind" --round 99 2>&1); then
+    bad "$kind accepted a unit without a plan section: [$out]"
+  elif [[ "$out" == *"no '### <ID> · ' section for U-09"* ]]; then
+    ok "$kind rejects a unit without a plan section"
+  else
+    bad "$kind missing section: [$out]"
+  fi
 done
 exit $fail
