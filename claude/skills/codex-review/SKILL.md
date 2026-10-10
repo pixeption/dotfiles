@@ -1,7 +1,7 @@
 ---
 name: codex-review
 description: >-
-  Runs a grounded, multi-round second-opinion review of a plan, design, PR or diff by a codex-family model, ending on an APPROVE verdict. Use when the user asks to "run codex", for a "codex review" or "codex sol review", to have codex review a plan/design/PR/diff, or for a second AI opinion before building. For implementation use codex-implementor.
+  Runs a grounded, multi-round second-opinion review of a plan, design, PR or diff by a codex-family model, ending on an APPROVE verdict (one dispositioned round for a plan under bees). Use when the user asks to "run codex", for a "codex review" or "codex sol review", to have codex review a plan/design/PR/diff, or for a second AI opinion before building. For implementation use codex-implementor.
 ---
 
 # Codex review
@@ -49,7 +49,8 @@ only the final answer — findings, suggestions, verdict.
 
 ## Shape of the loop
 
-Three kinds of round, one session, no round cap — the loop ends on `APPROVE` from the final pass:
+Three kinds of round, one session, no round cap — the loop ends on `APPROVE` from the final pass
+(a plan under bees runs the shorter "Plan review under bees" instead):
 
 1. **Round 1 — discovery, broad.** The reviewer reads the whole artifact and the source it
    composes over. Sub-agents are allowed (breadth is wanted, and they keep the parent under the
@@ -72,6 +73,24 @@ A healthy loop is round 1, one follow-up, final pass. Two things keep it short:
 **Churn check, instead of a cap.** After each follow-up: a finding that regressed twice, or new
 findings outnumbering closed ones two rounds running, means a structural problem patches will not
 fix. Stop and rewrite the section before resubmitting.
+
+## Plan review under bees
+
+A plan's expanded phase (bees `reference/review.md` "Once per unit") gets **one discovery round at
+`-e high`** — round 1 above, over the phase's items and the source their Reach names — and no loop:
+the orchestrator applies or dispositions every finding, and the phase is `ready` when no High or
+Med is open. There is **no final pass**, because a plan is re-read by every implementor that runs
+it and reviewed again as code; a second holistic pass buys little.
+
+- A **Med** finding closed by pasting the reviewer's exact text is closed by orchestrator
+  inspection, like a code fix that applies the reviewer's text verbatim.
+- A **High** finding, or any fix that departs from the reviewer's text, gets **one targeted
+  recheck**: a follow-up round in the same session, `--no-subagents`, scoped to those ids
+  ("Follow-up rounds"); its `Fixed` closes them.
+- Approved AC is frozen (bees P-02): a finding against an AC is dispositioned as "back to owner",
+  never applied.
+
+Code reviews are unchanged: discovery, follow-up, final pass, `APPROVE`.
 
 ## One session for the whole loop
 

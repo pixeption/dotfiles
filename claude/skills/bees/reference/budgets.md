@@ -57,8 +57,8 @@ price instead of reading it at 0.1×.
   "[bees:handover] stop at a safe point; write the state a successor needs (suite command + last
   green count, uncommitted files, what is half-done, resources/Play-mode state) in your report" —
   the prefix lets it past the 120k refusal (`bees-budget` mod, `opencode-budget`); you put its
-  facts in status.md's Now/Resources. The fresh agent's brief carries that text; it does not
-  re-derive the area from the transcript.
+  facts in the plan's `## Resume` (`plan` skill "Rules, Resume and log"). The fresh agent's brief
+  carries that text; it does not re-derive the area from the transcript.
 - **Scouts** are never continued and never asked a second question. ≤ 2 scouts per unit; a third
   is a diagnosis unit. Log scout tokens on the unit (`[G1] scout ×2 · 90k`); they add no points.
 - **One unit per brief.** Two half-briefs to one agent beat one full brief, because each report is

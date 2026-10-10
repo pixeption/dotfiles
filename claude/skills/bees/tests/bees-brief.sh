@@ -76,4 +76,14 @@ has "plan-ac rules stop at 120k" "$b" "Stop at 120k context" 1
 b=$(brief --work "$TMP/work" --units Q-03 --kind plan-ac)
 if [ -f "$b" ] && ! grep -q "sed -En" "$b" && [ "$(count "$b" "$AC_BLOCK")" == 1 ]; then ok "plan-ac from a queue row needs no plan"; else bad "plan-ac --work: brief [$b]"; fi
 if echo x | "$SCRIPT" --plan "$PLAN" --units U-01 --kind plan --round 99 >/dev/null 2>&1; then bad "kind plan is gone"; else ok "kind plan is gone"; fi
+names() { # names <kind> <units>: the brief is brief-<units>-<kind>-r<N>.txt and its last Report line names report-<units>-<kind>-r<N>.md beside it
+  local b n; b=$(brief --plan "$PLAN" --units "$2" --kind "$1"); n=$(basename "$b")
+  if [[ "$n" =~ ^brief-${2//,/_}-$1-r[0-9]+\.txt$ ]] && grep -qF "Report: $(dirname "$b")/$(sed 's/^brief-/report-/; s/\.txt$/.md/' <<<"$n")" "$b"; then ok "$1 brief and report are named by unit, kind and round"; else bad "$1 names: [$n]"; fi
+}
+names plan-ac U-01
+names plan-expand U-02,U-03
+for kind in plan-ac plan-expand impl; do
+  out=$(echo x | "$SCRIPT" --plan "$PLAN" --units U-09 --kind $kind --round 99 2>&1)
+  if [[ "$out" == *"no '### <ID> · ' section for U-09"* ]]; then ok "$kind rejects a unit without a plan section"; else bad "$kind missing section: [$out]"; fi
+done
 exit $fail
