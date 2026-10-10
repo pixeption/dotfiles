@@ -35,11 +35,14 @@ Checklist columns for a plan:
 | `ID` | anchor link to the item's heading: `[STEP-01](#step-01--title-slug)` |
 | `Item` | one line |
 | `Pts` | score (below) |
-| `Size` | S · M · L, a guess at how much of one agent's session it takes (below) |
+| `Size` | S · M · L or `unknown`, counted from the item's Sizing (below), never a guess |
 | `Route` | who implements it (a bees "Routing" bucket or a named agent/model); `-` outside bees |
 | `Phase` | the session that should finish it (below) |
-| `Depends` | IDs, or `-` |
-| `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ✅ done |
+| `Depends` | hard dependencies only — IDs, or `-` |
+| `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ☑ `<sha>` checkpoint (a piece landed, its parent's review pending) · ✅ `<sha>` done, with the suite counts |
+
+A piece row names its parent in its `Item` cell (`… — piece of STEP-07`), so a ☑ is never read as an
+acceptance when scheduling or counting accepted parents.
 
 An audit or review may use `ID | Severity | Item | Status` instead; the ID/anchor rules still hold.
 
@@ -71,26 +74,52 @@ long mechanical task is still a 1.
 Above 13, split. Size is handled by splitting (below), never by the score. An
 item whose score you cannot name is a read-only diagnosis item (3) that returns the split.
 
+## Item fields
+
+Each `### <ID>` section carries, after its shared context, the fields below as bold labels, so an
+implementor reads its scope and its filter from the item alone:
+
+| Field | Holds |
+|---|---|
+| **Reach** | every reader, writer, validator, lowering and caller of what changes, as `file` + symbol (a line only where it will not move), each marked *changes* or *reads*, plus the test classes that exercise them. Required for any item that changes a contract, a field, a grammar or one side of a pair (writer/reader, export/import, check/apply, seed/parity); a planner that cannot produce it makes the item a diagnosis first |
+| **Sizing** | the four counts of the table below and the size they give |
+| **Tests** | for each acceptance statement, the test that proves it, new or existing |
+| **Test filter** | the item's own test classes plus its callers', from the Reach — what the implementor runs with `--filter` |
+
+"May change" is the Reach's *changes* entries. Two items may run in parallel when their *changes*
+sets are disjoint and neither's acceptance reads output the other changes; shared *reads* are fine.
+
 ## Sizing and splitting
 
 An implementor has a hard 200k context cap, and a unit that hits it pauses and its successor rebuilds
-the context, so size every item by counting, not by feel. A **run** is anything that puts output
-into the agent's context: a filtered suite run, an editor or browser session, a live/Play-mode
-check, a golden re-capture, a rebase that may conflict, a review round.
+the context, so **Size is counted, not guessed**: the item's **Sizing** field holds the four counts
+below, read from the tree and its Reach, and the size is the largest column that applies.
 
-| Size | Takes |
-|---|---|
-| S | one area, a few files, at most one run |
-| M | one area, at most three runs |
-| L | anything more: a second area, a fourth run, or a list of changes joined by "and" — split it before the run |
+| Size | Files changed | Call sites of changed symbols (production + test) | Test classes in the filter (unit-specific) | Planned runs |
+|---|---|---|---|---|
+| S | ≤ 4 | ≤ 10 | ≤ 4 | ≤ 2 |
+| M | ≤ 12 | ≤ 30 | ≤ 10 | ≤ 4 |
+| L | above M in any column — split before the run | | | |
 
-An area is one package or folder the agent must understand (a model and its reader, a seed, a live
-runner, a game view), not one file. When unsure between two sizes, take the larger: estimates run
-low, and an overrun costs a whole successor session.
+Counting rules:
 
-Split an L into pieces that are each S or M. Every piece:
+- A synced copy of a file (a skill mirrored into another project) counts once, at its source: it
+  is one edit.
+- Planned runs are the runs the expansion can name before the run — suite runs, editor or browser
+  sessions, live checks, the one review — never the fix rounds observed afterwards, which measure
+  churn, not size.
+- Standing filters that join every run are fixed overhead, not a size signal: count only the
+  item's own test classes.
 
-- leaves the tree building and its suites green, so it is reviewed and accepted alone;
+A count the planner cannot produce makes the size `unknown`: the item becomes a read-only diagnosis
+that returns the counts, never an M by default. An L cannot leave planning: split it there into S/M
+pieces. Every piece:
+
+- is a checkpoint, not an acceptance. A **serial** piece is a private lane checkpoint: the tree
+  builds, its `Done when` holds, it is committed on the task branch and not integrated — a
+  tests-first piece whose `Done when` names planned-red tests stays off the target. A **parallel**
+  piece integrates on its own only when it leaves the target green. The **parent item is reviewed
+  and accepted once, over its complete change**, when the last piece lands;
 - has its own `Done when` — a piece you cannot write one for is not a piece;
 - follows a seam: contract or model first, then its callers; one screen, case or area at a time;
   a mechanical migration in batches; a read-only diagnosis before the fix it scopes; a bulk
@@ -108,10 +137,13 @@ A **phase** is what one session should finish: ≈ 5–8 items. Phases are numbe
 the `Depends` order.
 
 Every item section ends with a `Done when:` line. An item's review is its own last step — one
-sentence in the shared context ("each piece ends with a review; accepted only on APPROVE"), never a
-`REV-nn` row per item, which doubles the checklist without adding work to track. Other work that ships
-a unit — closing its editors, integrating its lane — is its own S row or the unit's last step, never
-folded into a gate.
+sentence in the shared context ("each item ends with a review; accepted only on APPROVE"), never a
+`REV-nn` row per item, which doubles the checklist without adding work to track. Closing its editors
+and integrating its lane are likewise the unit's last steps, never their own rows and never folded
+into a gate. An item lands as **one commit** whose subject names its id, so the landed commit is
+found with `git log --grep '<ID>'`; the Status cell and the `accept:` log line hold the reviewed
+lane SHA and the counts the review ran on. Plan and log lines ride in the next item's commit, never
+committed on their own.
 
 Every phase ends with a `GATE-<n>` row, `<n>` its phase number (1 pt, `Depends` listing each of the
 phase's item IDs), whose section is only this checklist, so the phase cannot close on a green suite
