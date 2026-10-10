@@ -98,7 +98,7 @@ and its filter from the item alone. Each stage has a template to copy:
 | | **Sizing** | the four counts of the table below and the size they give |
 | | **Pieces** | when split: the sub-items or new items, each S/M with its own `Done when` and the ACs it proves |
 | | **Tests** | for each AC, the test that proves it, new or existing |
-| | **Test filter** | the item's own test classes plus its callers', from the Reach — what the implementor runs with `--filter` |
+| | **Test filter** | the item's own test classes plus its callers', from the Reach, by class name, never a file name (`--filter` matches classes) — what the implementor runs with `--filter` |
 | | **Needs** | hard dependencies only |
 | | **Done when** | the item's last line, naming the ACs it closes |
 | 3 · Review | — | adds no field: one codex plan review per expanded phase (sizing, then AC coverage, then reach); the phase is `ready` when no High or Med finding is open |
