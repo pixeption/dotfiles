@@ -27,7 +27,7 @@ At the next safe point:
       under 200k may stay for the successor to resume by id, in its pinned directory, same server.
 - [ ] Every lane a retired bee held: close its editors and release its claim (nono4u's `workspaces`
       skill "End a lane session" steps 2–3) — a retired holder never comes back to do it.
-- [ ] Every gap a report listed since the last handoff is a tooling-gaps row or a `gap:` log line.
+- [ ] Every gap a report listed since the last handoff has been routed through bees "Intake".
 - [ ] Rules: every owner decision that still applies is a line there, in place, naming the one it
       replaces; no environment lines — the successor re-runs machine checks.
 - [ ] Resume, overwritten, ≤ 10 lines, so the successor needs nothing from this tab: lane and

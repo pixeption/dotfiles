@@ -51,11 +51,12 @@ recorded nowhere, because an environment line is stale on the next machine.
 **Standing owner rules**, holding for every plan unless its Rules says otherwise, so no plan
 restates them:
 
-- A decision that comes with a recommendation takes the recommendation. **AC is the exception**:
-  only the owner approves it, through the queue's Owner list.
-- A run selecting more than one Integration test is sharded ("Cost routing").
-- Items whose Reach *changes* sets are disjoint run in parallel (`plan` skill "Item fields by
-  stage").
+- A decision that comes with a recommendation takes the recommendation, so routine decisions do
+  not require another owner round. **AC is the exception**: only the owner approves it, through
+  the queue's Owner list.
+- The standing sharding rule lives in "Cost routing".
+- Parallelise items eligible under the `plan` skill's "Item fields by stage", so independent
+  work overlaps.
 
 **On adopting a plan that arrives already scored**, check its checklist for units that take a
 pipeline where no committed consumer has gone, and schedule their path maps ("Routing") before
@@ -278,8 +279,10 @@ One pass per queue row, from `to plan` to the phase-end retro:
          (reference/review.md), delegate fixes, recheck; record a piece as ☑ checkpoint, accept only
          the item or complete parent ("Status and acceptance") and integrate; route every gap it
          reported ("Intake"). Then one scheduling pass — which `ready` row or item has a free
-         lane? — and report ("What you say to the user"). No `ready` row and an empty Owner list
-         is reported, never filled with invented work.
+         lane? — and report ("What you say to the user"). The Owner list contains everything
+         waiting on the owner; nothing else waits on the owner. When no row is `ready` and the
+         Owner list is not empty, report starvation and stop; never invent work or bypass the
+         owner gate.
 - [ ] 7. Phase end, in this order: gate green (the GATE row) → Rules current, Resume overwritten,
          the phase-end commit → handoff (reference/handoff.md). The successor opens the next phase
          with "Triage" and "Retro" before it dispatches anything; the retiring session does none of
@@ -425,14 +428,26 @@ At every phase end only, by the successor orchestrator, before it dispatches any
 At the same opening, the `bee-haiku-runner` counts the phase's log and the successor appends the
 numbers to `docs/plans/retro-numbers.md`: rounds per item by outcome, review passes per item,
 `docs(plans)` commits and item ids per item commit (`git log --first-parent --format=%s
-<from>..<to>`), fix rounds by a fresh bee vs the implementor, `replan` returns and mid-run splits,
+<from>..<to>`), fix rounds by a fresh bee vs the implementor, `replan` returns, incomplete
+expansions and mid-run splits,
 out-of-scope review findings, AC sent back after approval, escapes per level, handoffs per phase,
 hours a row waited in Owner, queued-but-never-started and started-without-a-row, active vs waiting
-wall-clock per item and parent acceptances per orchestrator-hour. A missing timing is `unknown`, a
+wall-clock per item and parent acceptances per orchestrator-hour, with S/M beside it. A missing timing is `unknown`, a
 number the phase cannot produce `not applicable`, never 0. At most 3 rule changes per retro, each
 a skill edit whose commit message carries its before/after numbers and the `retro-numbers.md` row;
 a forecast is labelled a forecast. The owner reads the numbers and proposed changes in the final
 message and can veto.
+
+Before a batch activates, write its success thresholds and comparison scope (units, sizes,
+scores, concurrency and sharding) to `retro-numbers.md`, so its result can be judged.
+Freeze correctness guardrails beside them: required verification recorded and no blocking
+review finding open for every acceptance; a red target fixed before the next integrate;
+an escape bound naming count per phase, worst severity and recovery minutes. A guardrail
+breach blocks keeping the batch regardless of throughput.
+Judge a batch as one, with no per-rule causal claim. Revert a batch or rule on an attributable
+regression or a missed predeclared threshold over two comparable retros, never on an unchanged
+aggregate alone. Too little comparable evidence is inconclusive; report it without a per-rule
+conclusion.
 
 ## What you say to the user
 
