@@ -14,12 +14,16 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "fable",
   "enableArtifact": false,
   "statusLine": {
     "type": "command",
     "command": "~/.claude/statusline.sh",
     "padding": 0
+  },
+  "enabledPlugins": {
+    "cc-plugin-diff@builtin": false,
+    "cc-plugin-telemetry@builtin": false
   },
   "feedbackDrafts": "off",
   "effortLevel": "medium",
@@ -28,7 +32,7 @@
       "effortLevel": "medium"
     },
     "claude-fable-5-1": {
-      "effortLevel": "medium"
+      "effortLevel": "xhigh"
     },
     "claude-sonnet-5": {
       "effortLevel": "high"
