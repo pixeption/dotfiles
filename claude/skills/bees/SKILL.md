@@ -30,35 +30,32 @@ What the rules below protect:
   own context the third** — compaction loses things nobody chose; a curated handoff does not.
 - **A blocked agent costs the owner's wall-clock**, so a background task is inspected, never
   waited on.
-- **Bookkeeping stays small and committed**: three markdown files, nothing derived.
+- **Bookkeeping stays small and committed**: the queue and two files per plan, nothing derived.
 - **Exclusive resources deadlock silently**, and agents die holding them.
 
 ## Setup (every new bees session)
 
-**First, read `<plan>.status.md`'s Setup section.** Owner answers there hold on any machine: do
-not re-ask them. An environment line (`<machine>, <date>: …` for playwright-cli, the Chrome
-extension, the OpenCode preflight, codex usage) whose machine is this one (`scutil --get
-LocalHostName`) is trusted and its check skipped; on another machine re-run only those checks and
-rewrite their lines. Codex usage is still re-read before each codex unit ("Routing").
+Read, in this order, and nothing else: `docs/queue.md`, then the running plan's checklist
+(`awk '/^\| ID \|/{f=1} f&&!/^\|/{exit} f' <plan>`), its `## Rules` and `## Resume`, then
+`tools/workspace.sh list` — that is the whole committed state, so a session on any machine resumes
+from it. Score, route, phase, dependencies and status are all you schedule from; a whole plan stays
+in your context every turn. A unit's section is its implementor's to read; open one yourself
+(`sed -En '/^### <unit> ·/,/^#{1,3} /p'`) only when a decision, blocker or finding turns on it.
 
-Otherwise, before scoring anything, ask the owner in one AskUserQuestion call and record the
-answers in Setup (light mode: in your first status line):
+Nothing is asked per plan. The defaults are the skill's — implementors by score through the
+buckets ("Routing"), codex preferred, in place in a lane when the unit drives an editor; review
+cross-vendor, once per unit at its parent boundary (`reference/review.md`) — and a plan's `## Rules`
+overrides them. Machine checks (preflight, codex usage, browser tools) are re-run each session and
+recorded nowhere, because an environment line is stale on the next machine.
 
-| question | default |
-|---|---|
-| Implementor routing | **buckets** ("Routing"): the score picks the effort, codex preferred, in place in a lane when the unit drives an editor; codex via OpenCode, CLI fallback. |
-| Review pairing | **cross-vendor** (`reference/review.md`). |
+**Standing owner rules**, holding for every plan unless its Rules says otherwise, so no plan
+restates them:
 
-When to review is not asked: every unit is reviewed once, at its parent boundary
-(`reference/review.md` "Once per unit"). Do not start a unit until the answers are in. They hold for the whole plan; a later change is an
-owner decision, logged and reflected in Setup. Every check you run (preflight, usage, browser
-tools) gets its machine-and-date line in Setup once it passes.
-
-**Read the status file and the plan's checklist, never the whole plan**
-(`awk '/^\| ID \|/{f=1} f&&!/^\|/{exit} f' <plan>`): score, route, phase, dependencies and status
-are all you schedule from, and a whole plan stays in your context every turn. A unit's section is
-its implementor's to read; open one yourself (`sed -En '/^### <unit> ·/,/^#{1,3} /p'`) only when a
-decision, blocker or finding on that unit turns on it.
+- A decision that comes with a recommendation takes the recommendation. **AC is the exception**:
+  only the owner approves it, through the queue's Owner list.
+- A run selecting more than one Integration test is sharded ("Cost routing").
+- Items whose Reach *changes* sets are disjoint run in parallel (`plan` skill "Item fields by
+  stage").
 
 **On adopting a plan that arrives already scored**, check its checklist for units that take a
 pipeline where no committed consumer has gone, and schedule their path maps ("Routing") before
@@ -89,7 +86,7 @@ many units there are and how many sessions they need:
 |---|---|
 | one or two units, one sitting | **No bees.** Do it yourself, or one agent, one brief, no plan checklist, no reviewer unless the change is risky. |
 | a handful of units, one session | **Light.** One implementor, continued across units until its budget is spent; review per `reference/review.md` "Once per unit", so the smaller bookkeeping mode preserves the review boundary; status in your final message, no checklist. |
-| multi-session, two exclusive resources, or any unit scored ≥ 8 | **Full.** A plan in the `plan` skill's format with its status and log files, rounds in its `.work/`, review per `reference/review.md`. |
+| multi-session, two exclusive resources, or any unit scored ≥ 8 | **Full.** A queue row and a plan in the `plan` skill's format with its Rules, Resume and log, rounds in its `.work/`, review per `reference/review.md`. |
 
 Choosing "full" for a small plan is the error, not the safe default.
 
@@ -113,8 +110,7 @@ Choosing "full" for a small plan is the error, not the safe default.
    shared runtime claim the plan names (e.g. `perf-tests-<project>`) is held the same way. Every
    other agent does read-only work, works in another slot or a blind worktree no editor loads — or
    waits. Disjoint files inside one slot are not enough: sequence the units. A second orchestrator
-   session reads the plan's status file (Resources) and `tools/workspace.sh list` before touching
-   any slot. A blind codex worktree is outside every slot; **validating its diff** in a lane is not.
+   session reads the plan's `## Resume` and `tools/workspace.sh list` before touching any slot. A blind codex worktree is outside every slot; **validating its diff** in a lane is not.
 4. **Session budget, both vendors: continue below 120k, finish the current round below 200k.** The
    figure is the harness's token count on a Claude agent's final notification, or `context_tokens`
    in the codex wrapper's `.usage` — never the agent's own estimate, which runs low. At 120k it
@@ -141,9 +137,11 @@ Choosing "full" for a small plan is the error, not the safe default.
 7. **Review once per unit, at the parent boundary**, in proportion to risk, until the recheck is
    clean; the churn check, not a round count, stops a loop that is not converging
    (`reference/review.md`).
-8. **Status is three committed files** (full mode): the plan's checklist, `<plan>.status.md` and
-   `<plan>.log.md`. Accepting a unit updates the checklist and the log; the status file is written
-   at a pause ("Status and acceptance").
+8. **State is the queue and two committed files per plan** (full mode): `<plan>.md` — checklist,
+   `## Rules`, `## Resume` — and `<plan>.log.md`, nothing derived, nothing else. Accepting a
+   unit updates the checklist and the log; Resume is overwritten at a pause, a handoff or a change
+   of holder ("Status and acceptance"). Both ride in the item's commit through `integrate --with`,
+   or in a plan-stage, phase-end or handoff commit ("Commit cadence").
 9. **The orchestrator hands off at phase end, or at the first safe point past 170k, by 200k**
    (`reference/handoff.md`). Compaction is the fallback, never the plan.
 10. **Delegate execution — including reading.** Inspect directly only when cheaper than a spawn:
@@ -260,21 +258,33 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
 
 ## Lifecycle
 
+One pass per queue row, from `to plan` to the phase-end retro:
+
 ```text
-- [ ] 1. Understand the goal.
-- [ ] 2. Acceptance criteria: behaviour, edge cases, tests, build, API constraints.
-- [ ] 3. Score, bucket, pick the mode ("Size the plan first").
-- [ ] 4. Investigate only for a decision you must make first — a scout past two reads, a diagnosis
-         unit when it needs a run or a judgment, a path map before a first-use unit ("Routing").
-- [ ] 5. Roster: resources → holders → slots → order, units grouped by area and bucket.
-- [ ] 6. Delegate; continue or spawn (reference/budgets.md).
-- [ ] 7. At an item or complete parent's boundary: review (reference/review.md); evaluate;
-         delegate fixes; recheck. Pieces follow "Once per unit" instead, so review covers the parent.
-- [ ] 8. Record a piece as ☑ checkpoint; accept only the item or complete parent against its
-         criteria ("Status and acceptance"), so a checkpoint is never counted as acceptance.
-- [ ] 9. Report ("What you say to the user").
-- [ ] 10. At every pause, decision or acceptance: phase done, or context hook fired?
-          → reference/handoff.md
+- [ ] 1. Queue: take the first eligible row (Setup). `to plan` → a planner drafts stage 1 (Outcome,
+         AC, Out of scope per item; `plan` skill "Item fields by stage"); the drafts of one triage
+         go together.
+- [ ] 2. Owner gate, once per plan: the draft goes to the queue's Owner list, stage `AC review`;
+         draft the next row's AC while this one runs, so the list is never empty at a phase end.
+         Approved AC is frozen; an AC expansion shows wrong goes back to Owner with a proposed edit.
+- [ ] 3. Expand one phase at a time: Reach, Sizing, Pieces, Tests, Test filter, Needs — the next
+         phase while the current one runs, so Reach is read from the tree the items will change.
+- [ ] 4. Plan review: one codex discovery round per expanded phase (`codex-review` plan-review
+         mode). Apply or disposition every finding; no High or Med open → stage `ready`.
+- [ ] 5. Run: score, bucket, mode ("Size the plan first", "Routing"); a scout, diagnosis or path
+         map only for a decision you must make first; roster resources → holders → slots → order;
+         delegate, continue or spawn (reference/budgets.md).
+- [ ] 6. At each hand-back: evaluate; at an item or complete parent's boundary review
+         (reference/review.md), delegate fixes, recheck; record a piece as ☑ checkpoint, accept only
+         the item or complete parent ("Status and acceptance") and integrate; route every gap it
+         reported ("Intake"). Then one scheduling pass — which `ready` row or item has a free
+         lane? — and report ("What you say to the user"). No `ready` row and an empty Owner list
+         is reported, never filled with invented work.
+- [ ] 7. Phase end, in this order: gate green (the GATE row) → Rules current, Resume overwritten,
+         the phase-end commit → handoff (reference/handoff.md). The successor opens the next phase
+         with "Triage" and "Retro" before it dispatches anything; the retiring session does none of
+         it. After the last implementation phase the successor is the closeout session.
+- [ ] 8. Context hook fired at any pause, decision or acceptance? → reference/handoff.md
 ```
 
 Convergence tasks (iterating toward a measured target): freeze metric, threshold, reference set and
@@ -334,28 +344,30 @@ pausing.
 
 Full mode only. State is plain markdown, hand-written, committed with the plan; nothing derives
 it, no hook writes it, nothing lives only in `.work/` (gitignored, disposable codex out-files for
-`bees-watch`). The file formats are the `plan` skill's "Status and log files"; a new status file
-starts from `cat ~/.claude/skills/plan/templates/status.md`.
+`bees-watch`). The formats — checklist, `## Rules`, `## Resume`, log kinds — are the `plan` skill's
+"Rules, Resume and log". Rules holds owner rules for this plan only, edited in place; Resume holds
+unfinished work only, ≤ 10 lines, overwritten; the queue holds what's next and what waits on the
+owner.
 
 **Acceptance** — accepting an unsplit item or complete parent is two edits; the commit is the
 landing's ("Commit cadence"). A piece records ☑ and its checkpoint SHA instead of ✅ or an
 `accept:` line, because its parent's review is still pending.
 
 ```text
-- [ ] Checklist: Status ✅.
+- [ ] Checklist: Status ✅ <reviewed lane SHA> <count>.
 - [ ] Lane: close its editors and release the claim (`workspaces` skill "End a lane session").
 - [ ] Log: - <date '+%F %H:%M'> [<unit>] accept: <evidence — suite count, review verdict, reviewed lane SHA>
 ```
 
-The status file is not part of an acceptance, because the log line already carries the evidence:
-write it at a pause, a handoff, or when a resource changes holder.
+Resume is not part of an acceptance, because the checklist and the log line already carry the
+evidence: overwrite it at a pause, a handoff, or when a resource changes holder, with a kept codex
+session's id, pinned directory, last out-file and context among its lines.
 
 Also log each round as it finishes (`[<unit>] round: impl r2 codex sol high, done, ctx 96k,
-impl-<unit>-r2.txt`), each review verdict, each owner decision (`decision: …`, and in Keep in mind
-while it applies), each tooling gap, every one a report lists and not only the blocking ones
-(`gap: …`), and each escape as defined in "Cost routing" (the `plan` skill's log kinds gain it in
-STEP-02b). A session id worth resuming goes in status.md. A log entry that needs more than one
-line is a checklist row or a plan section instead.
+impl-<unit>-r2.txt`), each review verdict, each owner decision (`decision: …`; one that still
+applies next session is a Rules line), each tooling gap the intake table routes to a log line
+(`gap: …`), each `replan` return and each escape as defined in "Cost routing". A log entry that
+needs more than one line is a checklist row or a plan section instead.
 
 **Commit cadence** — the plan and log ride in the item they record, so history reads one commit
 per item. You write them in `integration` as events happen, uncommitted (`require_no_overlap`
@@ -363,17 +375,64 @@ tolerates that WIP because no lane changes those files), and they land through
 `integrate <lane> --with docs/plans/<plan>.md docs/plans/<plan>.log.md`, which folds the lines
 written since the previous landing into the item's squash. When `--with` reports `bookkeeping not
 folded`, the lines wait for the next landing. The only docs-only commits are a plan stage (AC
-approved; a phase `ready`), a phase end (gate evidence, triage) and a handoff mid-phase
+approved; a phase `ready`), a phase end (gate evidence, Resume) and a handoff mid-phase
 (`reference/handoff.md`), each by path (`git commit -m … -- <paths>`, so another agent's staged
 files are never swept in). Starts, rounds, reviews, decisions and gaps are logged and wait for the
 next landing, never committed on their own. The Status cell and the `accept:` line hold the
 reviewed lane SHA and counts; the landed commit is found by the unit id in its subject
 (`git log --grep '<ID>'`).
 
-A plan that predates this
-format gets a status file written from what is known, the old notes moved into the log verbatim,
-and the checklist brought to the `plan` skill's columns — an unknown fact is written `unknown`,
-never reconstructed.
+## Intake
+
+Any agent reports a gap — source, evidence, minutes lost, workaround — in its report; **only the
+orchestrator writes** `docs/plans/tooling-gaps.md`, `docs/backlog.md` and the queue, because two
+lanes appending to one table is a merge conflict. This table is the only place gap routing is
+stated; `tooling-gaps.md` and the root `CLAUDE.md` link here.
+
+| Found | Where it goes |
+|---|---|
+| A defect or missing capability in an owned package (game-core, game-build) that the current unit would otherwise work around | fixed at the owning source first — its own unit, test and review — before the dependent work continues, never shimmed; not cleanly fixable at the root → stop and surface it (global `CLAUDE.md` "Owned packages") |
+| An owned-package defect the unit observed but does not depend on | a `tooling-gaps.md` row, fixed at the owning source when picked up |
+| Blocks the current unit, not an owned package | fixed in that unit |
+| Obvious bug, clear fix, inside the unit's own area | fixed in that unit as its own commit |
+| Has a workaround and cost < ~5 min, no correctness defect | a `gap:` log line only, with the workaround |
+| Anything else (tooling) | a `tooling-gaps.md` row: `Hits 1`, minutes lost, workaround |
+| Anything else (player-facing) | `docs/backlog.md` under "Later", next free `T-nnn` |
+| Same gap again | `Hits` + 1 and minutes added on the existing row; never a second row |
+
+A backlog or tooling-gaps row that is queued gets `→ Q-nn` in its Status, so nothing is queued
+twice.
+
+## Triage
+
+At every phase end only, by the successor orchestrator, before it dispatches anything:
+
+1. Collect the phase's `gap:` lines (a `bee-haiku-runner` counts the log — never read it yourself,
+   rule 10). Any gap that came up twice becomes a row.
+2. Every `?` row gets one outcome: **close** (small, or a workaround — which alone never closes a
+   gap whose summed cost is high; one Status line, row removed next triage), **fix** (kept for
+   pick-up), or **owner** (needs a design or product decision: to the queue's Owner list with
+   options and a recommendation). No `?` row survives two phase ends.
+3. **Pick-up**, one batch: cluster the `fix` rows by area (one scout answers "which files does
+   each touch?" when it isn't obvious); take at most **3 clusters**, highest summed minutes lost
+   first — `unknown` stays unknown, never zero; among unknowns more `Hits`, then the lower id, or
+   one costing scout where the pick would be arbitrary. Each picked cluster is a queue row at
+   `to plan`; its AC draft joins the Owner batch. The rest wait for the next phase end. Backlog
+   items are owner-ordered and queued only by the owner.
+
+## Retro
+
+At the same opening, the `bee-haiku-runner` counts the phase's log and the successor appends the
+numbers to `docs/plans/retro-numbers.md`: rounds per item by outcome, review passes per item,
+`docs(plans)` commits and item ids per item commit (`git log --first-parent --format=%s
+<from>..<to>`), fix rounds by a fresh bee vs the implementor, `replan` returns and mid-run splits,
+out-of-scope review findings, AC sent back after approval, escapes per level, handoffs per phase,
+hours a row waited in Owner, queued-but-never-started and started-without-a-row, active vs waiting
+wall-clock per item and parent acceptances per orchestrator-hour. A missing timing is `unknown`, a
+number the phase cannot produce `not applicable`, never 0. At most 3 rule changes per retro, each
+a skill edit whose commit message carries its before/after numbers and the `retro-numbers.md` row;
+a forecast is labelled a forecast. The owner reads the numbers and proposed changes in the final
+message and can veto.
 
 ## What you say to the user
 

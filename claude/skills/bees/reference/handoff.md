@@ -8,8 +8,10 @@ The orchestrator pays its context every turn like any agent, and compaction's su
 ways nobody chose. It hands off to a fresh orchestrator — one role, chained — at:
 
 - **Phase end**: every parent item in phase N is accepted, including parents represented by ☑
-  piece rows, so checkpoints are not mistaken for missing or completed acceptance. You decide
-  this from the checklist and parent acceptance log lines; no tool does.
+  piece rows, so checkpoints are not mistaken for missing or completed acceptance, and the GATE
+  row's full suites are green. You decide this from the checklist and parent acceptance log
+  lines; no tool does. Triage, pick-up and the retro are the successor's opening (bees "Triage",
+  "Retro"), never the retiring session's.
 - **Context**: the `PostToolUse` hook (`scripts/context-nudge`) injects "Context at 170k: … hand
   off" once per session, since a handoff there costs least for the measured startup cost and
   growth. Finish the running unit, then hand off by ~200k. The hook reads the transcript, which
@@ -26,16 +28,16 @@ At the next safe point:
 - [ ] Every lane a retired bee held: close its editors and release its claim (nono4u's `workspaces`
       skill "End a lane session" steps 2–3) — a retired holder never comes back to do it.
 - [ ] Every gap a report listed since the last handoff is a tooling-gaps row or a `gap:` log line.
-- [ ] Write <plan>.status.md so the successor needs nothing from this tab:
-      Setup — owner answers, each environment check with machine and date
-      Now / Resources — each kept codex session (id, pinned dir, last out-file, context),
-        editor/Play-mode state and holder, each repo's branch, HEAD and uncommitted paths
-        (owner WIP named), last verification command and result, open review ids
-      Next / Blocked — the next ready unit, blockers
-      Keep in mind — still-applicable decisions, or links to their log lines
+- [ ] Rules: every owner decision that still applies is a line there, in place, naming the one it
+      replaces; no environment lines — the successor re-runs machine checks.
+- [ ] Resume, overwritten, ≤ 10 lines, so the successor needs nothing from this tab: lane and
+      holder, editor/Play-mode state; each repo's branch, HEAD and uncommitted paths (owner WIP
+      named); accepted-but-unintegrated ranges; blockers; open review ids; each kept codex session
+      (id, pinned dir, last out-file, context); the last verification command and result.
+- [ ] Queue: the running row's Stage and Lanes current; the next row's AC in the Owner list.
 - [ ] Log `handoff: phase N → <tab name>`; the handoff commit, by path:
-      `git commit -m 'docs(plans): handoff …' -- <plan>.md <plan>.log.md <plan>.status.md`
-      (one of the three docs-only commits bees "Commit cadence" permits).
+      `git commit -m 'docs(plans): handoff …' -- <plan>.md <plan>.log.md docs/queue.md`
+      (one of the docs-only commits bees "Commit cadence" permits).
 - [ ] Spawn the successor (below).
 - [ ] Confirm the new tab is up (ListAgents shows its name), report the handoff, dispatch nothing
       further. This session stays open as a fallback and starts nothing.
@@ -58,5 +60,5 @@ sed -e "s|<plan path>|$plan.md|" -e "s|<plan>|$plan|" -e "s|<N>|$n|" \
 ## After a compaction
 
 Compaction stays enabled only as the fallback for a single unit that overruns the window before a
-safe point. The first action after one is to read `<plan>.status.md` and run `bees-watch`, not to
-trust the summary.
+safe point. The first action after one is to read the queue, the plan's checklist, Rules and Resume
+(bees "Setup") and run `bees-watch`, not to trust the summary.

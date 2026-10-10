@@ -187,7 +187,7 @@ Done when: the successor's tab is named, or the final message says why no handof
 ```
 
 The **successor** opens the phase, before it dispatches anything, with triage, pick-up and the retro
-numbers; these are its opening obligations, not prerequisites of the
+numbers (bees "Triage" and "Retro"); these are its opening obligations, not prerequisites of the
 handoff, so the retiring session does none of them. After the last implementation phase the
 successor is a closeout session: the plan is complete when its triage, numbers and final report
 are in.
