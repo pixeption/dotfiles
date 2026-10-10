@@ -19,7 +19,9 @@ Read first: <the CLAUDE.md of the one game-core package the unit edits, by absol
 it needs as `path:start-end`.>
 
 ## Commit gate
-No suite XML produced in this session → no commit: leave the tree dirty and report `Blocked`.
+When the required verification includes a Unity test run and no suite XML was produced in this
+session → no commit: leave the tree dirty and report `Blocked`. Verification that is not a Unity run
+records each command, its exit status and result in the report instead.
 Stage by explicit path only. Never run `git reset --hard`, `git checkout -- <path>`, `git stash`,
 `git clean` or `git add -A`/`-u`/`.`.
 

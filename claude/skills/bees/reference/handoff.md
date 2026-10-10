@@ -33,7 +33,9 @@ At the next safe point:
         (owner WIP named), last verification command and result, open review ids
       Next / Blocked — the next ready unit, blockers
       Keep in mind — still-applicable decisions, or links to their log lines
-- [ ] Log `handoff: phase N → <tab name>`; commit the plan and both files.
+- [ ] Log `handoff: phase N → <tab name>`; the handoff commit, by path:
+      `git commit -m 'docs(plans): handoff …' -- <plan>.md <plan>.log.md <plan>.status.md`
+      (one of the three docs-only commits bees "Commit cadence" permits).
 - [ ] Spawn the successor (below).
 - [ ] Confirm the new tab is up (ListAgents shows its name), report the handoff, dispatch nothing
       further. This session stays open as a fallback and starts nothing.

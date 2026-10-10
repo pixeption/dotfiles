@@ -48,9 +48,9 @@ answers in Setup (light mode: in your first status line):
 |---|---|
 | Implementor routing | **buckets** ("Routing"): the score picks the effort, codex preferred, in place in a lane when the unit drives an editor; codex via OpenCode, CLI fallback. |
 | Review pairing | **cross-vendor** (`reference/review.md`). |
-| Review cadence | **per unit** or **at the end of the plan** (one diff review of the whole plan). |
 
-Do not start a unit until the answers are in. They hold for the whole plan; a later change is an
+When to review is not asked: every unit is reviewed once, at its parent boundary
+(`reference/review.md` "Once per unit"). Do not start a unit until the answers are in. They hold for the whole plan; a later change is an
 owner decision, logged and reflected in Setup. Every check you run (preflight, usage, browser
 tools) gets its machine-and-date line in Setup once it passes.
 
@@ -131,13 +131,16 @@ Choosing "full" for a small plan is the error, not the safe default.
 5. **Evidence, not claims.** Completion is a suite count, a real run, a byte-identity check. A
    codex diff from a **blind worktree** is unverified until you (or a `bee-sonnet-medium` holding
    the resource) compile and test it; codex **in place** with the editor card in its brief verifies
-   itself, to the same standard. **No report, no commit**: every brief states that if its fast-lane
-   run produced no XML in the session, the agent leaves the tree dirty, reports
-   `Blocked`, and the orchestrator validates.
+   itself, to the same standard. **No report, no commit**: every brief states that when the unit's
+   required verification includes a Unity test run and that run produced no XML in the session,
+   the agent leaves the tree dirty, reports `Blocked`, and the orchestrator validates; a unit whose
+   verification is not a Unity run (docs, scripts, a .NET suite) records each command, its exit
+   status and result instead, so evidence stays task-appropriate.
 6. **A background task is inspected, never waited on.** A codex round whose `.log` has not grown
    in ~20 minutes is checked with `bees-watch`, which costs no tokens (`reference/watching.md`).
-7. **Review in proportion to risk**, until the recheck is clean; the churn check, not a round
-   count, stops a loop that is not converging (`reference/review.md`).
+7. **Review once per unit, at the parent boundary**, in proportion to risk, until the recheck is
+   clean; the churn check, not a round count, stops a loop that is not converging
+   (`reference/review.md`).
 8. **Status is three committed files** (full mode): the plan's checklist, `<plan>.status.md` and
    `<plan>.log.md`. Accepting a unit updates the checklist and the log; the status file is written
    at a pause ("Status and acceptance").
@@ -227,10 +230,28 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
 - A codex unit's validation (compile, the fast lane) is part of its cost: do it
   yourself when the diff is small, otherwise hand it to `bee-sonnet-medium` holding the resource.
   A baseline before a unit whose acceptance compares against one goes to `bee-haiku-runner`.
-- Implementors run only the tests they touched (`templates/standing-rules-implementor.txt`). The
-  full suite runs once, at the end of the phase, on a `bee-haiku-runner`: it outlasts the 5-minute
-  cache clock, and a cold turn is cheapest on Haiku and keeps the run out of your context. A 1-cell smoke asserting
-  preconditions (capture size, stack, viewport) before any multi-cell or live run.
+- **Three test levels, each run once**, so no suite runs twice for one unit:
+  - *Round* — the bee, holding its lane: the fail-before plus the item's test filter, its own and
+    its callers' test classes, once at the end of the round
+    (`templates/standing-rules-implementor.txt`); it never re-runs Game full or another unit's filter.
+  - *Post-integrate* — you, after each `integrate`, holding `integration`, as background Bash: the
+    integrated unit's filter on the target plus Game full, once (about 2 min), so the target never
+    goes red. Integrations are serialised: this check finishes before the next `integrate` moves
+    the target, and a red target is the next unit on a lane, ahead of the queue. It is a target
+    check, not acceptance: a parallel piece that passes it is still unreviewed until its parent
+    review.
+  - *Phase gate* — the sharded runner, holding `integration` and `test-shards`: the full suites,
+    once per phase, on a `bee-haiku-runner`, because it outlasts the 5-minute cache clock and a
+    cold turn is cheapest on Haiku and keeps the run out of your context.
+  At any level a GameCore run selecting more than one Integration test borrows the test shards
+  (`workspaces` "Borrow the test shards"); Game runs in one editor, since its `file:` packages
+  cannot shard. Every run records the SHA or worktree it tested, the command, the filter and the
+  count — a count without them is not evidence. A bug first caught one level later than it should
+  have been is an **escape**, logged `escape: <unit> <test> caught at <level>`: within the plan's
+  escape bound the trimmed levels hold; past it the retro adds the missing check back at the level
+  that should have caught it.
+- A 1-cell smoke asserting preconditions (capture size, stack, viewport) before any multi-cell or
+  live run.
 - Fold confirmations into the next real brief; a confirmation alone is never a turn. But a ready
   brief goes now, inside the cache clock — batching it is how a warm agent goes cold.
 - Stop starting units at ~80% of the known spend budget; a cut-off must never find an agent
@@ -313,12 +334,12 @@ it, no hook writes it, nothing lives only in `.work/` (gitignored, disposable co
 `bees-watch`). The file formats are the `plan` skill's "Status and log files"; a new status file
 starts from `cat ~/.claude/skills/plan/templates/status.md`.
 
-**Acceptance** — accepting a unit is two edits and a commit (see "Commit cadence"):
+**Acceptance** — accepting a unit is two edits; the commit is the landing's ("Commit cadence"):
 
 ```text
 - [ ] Checklist: Status ✅.
 - [ ] Lane: close its editors and release the claim (`workspaces` skill "End a lane session").
-- [ ] Log: - <date '+%F %H:%M'> [<unit>] accept: <evidence — suite count, review verdict, commit>
+- [ ] Log: - <date '+%F %H:%M'> [<unit>] accept: <evidence — suite count, review verdict, reviewed lane SHA>
 ```
 
 The status file is not part of an acceptance, because the log line already carries the evidence:
@@ -327,23 +348,23 @@ write it at a pause, a handoff, or when a resource changes holder.
 Also log each round as it finishes (`[<unit>] round: impl r2 codex sol high, done, ctx 96k,
 impl-<unit>-r2.txt`), each review verdict, each owner decision (`decision: …`, and in Keep in mind
 while it applies), each tooling gap, every one a report lists and not only the blocking ones
-(`gap: …`). A session id worth resuming goes in status.md. A log entry that needs more than one
+(`gap: …`), and each escape (`escape: <unit> <test> caught at <level>` — a bug first caught one
+level later than it should have been, "Cost routing"; the `plan` skill's log kinds gain it in
+STEP-02b). A session id worth resuming goes in status.md. A log entry that needs more than one
 line is a checklist row or a plan section instead.
 
-**Commit cadence** — commit the plan, log and status at every decision, acceptance and pause, by
-path (`git commit -m … -- <paths>`, so another agent's staged files are never swept in). A run of
-`docs(plans)` commits buries the real work, so when HEAD is already a `docs(plans)` commit on no
-other branch, fold into it instead — checked right before, since another agent may have committed
-since; a pushed commit, or one a lane branched from, would diverge:
-
-```bash
-git log -1 --format=%s | grep -q '^docs(plans)' && [ "$(git branch -a --contains HEAD | wc -l)" -eq 1 ] \
-  && git commit --amend -m "<subject covering both>" -- <paths> \
-  || git commit -m "<subject>" -- <paths>
-```
-
-Starts, rounds and review launches are logged but never committed on their own; they ride along
-with the next commit.
+**Commit cadence** — the plan and log ride in the item they record, so history reads one commit
+per item. You write them in `integration` as events happen, uncommitted (`require_no_overlap`
+tolerates that WIP because no lane changes those files), and they land through
+`integrate <lane> --with docs/plans/<plan>.md docs/plans/<plan>.log.md`, which folds the lines
+written since the previous landing into the item's squash. When `--with` reports `bookkeeping not
+folded`, the lines wait for the next landing. The only docs-only commits are a plan stage (AC
+approved; a phase `ready`), a phase end (gate evidence, triage) and a handoff mid-phase
+(`reference/handoff.md`), each by path (`git commit -m … -- <paths>`, so another agent's staged
+files are never swept in). Starts, rounds, reviews, decisions and gaps are logged and wait for the
+next landing, never committed on their own. The Status cell and the `accept:` line hold the
+reviewed lane SHA and counts; the landed commit is found by the unit id in its subject
+(`git log --grep '<ID>'`).
 
 A plan that predates this
 format gets a status file written from what is known, the old notes moved into the log verbatim,

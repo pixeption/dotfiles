@@ -10,9 +10,12 @@ to the actionable lines, keeping the exit status and the evidence needed to clas
 If a command fails because a project is held
 by another editor, stop and report; never retry or poll. Classify every failure (introduced /
 pre-existing with evidence / unknown), add tests, no opportunistic refactors.
-Run only the tests you touched, fast and Integration alike, with --filter naming their test classes
-(including any you added or changed, for fail-before evidence), never a whole suite or category,
-because the orchestrator runs the full suite once per phase.
+Run, once at the end of the round, the fail-before for every test you added or changed and the
+item's test filter — its own test classes and its callers', as the brief names them — with --filter,
+fast and Integration alike, never a whole suite or category, because the orchestrator runs the
+post-integrate check after each landing and the full suites once per phase. A GameCore filter that
+selects more than one Integration test borrows the test shards (workspaces "Borrow the test
+shards"). Never re-run Game full or another unit's filter.
 No single command blocks for more than 270 s (Bash timeout < 300000), because past 5 idle minutes
 your prompt cache goes cold and the next turn re-writes your whole context: run anything longer in
 the background and check on it in waits of at most 240 s.

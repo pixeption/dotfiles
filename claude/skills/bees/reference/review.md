@@ -15,10 +15,22 @@ The reviewer is the **other vendor** from the implementor, so no model checks it
 When codex is out (usage limit, 429), the review goes to the Claude reviewer for its score, and a
 log line says so.
 
-**Cadence** is what the owner chose in setup: per unit, or one diff review of the whole plan at
-the end. For the end-of-plan review, the reviewer is chosen by the vendor that implemented **most
-points**, and a Claude reviewer is `bee-reviewer-high` when the plan holds any unit routed at
-8–13.
+## Once per unit
+
+| What | Review |
+|---|---|
+| Every expanded phase of a plan | one discovery round in plan-review mode |
+| An item implemented in one piece | one review of the item, then fix → recheck under `codex-review`'s contract |
+| An item split into pieces | **no per-piece review**. A serial piece is a private lane checkpoint (builds, its `Done when` holds, committed on the task branch, not integrated); a parallel piece integrates only if it leaves the target green under the post-integrate check. When the last piece lands, **one review of the complete parent change** at the parent's effort — on the lane for a serial group, before it integrates; on the target for parallel pieces, over their recorded SHAs so unrelated commits are excluded. Its fix round runs on the same lane, or on a lane from the reviewed target |
+| A fix that applies the reviewer's exact fixes | orchestrator inspection ("Rechecks and the end of the loop") |
+| A production diff ≤ ~5 lines with a fail-before test | orchestrator inspection (same) |
+
+Code reviews check the change against the item's ACs. Parallel pieces sit on the target green but
+unreviewed until the parent review; the parent review and the phase gate both precede anything
+leaving that branch. A parent's acceptance records the complete filter, the target checks and the
+review verdict for the reviewed SHA — the last piece's filter alone is not the parent's. A
+whole-range review reads more than a piece review, so its recheck is a fresh session pointed at
+the review file whenever the first passed 120k (`budgets.md`).
 
 ## The review
 
