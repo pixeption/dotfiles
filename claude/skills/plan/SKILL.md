@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >-
-  Formats structured Markdown plans, audits and reviews with summary tables, stable item IDs, scoring, phases, source links and companion status/log files. Use when writing, restructuring or deleting a structured Markdown deliverable with enumerated items, or when bees runs a plan.
+  Formats structured Markdown plans, audits and reviews with summary tables, stable item IDs, scoring, staged items, phases, source links and the companion Rules, Resume and log a fresh session resumes from. Use when writing, restructuring or deleting a structured Markdown deliverable with enumerated items, or when bees runs a plan.
 ---
 
 # Plan and audit format
@@ -19,9 +19,14 @@ Right under the title:
 **Focus:** why now, what the document is for
 **By:** claude-opus-5-5 · reasoning: high (name any subagent used)
 **Method:** real verification done — compile check, call-site tracing, a build/test run, a review loop
+**Stage:** expanding phase 2 · ready phase 1
+**AC approved:** 2026-09-25
 ```
 
-`Method` only when something was actually verified.
+`Method` only when something was actually verified. `Stage` is the plan's stage ("Item fields by
+stage" below) with the phase being expanded or `ready`; `AC approved` appears once the owner
+approves the AC and never changes after. A plan the owner shaped in conversation says so in its
+header instead of a stage-1 pass.
 
 ## Tables at the top
 
@@ -39,7 +44,7 @@ Checklist columns for a plan:
 | `Route` | who implements it (a bees "Routing" bucket or a named agent/model); `-` outside bees |
 | `Phase` | the session that should finish it (below) |
 | `Depends` | hard dependencies only — IDs, or `-` — so scheduling does not serialize independent work |
-| `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ☑ `<sha>` checkpoint (a piece landed, its parent's review pending) · ✅ `<sha>` done, with the suite counts |
+| `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ☑ `<sha>` checkpoint (a piece landed, its parent's review pending) · ✅ `<sha> <count>` done — the acceptance evidence: the reviewed SHA and the count its review ran on |
 
 A piece row names its parent in its `Item` cell (`… — piece of STEP-07`), so a ☑ is never read as an
 acceptance when scheduling or counting accepted parents.
@@ -74,17 +79,34 @@ long mechanical task is still a 1.
 Above 13, split. Size is handled by splitting (below), never by the score. An
 item whose score you cannot name is a read-only diagnosis item (3) that returns the split.
 
-## Item fields
+## Item fields by stage
 
-Each `### <ID>` section carries, after its shared context, the fields below as bold labels, so an
-implementor reads its scope and its filter from the item alone:
+A plan goes through three stages; each adds fields to its items and none rewrites an earlier
+stage's. Fields are bold labels after the item's shared context, so an implementor reads its scope
+and its filter from the item alone. Each stage that adds fields has a template to copy:
+`cat ~/.claude/skills/plan/templates/item-ac.md`, then `templates/item-expand.md`.
 
-| Field | Holds |
-|---|---|
-| **Reach** | every reader, writer, validator, lowering and caller of what changes, as `file` + symbol (a line only where it will not move), each marked *changes* or *reads*, plus the test classes that exercise them. Required for any item that changes a contract, a field, a grammar or one side of a pair (writer/reader, export/import, check/apply, seed/parity); a planner that cannot produce it makes the item a diagnosis first |
-| **Sizing** | the four counts of the table below and the size they give |
-| **Tests** | for each acceptance statement, the test that proves it, new or existing |
-| **Test filter** | the item's own test classes plus its callers', from the Reach — what the implementor runs with `--filter` |
+| Stage | Field | Holds |
+|---|---|---|
+| 1 · AC draft | **Outcome** | what changes for the player or developer, in plain words |
+| | **AC** | numbered, checkable statements (`AC-1`, `AC-2`…), edge and failure cases included |
+| | **Approach** | optional: the how, only where the owner or planner has a view |
+| | **Out of scope** | what the item deliberately doesn't do |
+| 2 · Expand | **Reach** | every reader, writer, validator, lowering and caller of what changes, as `file` + symbol (a line only where it will not move), each marked *changes* or *reads*, plus the test classes that exercise them. Required for any item that changes a contract, a field, a grammar or one side of a pair (writer/reader, export/import, check/apply, seed/parity); a planner that cannot produce it makes the item a diagnosis first |
+| | **Sizing** | the four counts of the table below and the size they give |
+| | **Pieces** | when split: the sub-items or new items, each S/M with its own `Done when` and the ACs it proves |
+| | **Tests** | for each AC, the test that proves it, new or existing |
+| | **Test filter** | the item's own test classes plus its callers', from the Reach — what the implementor runs with `--filter` |
+| | **Needs** | hard dependencies only |
+| | **Done when** | the item's last line, naming the ACs it closes |
+| 3 · Review | — | adds no field: one codex plan review per expanded phase (sizing, then AC coverage, then reach); the phase is `ready` when no High or Med finding is open |
+
+- **Stage 1 is the owner's one gate per plan**: short, no code references, the drafts of one
+  triage approved in one sitting. Approved AC is frozen — an AC that expansion shows wrong goes back
+  to the owner with the reason and a proposed edit, never edited in place — and AC ids stay stable
+  when expansion creates pieces.
+- **Stage 2 expands one phase at a time**, the next while the current runs, so Reach is read from
+  the tree the items will actually change. An incomplete expansion cannot become `ready`.
 
 "May change" is the Reach's *changes* entries. Two items may run in parallel when their *changes*
 sets are disjoint and neither's acceptance reads output the other changes; shared *reads* are fine.
@@ -149,17 +171,25 @@ lane SHA and the counts the review ran on. Plan and log edits written before lan
 stay together. Post-integrate evidence and bookkeeping that cannot be folded wait for the next
 landing or a plan-stage, phase-end or handoff commit; log lines are never committed alone.
 
+
 Every phase ends with a `GATE-<n>` row, `<n>` its phase number (1 pt, `Depends` listing each of the
 phase's item IDs), whose section is only this checklist, so the phase cannot close on a green suite
 alone:
 
 ```text
 - [ ] Full suites green on the target, counts logged
-- [ ] Status file written for the pause
+- [ ] Every post-integrate check of the phase recorded in the log
+- [ ] Rules current and Resume overwritten for the successor
 - [ ] Handoff to a fresh session for the next phase (bees reference/handoff.md); the successor waits
       for the owner's go when the owner scoped the session to this phase
 Done when: the successor's tab is named, or the final message says why no handoff ran.
 ```
+
+The **successor** opens the phase, before it dispatches anything, with triage, pick-up and the retro
+numbers (bees "Triage" and "Retro"); these are its opening obligations, not prerequisites of the
+handoff, so the retiring session does none of them. After the last implementation phase the
+successor is a closeout session: the plan is complete when its triage, numbers and final report
+are in.
 
 ## Sources and snippets
 
@@ -167,36 +197,41 @@ Done when: the successor's tab is named, or the final message says why no handof
   ranges `#L84-L112`. Paths outside the repo (e.g. `~/.claude/skills/...`) stay inline code.
 - Code in a plan uses a language-tagged fence (` ```csharp `, ` ```sh `), never a bare one.
 
-## Status and log files (plans that span sessions)
+## Rules, Resume and log (plans that span sessions)
 
-Beside `<plan>.md`, committed with it:
+What a successor resumes from is the checklist, `## Rules`, `## Resume` and the queue; it reads
+those and `tools/workspace.sh list`, nothing else. Rules and Resume are sections of `<plan>.md`
+after the items; the log is `<plan>.log.md` beside it, committed with it.
 
-| file | holds | written |
-|---|---|---|
-| `<plan>.status.md` | the handover — overwritten, **≤ 30 lines**; never repeats per-item status (that is the checklist) | at a pause, before a handoff, and when a resource changes holder — not on every acceptance, which the checklist and the log record |
-| `<plan>.log.md` | one line per event, append-only | as events happen |
+### Rules
 
-`<plan>.status.md` starts as a copy of [`templates/status.md`](templates/status.md)
-(`cat ~/.claude/skills/plan/templates/status.md`), an example to overwrite line by line:
+Owner rules for this plan only, edited in place; a new rule names the one it replaces, so a reader
+never reconciles two. Never environment lines — machine checks are re-run per session and live
+nowhere — and never rules that hold for every plan, which live once in the `bees` skill.
 
-- **Setup** holds what a new session would otherwise ask or check again. Owner answers are valid
-  anywhere. Each environment line starts with the machine (`scutil --get LocalHostName`) and date: a
-  session on the same machine trusts it and skips that check; on another machine it re-runs the
-  environment checks only, never the owner's questions.
-- **Resources** lists each slot by name with its holder or `free` — a slot is what bees "Rules"
-  (rule 3) names, and what it covers is unity-cli "One driver per project". It keeps one
-  last-verification entry per slot and suite. Older runs live only in the log, so the file stays
-  inside its line limit.
-- A codex session is resumable only on the same server; say so when the plan may move machines.
-- An unknown fact is written `unknown`, never reconstructed.
+### Resume
 
-`<plan>.log.md` lines — `- <YYYY-MM-DD HH:MM> [<ID>] <kind>: <text>`, kind one of `round`,
-`review`, `accept`, `decision`, `gap`, `concern`, `handoff`, or none for a plain line:
+Unfinished work only, **≤ 10 lines**, overwritten at a pause, before a handoff and when a resource
+changes holder: lane and holder; branch and HEAD; accepted-but-unintegrated ranges; named
+uncommitted work; blockers; open review ids; each kept codex session (id, pinned directory, last
+out-file, context); the last verification command and result. Never per-item progress (that is the
+checklist's Status cell), never owner rules (Rules). An unknown fact is written `unknown`, never reconstructed;
+a codex session is resumable only on the same server, so say so when the plan may move machines.
+
+### Log
+
+`<plan>.log.md`, append-only, one terse line per event — `- <YYYY-MM-DD HH:MM> [<ID>] <kind>:
+<text>` — carrying ids, SHA, counts and verdict only; reasoning lives in the review or report file
+the line points to. Kind one of `round`, `review`, `accept`, `decision`, `gap`, `concern`,
+`escape` (a bug caught one test level later than it should have been), `replan` (an item returned
+to expansion with its real counts), `handoff`, or none for a plain line:
 
 ```markdown
 - 2026-09-24 14:12 [STEP-05] review: codex sol r3 APPROVE (review-STEP-05-r3.txt)
 - 2026-09-24 14:20 [STEP-05] accept: 412 green; reviewed at 3b73b3a
 - 2026-09-24 14:25 decision: D7 phase 2 runs without a reviewer for 1-pt items
+- 2026-09-24 15:02 [STEP-07] replan: files 6 > S; back to expansion (report-STEP-07-impl-r1.md)
+- 2026-09-24 16:40 [STEP-05] escape: UIStylePatchTests caught at post-integrate, fixed 9c1e2d0
 ```
 
 Take times from `date '+%F %H:%M'`, never from memory. `[<ID>] accept:` is the shape `bees-watch`
@@ -204,7 +239,7 @@ greps to hide superseded rounds.
 
 ## Deleting a plan
 
-"Delete a plan" means the plan **and every file that travels with it**: everything named
-`<plan>.*` beside it — `.status.md`, `.log.md`, `.handoff.md`, `.notes.md`, the gitignored
-`.work/` — without asking about each one. List what you deleted and say that `.work/` is not
-recoverable, since it is gitignored.
+A plan is deleted after its last retro, whose numbers are counted from its log — never before.
+"Delete a plan" means the plan **and every file that travels with it**: `<plan>.md`,
+`<plan>.log.md`, any other `<plan>.*` beside it, and the gitignored `.work/` — without asking about
+each one. List what you deleted and say that `.work/` is not recoverable, since it is gitignored.
