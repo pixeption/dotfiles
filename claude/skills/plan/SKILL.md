@@ -35,6 +35,7 @@ Checklist columns for a plan:
 | `ID` | anchor link to the item's heading: `[STEP-01](#step-01--title-slug)` |
 | `Item` | one line |
 | `Pts` | score (below) |
+| `Size` | S · M · L, a guess at how much of one agent's session it takes (below) |
 | `Route` | who implements it (a bees "Routing" bucket or a named agent/model); `-` outside bees |
 | `Phase` | the session that should finish it (below) |
 | `Depends` | IDs, or `-` |
@@ -67,11 +68,62 @@ long mechanical task is still a 1.
 | 8 | unknown cause, cross-area trade-offs, or a design with more than one defensible answer |
 | 13 | new architecture or a contract change with migration, where mistakes are expensive to undo |
 
-Above 13, split. Size is handled by splitting and by the session budget, never by the score. An
+Above 13, split. Size is handled by splitting (below), never by the score. An
 item whose score you cannot name is a read-only diagnosis item (3) that returns the split.
+
+## Sizing and splitting
+
+An implementor has a hard 200k context cap, and a unit that hits it pauses and its successor rebuilds
+the context, so size every item by counting, not by feel. A **run** is anything that puts output
+into the agent's context: a filtered suite run, an editor or browser session, a live/Play-mode
+check, a golden re-capture, a rebase that may conflict, a review round.
+
+| Size | Takes |
+|---|---|
+| S | one area, a few files, at most one run |
+| M | one area, at most three runs |
+| L | anything more: a second area, a fourth run, or a list of changes joined by "and" — split it before the run |
+
+An area is one package or folder the agent must understand (a model and its reader, a seed, a live
+runner, a game view), not one file. When unsure between two sizes, take the larger: estimates run
+low, and an overrun costs a whole successor session.
+
+Split an L into pieces that are each S or M. Every piece:
+
+- leaves the tree building and its suites green, so it is reviewed and accepted alone;
+- has its own `Done when` — a piece you cannot write one for is not a piece;
+- follows a seam: contract or model first, then its callers; one screen, case or area at a time;
+  a mechanical migration in batches; a read-only diagnosis before the fix it scopes; a bulk
+  re-seed or golden re-capture as its own piece after the code it reflects.
+
+Never split "code" from "its tests", or into halves that need each other's uncommitted work.
+
+**Sub-items or new items.** Pieces that read the same files are sub-items, `STEP-07a`, `STEP-07b`:
+one agent carries its warm context from one to the next. Pieces in different areas, or that can run
+in parallel, are new items with the next free number. Sub-items replace the parent's checklist row,
+each with its own `Pts`, `Size` and `Depends`; the parent's `### STEP-07` section keeps the shared
+context, each sub-item gets its own `### STEP-07a · <title>` section.
 
 A **phase** is what one session should finish: ≈ 5–8 items. Phases are numbered from 1 and follow
 the `Depends` order.
+
+Every item section ends with a `Done when:` line. An item's review is its own last step — one
+sentence in the shared context ("each piece ends with a review; accepted only on APPROVE"), never a
+`REV-nn` row per item, which doubles the checklist without adding work to track. Other work that ships
+a unit — closing its editors, integrating its lane — is its own S row or the unit's last step, never
+folded into a gate.
+
+Every phase ends with a `GATE-<n>` row, `<n>` its phase number (1 pt, `Depends` listing each of the
+phase's item IDs), whose section is only this checklist, so the phase cannot close on a green suite
+alone:
+
+```text
+- [ ] Full suites green on the target, counts logged
+- [ ] Status file written for the pause
+- [ ] Handoff to a fresh session for the next phase (bees reference/handoff.md); the successor waits
+      for the owner's go when the owner scoped the session to this phase
+Done when: the successor's tab is named, or the final message says why no handoff ran.
+```
 
 ## Sources and snippets
 
