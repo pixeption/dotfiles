@@ -83,8 +83,10 @@ item whose score you cannot name is a read-only diagnosis item (3) that returns 
 
 A plan goes through three stages; each adds fields to its items and none rewrites an earlier
 stage's. Fields are bold labels after the item's shared context, so an implementor reads its scope
-and its filter from the item alone. Each stage that adds fields has a template to copy:
-`cat ~/.claude/skills/plan/templates/item-ac.md`, then `templates/item-expand.md`.
+and its filter from the item alone. Each stage has a template to copy:
+`cat ~/.claude/skills/plan/templates/item-ac.md`,
+`cat ~/.claude/skills/plan/templates/item-expand.md`, or
+`cat ~/.claude/skills/plan/templates/item-review.md`.
 
 | Stage | Field | Holds |
 |---|---|---|
@@ -161,8 +163,7 @@ context, each sub-item gets its own `### STEP-07a · <title>` section.
 A **phase** is what one session should finish: ≈ 5–8 items. Phases are numbered from 1 and follow
 the `Depends` order.
 
-Every item section ends with a `Done when:` line. For an unsplit item, review is its last
-implementation step; split items use the parent review boundary above. Put this in shared context,
+For an unsplit item, review is its last implementation step; split items use the parent review boundary above. Put this in shared context,
 never a `REV-nn` row, which doubles the checklist without adding work to track. Closing its editors
 and integrating its lane are the unit's final shipping steps, never their own rows or part of a
 gate, so each landing remains attributable to its item. An item lands as **one commit** whose subject names its id, so the landed commit is
@@ -186,7 +187,7 @@ Done when: the successor's tab is named, or the final message says why no handof
 ```
 
 The **successor** opens the phase, before it dispatches anything, with triage, pick-up and the retro
-numbers (bees "Triage" and "Retro"); these are its opening obligations, not prerequisites of the
+numbers; these are its opening obligations, not prerequisites of the
 handoff, so the retiring session does none of them. After the last implementation phase the
 successor is a closeout session: the plan is complete when its triage, numbers and final report
 are in.
