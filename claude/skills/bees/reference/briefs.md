@@ -57,7 +57,7 @@ May change: <paths>; nothing else.
 EOF
 ```
 
-- `--kind` is `impl`, `fix`, `review`, `recheck`, `consult`, `gate` or `plan`; it picks the role's
+- `--kind` is `impl`, `fix`, `review`, `recheck`, `consult`, `gate`, `plan-ac` or `plan-expand`; it picks the role's
   standing rules and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor,
   reviewer or planner also gets its return contract; a consult answers directly, no report file or
   BEES line, ending `CHANGES_REQUIRED`.
@@ -69,9 +69,13 @@ EOF
 - A fix round (`--kind fix`) goes back to the implementor by SendMessage while it is under 120k and
   inside its cache clock (`reference/budgets.md` "Continue, spawn or hand over"), because a fresh
   bee re-reads what the implementor still holds; spawn fresh only past either line.
-- `--kind plan` emits the read-only planner's standing rules and return contract from `templates/`,
-  because one owned block keeps expansion and budget rules consistent. You write its `Expanded`
-  text into the plan. Under batch A a live item scored 5 or more gets this planner, recording Reach
+- `--kind plan-ac` and `--kind plan-expand` are the read-only planner at stage 1 and stage 2 of the
+  `plan` skill's "Item fields by stage": each adds its stage block (`templates/planner-ac.txt`,
+  `templates/planner-expand.txt`) before the planner's standing rules and return contract, because
+  one owned block per stage keeps the fields and budget rules consistent. A `plan-ac` for a queue
+  row or gap cluster that has no plan yet runs with `--work <plan>.work` and the row or cluster on
+  stdin. You write its `Expanded` text into the plan — stage-1 drafts go to the queue's Owner list,
+  an `AC back to owner` item too. Under batch A a live item scored 5 or more gets `plan-expand`, recording Reach
   and Sizing; one below 5 is sized by its implementor's first-read check, since a planner round per
   2-point item costs more than the overrun it prevents. Either way no item proceeds on an inherited
   M or `unknown`: that is a `Re-plan`.
@@ -105,7 +109,7 @@ The bee agent files carry only model and effort; every Claude brief carries its 
 | implementor (`bee-opus-*`, `bee-sonnet-medium`, `bee-haiku-runner`) | `~/.claude/skills/bees/templates/standing-rules-implementor.txt` |
 | reviewer (`bee-reviewer`, `bee-reviewer-high`) | `~/.claude/skills/bees/templates/standing-rules-reviewer.txt` |
 | consultant (`bee-consultant`, and the astra consult) | `~/.claude/skills/bees/templates/standing-rules-consultant.txt` |
-| planner (`--kind plan`, a read-only `bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-planner.txt` |
+| planner (`--kind plan-ac`, `--kind plan-expand`, a read-only `bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-planner.txt` |
 
 The consultant's terminal `CHANGES_REQUIRED` is there because `opencode-review` fails an answer
 without a verdict; it carries no meaning in a consult.
@@ -118,7 +122,7 @@ per unit the round serves (the wrapper's `-u` list), hashes comma-separated, `-`
 that finishes F2 and blocks LV-02 ends `BEES: results=F2:done:4a31ceeb;LV-02:blocked:-`.
 
 `replan` is the implementor's `Re-plan` return under `templates/standing-rules-implementor.txt`;
-its report's `Sizing` carries the real counts. The item goes back to a `--kind plan` round that
+its report's `Sizing` carries the real counts. The item goes back to a `--kind plan-expand` round that
 rewrites its Sizing and pieces before any implementor resumes, and the `Re-plan` is logged on the
 unit, since it means planning missed something. A planner ends
 `BEES: results=<unit>:<done|partial|blocked>:-`; `partial` lists the items still `to expand`, and an

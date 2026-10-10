@@ -1,0 +1,8 @@
+Stage 1, AC draft (`plan` skill "Item fields by stage"; copy `cat ~/.claude/skills/plan/templates/item-ac.md`):
+from the queue row or gap cluster named above, write one `### <ID> · <title>` section per outcome
+with Outcome, AC (numbered `AC-n`, each a checkable statement, edge and failure cases included),
+Approach (only where the owner or this brief has a view) and Out of scope. Short, plain words, no
+code references: the owner reads the drafts of one triage once, in one sitting, so nothing here
+needs the tree — read code only to tell whether an outcome is one item or several. A cluster names
+the gap rows each item closes. Return the sections under `Expanded`; the orchestrator writes them
+into the plan and lists the row in the queue's Owner section, because the AC gate is the owner's.

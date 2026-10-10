@@ -485,5 +485,5 @@ Should read like:
 | [`reference/review.md`](reference/review.md) | before choosing or briefing a reviewer |
 | [`reference/watching.md`](reference/watching.md) | before the session's first codex round, and on any flag or termination |
 | [`reference/handoff.md`](reference/handoff.md) | at phase end or when the context hook fires |
-| `templates/standing-rules-*.txt`, `templates/return-*.txt` | assembled into every Claude brief by `scripts/bees-brief` — never retyped |
+| `templates/standing-rules-*.txt`, `templates/return-*.txt`, `templates/planner-*.txt` | assembled into every Claude brief by `scripts/bees-brief` (`--kind plan-ac`, `plan-expand` for the planner stages) — never retyped |
 | `templates/successor-brief.txt` | `cat` into the successor's first prompt at a handoff |

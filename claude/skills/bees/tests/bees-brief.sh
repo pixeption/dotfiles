@@ -52,12 +52,28 @@ has "impl rules carry the first-read size check" "$b" "$SIZE" 1
 has "impl rules carry the Re-plan return" "$b" "$REPLAN" 1
 has "impl return vocabulary lists replan" "$b" "<done|blocked|paused|needs-decision|replan>" 2
 
-b=$(brief --plan "$PLAN" --units U-01 --kind plan)
-expect_rules "plan gets the four hygiene rules" "$b" 1 1 1 1
-has "plan rules expand one item or phase" "$b" "Expand one item or one phase per brief" 1
-has "plan rules stop at 120k and return the rest as to expand" "$b" "Stop at 120k context" 1
-has "plan rules never default to M" "$b" "\`unknown\`, never M" 1
-has "plan return names the items to expand" "$b" "To expand:" 1
-has "plan brief points at the unit section" "$b" "sed -En '/^### U-01 ·" 1
-has "plan brief carries no implementor size check" "$b" "$SIZE" 0
+AC_BLOCK="Stage 1, AC draft"
+EXPAND_BLOCK="Stage 2, expand"
+b=$(brief --plan "$PLAN" --units U-01 --kind plan-expand)
+expect_rules "plan-expand gets the four hygiene rules" "$b" 1 1 1 1
+has "plan-expand carries the stage-2 block" "$b" "$EXPAND_BLOCK" 1
+has "plan-expand keeps AC read-only" "$b" "AC is read-only" 1
+has "plan-expand rules stop at 120k and return the rest as to expand" "$b" "Stop at 120k context" 1
+has "plan-expand rules never default to M" "$b" "\`unknown\`, never M" 1
+has "plan-expand return names the items to expand" "$b" "To expand:" 1
+has "plan-expand return sends an impossible AC to the owner" "$b" "AC back to owner" 2
+has "plan-expand brief points at the unit section" "$b" "sed -En '/^### U-01 ·" 1
+has "plan-expand brief carries no implementor size check" "$b" "$SIZE" 0
+has "plan-expand brief carries no stage-1 block" "$b" "$AC_BLOCK" 0
+
+b=$(brief --plan "$PLAN" --units U-02 --kind plan-ac)
+expect_rules "plan-ac gets the four hygiene rules" "$b" 1 1 1 1
+has "plan-ac carries the stage-1 block" "$b" "$AC_BLOCK" 1
+has "plan-ac names the stage-1 fields" "$b" "Outcome, AC (numbered" 1
+has "plan-ac carries no stage-2 block" "$b" "$EXPAND_BLOCK" 0
+has "plan-ac brief points at the unit section" "$b" "sed -En '/^### U-02 ·" 1
+has "plan-ac rules stop at 120k" "$b" "Stop at 120k context" 1
+b=$(brief --work "$TMP/work" --units Q-03 --kind plan-ac)
+if [ -f "$b" ] && ! grep -q "sed -En" "$b" && [ "$(count "$b" "$AC_BLOCK")" == 1 ]; then ok "plan-ac from a queue row needs no plan"; else bad "plan-ac --work: brief [$b]"; fi
+if echo x | "$SCRIPT" --plan "$PLAN" --units U-01 --kind plan --round 99 >/dev/null 2>&1; then bad "kind plan is gone"; else ok "kind plan is gone"; fi
 exit $fail

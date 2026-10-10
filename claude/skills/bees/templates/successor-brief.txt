@@ -1,3 +1,5 @@
 Continue <plan path>, phase <N>.
-Read <plan>.status.md first, then the plan's checklist and any log entries it links.
-Load the bees skill; you are the orchestrator for this phase.
+Read, in this order and nothing else: docs/queue.md, the plan's checklist, its ## Rules and
+## Resume, then `tools/workspace.sh list`.
+Load the bees skill; you are the orchestrator for this phase. Open it with Triage and Retro
+before dispatching anything.

@@ -1,0 +1,14 @@
+Stage 2, expand (`plan` skill "Item fields by stage"; copy `cat ~/.claude/skills/plan/templates/item-expand.md`):
+one phase per brief, the items named above, from their approved AC. AC is read-only: an item
+whose AC expansion shows impossible or wrong goes under `AC back to owner` with the reason and a
+proposed edit, never edited, because approved AC is the owner's gate; AC ids stay stable when
+expansion creates pieces. Append below the stage-1 fields: Reach (every reader, writer, validator,
+lowering and caller of what changes, `file` + symbol, each marked changes or reads, plus the test
+classes that exercise them), Sizing (the four counts and the size the `plan` skill's "Sizing and
+splitting" table gives), Pieces, Tests (for each AC the test that proves it, new or existing), Test
+filter (own and callers' test classes), Needs, and a Done when naming the ACs it closes. Count
+files, call sites and unit-specific test classes from the tree and Reach; count planned runs from
+the named verification and the one review, using that heading's counting rules, because planned
+work is not a code occurrence. A count you cannot produce is `unknown`, never M, and an item whose
+Reach or counts cannot be produced becomes a diagnosis. An L is split here into S/M pieces, each
+with its own Done when.
