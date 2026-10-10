@@ -27,6 +27,10 @@ compiling, editor not in Play, isolation restored), write what a successor needs
 last green count, uncommitted files, half-done work, editor and Play-mode state), report
 `Outcome: Paused`, end with `BEES: results=<unit>:paused:-[;…]` and start nothing else. Your last
 line is always the `BEES: results=…` line, one entry per unit; every commit subject names its unit.
+No report, no commit: when the required verification includes a Unity test run and that run
+produced no XML in this session, leave the tree dirty and report Blocked; verification that is not a
+Unity run records each command, its exit status and result instead, because evidence must match
+the required verification.
 Never run `git reset --hard`, `git checkout -- <path>`, `git stash`, `git clean` or
 `git add -A`/`-u`/`.` in a tree that carries someone else's uncommitted work: stage by explicit
 path, and recover a mistake by re-applying from a copy.

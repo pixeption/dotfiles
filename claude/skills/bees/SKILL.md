@@ -88,7 +88,7 @@ many units there are and how many sessions they need:
 | plan | mode |
 |---|---|
 | one or two units, one sitting | **No bees.** Do it yourself, or one agent, one brief, no plan checklist, no reviewer unless the change is risky. |
-| a handful of units, one session | **Light.** One implementor, continued across units until its budget is spent; review only risky units; status in your final message, no checklist. |
+| a handful of units, one session | **Light.** One implementor, continued across units until its budget is spent; review per `reference/review.md` "Once per unit", so the smaller bookkeeping mode preserves the review boundary; status in your final message, no checklist. |
 | multi-session, two exclusive resources, or any unit scored ≥ 8 | **Full.** A plan in the `plan` skill's format with its status and log files, rounds in its `.work/`, review per `reference/review.md`. |
 
 Choosing "full" for a small plan is the error, not the safe default.
@@ -206,7 +206,8 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
   loads, and what it doesn't") — without it, codex cannot know the command surface exists.
 - **Lanes.** In a repo that runs lanes (nono4u), who runs where — codex in place in a lane or `bee-*`
   sub-agents holding one for units that edit or drive an editor, sub-agents for read-only work and the gate — is its
-  `workspaces` skill "Who works where"; accept, then integrate, each unit before reusing its lane.
+  `workspaces` skill "Who works where"; follow the checkpoint and parent-review boundary in
+  `reference/review.md` "Once per unit" before reusing a lane, so pieces are not accepted separately.
 - **Claude instead of codex** only when the unit needs judgment a batch run cannot settle (a
   screenshot read, a live Play-mode check), or codex is out of usage. Before routing for browser
   judgment, verify the assigned bee can open the target with a browser tool; otherwise make the
@@ -230,7 +231,7 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
 - A codex unit's validation (compile, the fast lane) is part of its cost: do it
   yourself when the diff is small, otherwise hand it to `bee-sonnet-medium` holding the resource.
   A baseline before a unit whose acceptance compares against one goes to `bee-haiku-runner`.
-- **Three test levels, each run once**, so no suite runs twice for one unit:
+- **Three test levels, each run once at its boundary**, so verification is not repeated within a level:
   - *Round* — the bee, holding its lane: the fail-before plus the item's test filter, its own and
     its callers' test classes, once at the end of the round
     (`templates/standing-rules-implementor.txt`); it never re-runs Game full or another unit's filter.
@@ -267,8 +268,10 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
          unit when it needs a run or a judgment, a path map before a first-use unit ("Routing").
 - [ ] 5. Roster: resources → holders → slots → order, units grouped by area and bucket.
 - [ ] 6. Delegate; continue or spawn (reference/budgets.md).
-- [ ] 7. Review (reference/review.md); evaluate; delegate fixes; recheck.
-- [ ] 8. Accept against the criteria ("Status and acceptance").
+- [ ] 7. At an item or complete parent's boundary: review (reference/review.md); evaluate;
+         delegate fixes; recheck. Pieces follow "Once per unit" instead, so review covers the parent.
+- [ ] 8. Record a piece as ☑ checkpoint; accept only the item or complete parent against its
+         criteria ("Status and acceptance"), so a checkpoint is never counted as acceptance.
 - [ ] 9. Report ("What you say to the user").
 - [ ] 10. At every pause, decision or acceptance: phase done, or context hook fired?
           → reference/handoff.md
@@ -334,7 +337,9 @@ it, no hook writes it, nothing lives only in `.work/` (gitignored, disposable co
 `bees-watch`). The file formats are the `plan` skill's "Status and log files"; a new status file
 starts from `cat ~/.claude/skills/plan/templates/status.md`.
 
-**Acceptance** — accepting a unit is two edits; the commit is the landing's ("Commit cadence"):
+**Acceptance** — accepting an unsplit item or complete parent is two edits; the commit is the
+landing's ("Commit cadence"). A piece records ☑ and its checkpoint SHA instead of ✅ or an
+`accept:` line, because its parent's review is still pending.
 
 ```text
 - [ ] Checklist: Status ✅.
@@ -348,8 +353,7 @@ write it at a pause, a handoff, or when a resource changes holder.
 Also log each round as it finishes (`[<unit>] round: impl r2 codex sol high, done, ctx 96k,
 impl-<unit>-r2.txt`), each review verdict, each owner decision (`decision: …`, and in Keep in mind
 while it applies), each tooling gap, every one a report lists and not only the blocking ones
-(`gap: …`), and each escape (`escape: <unit> <test> caught at <level>` — a bug first caught one
-level later than it should have been, "Cost routing"; the `plan` skill's log kinds gain it in
+(`gap: …`), and each escape as defined in "Cost routing" (the `plan` skill's log kinds gain it in
 STEP-02b). A session id worth resuming goes in status.md. A log entry that needs more than one
 line is a checklist row or a plan section instead.
 

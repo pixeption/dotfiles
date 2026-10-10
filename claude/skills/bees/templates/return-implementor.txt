@@ -10,9 +10,8 @@ Cost: context now / turns / elapsed.
 Concerns: risks, assumptions, regressions.
 Need from orchestrator: only if a decision is required.
 BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]
-No report, no commit: when your required verification includes a Unity test run and that run
-produced no XML in this session, leave the tree dirty and report Blocked; verification that is not a
-Unity run records each command, its exit status and result instead.
+Apply the standing rules' "No report, no commit" gate before committing; the Verification field
+above carries its evidence.
 Then hand back only these lines, nothing else, since the orchestrator opens the file when it needs
 detail:
 Outcome: <Done|Blocked|Needs decision|Paused> — <one clause of substance>
