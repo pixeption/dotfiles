@@ -7,7 +7,9 @@ Read when a phase ends or the context hook fires.
 The orchestrator pays its context every turn like any agent, and compaction's summary is lossy in
 ways nobody chose. It hands off to a fresh orchestrator — one role, chained — at:
 
-- **Phase end**: every unit in phase N is ✅. You decide this; no tool does.
+- **Phase end**: every parent item in phase N is accepted, including parents represented by ☑
+  piece rows, so checkpoints are not mistaken for missing or completed acceptance. You decide
+  this from the checklist and parent acceptance log lines; no tool does.
 - **Context**: the `PostToolUse` hook (`scripts/context-nudge`) injects "Context at 170k: … hand
   off" once per session, since a handoff there costs least for the measured startup cost and
   growth. Finish the running unit, then hand off by ~200k. The hook reads the transcript, which

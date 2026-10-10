@@ -38,7 +38,7 @@ Checklist columns for a plan:
 | `Size` | S · M · L or `unknown`, counted from the item's Sizing (below), never a guess |
 | `Route` | who implements it (a bees "Routing" bucket or a named agent/model); `-` outside bees |
 | `Phase` | the session that should finish it (below) |
-| `Depends` | hard dependencies only — IDs, or `-` |
+| `Depends` | hard dependencies only — IDs, or `-` — so scheduling does not serialize independent work |
 | `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ☑ `<sha>` checkpoint (a piece landed, its parent's review pending) · ✅ `<sha>` done, with the suite counts |
 
 A piece row names its parent in its `Item` cell (`… — piece of STEP-07`), so a ☑ is never read as an
@@ -108,24 +108,27 @@ Counting rules:
 - Planned runs are the runs the expansion can name before the run — suite runs, editor or browser
   sessions, live checks, the one review — never the fix rounds observed afterwards, which measure
   churn, not size.
-- Standing filters that join every run are fixed overhead, not a size signal: count only the
-  item's own test classes.
+- Standing filters that join every run are fixed overhead, not a size signal: count the distinct
+  unit-specific classes in the item's Test filter, including its own and its callers' tests.
 
 A count the planner cannot produce makes the size `unknown`: the item becomes a read-only diagnosis
 that returns the counts, never an M by default. An L cannot leave planning: split it there into S/M
 pieces. Every piece:
 
-- is a checkpoint, not an acceptance. A **serial** piece is a private lane checkpoint: the tree
-  builds, its `Done when` holds, it is committed on the task branch and not integrated — a
-  tests-first piece whose `Done when` names planned-red tests stays off the target. A **parallel**
-  piece integrates on its own only when it leaves the target green. The **parent item is reviewed
-  and accepted once, over its complete change**, when the last piece lands;
+- is a checkpoint, not an acceptance, so review covers the complete parent change. A **serial**
+  piece is a private lane checkpoint: the tree builds, its `Done when` holds, it is committed on
+  the task branch and not integrated; planned-red tests named in `Done when` stay off the target.
+  A **parallel** piece integrates on its own only when it leaves the target green. Pieces receive
+  no individual review. After the last checkpoint, review and accept the **parent once**: on the
+  lane before a serial group integrates, with the complete parent filter green; on the target for
+  parallel pieces, over their recorded SHAs so unrelated commits are excluded;
 - has its own `Done when` — a piece you cannot write one for is not a piece;
 - follows a seam: contract or model first, then its callers; one screen, case or area at a time;
   a mechanical migration in batches; a read-only diagnosis before the fix it scopes; a bulk
   re-seed or golden re-capture as its own piece after the code it reflects.
 
-Never split "code" from "its tests", or into halves that need each other's uncommitted work.
+Keep code and its tests in the same parent item, so acceptance covers both; its pieces follow the
+checkpoint boundary above. Never split into halves that need each other's uncommitted work.
 
 **Sub-items or new items.** Pieces that read the same files are sub-items, `STEP-07a`, `STEP-07b`:
 one agent carries its warm context from one to the next. Pieces in different areas, or that can run
@@ -136,14 +139,15 @@ context, each sub-item gets its own `### STEP-07a · <title>` section.
 A **phase** is what one session should finish: ≈ 5–8 items. Phases are numbered from 1 and follow
 the `Depends` order.
 
-Every item section ends with a `Done when:` line. An item's review is its own last step — one
-sentence in the shared context ("each item ends with a review; accepted only on APPROVE"), never a
-`REV-nn` row per item, which doubles the checklist without adding work to track. Closing its editors
-and integrating its lane are likewise the unit's last steps, never their own rows and never folded
-into a gate. An item lands as **one commit** whose subject names its id, so the landed commit is
+Every item section ends with a `Done when:` line. For an unsplit item, review is its last
+implementation step; split items use the parent review boundary above. Put this in shared context,
+never a `REV-nn` row, which doubles the checklist without adding work to track. Closing its editors
+and integrating its lane are the unit's final shipping steps, never their own rows or part of a
+gate, so each landing remains attributable to its item. An item lands as **one commit** whose subject names its id, so the landed commit is
 found with `git log --grep '<ID>'`; the Status cell and the `accept:` log line hold the reviewed
-lane SHA and the counts the review ran on. Plan and log lines ride in the next item's commit, never
-committed on their own.
+lane SHA and the counts the review ran on. Plan and log edits written before landing ride in that item's commit, so its change and evidence
+stay together. Post-integrate evidence and bookkeeping that cannot be folded wait for the next
+landing or a plan-stage, phase-end or handoff commit; log lines are never committed alone.
 
 Every phase ends with a `GATE-<n>` row, `<n>` its phase number (1 pt, `Depends` listing each of the
 phase's item IDs), whose section is only this checklist, so the phase cannot close on a green suite
