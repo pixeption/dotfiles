@@ -12,7 +12,8 @@ namespace UnitySuite
 {
     // unity-suite --shards installs this into each shard project and launches it as
     //   -batchmode -executeMethod UnitySuite.ShardRunner.Run -shard k/N -timings <report> -shardOut <xml>
-    // It runs bin k of N over the current Edit-Mode test list by exact name, writes the NUnit report
+    //   [-shardFilter <A|B>] [-shardCategory <Name|!Name>]
+    // It runs bin k of N over the selected Edit-Mode tests by exact name, writes the NUnit report
     // and a <xml>.plan.json the merge checks it against, then exits 0 (all passed), 2 (a failure) or
     // 3 (the runner itself failed).
     [InitializeOnLoad]
@@ -42,8 +43,10 @@ namespace UnitySuite
                 var shard = Arg("-shard").Split('/').Select(int.Parse).ToArray();
                 var output = Path.GetFullPath(Arg("-shardOut"));
                 var timings = Durations(Arg("-timings", required: false));
+                var filter = Arg("-shardFilter", required: false);
+                var category = Arg("-shardCategory", required: false);
                 var api = CreateInstance<TestRunnerApi>();
-                api.RetrieveTestList(TestMode.EditMode, root => Guard(() => Start(api, root, shard[0], shard[1], output, timings)));
+                api.RetrieveTestList(TestMode.EditMode, root => Guard(() => Start(api, root, shard[0], shard[1], output, timings, filter, category)));
             }
             catch (Exception e)
             {
@@ -52,9 +55,11 @@ namespace UnitySuite
         }
 
         private static void Start(TestRunnerApi api, ITestAdaptor root, int k, int n, string output,
-                                  Dictionary<string, double> timings)
+                                  Dictionary<string, double> timings, string filter, string category)
         {
-            var leaves = Leaves(root).ToList();
+            var leaves = Leaves(root)
+                .Where(t => ShardPlan.Selected(t.FullName, SelfAndAncestors(t).SelectMany(a => a.Categories), filter, category))
+                .ToList();
             var allTests = SortedNames(leaves);
             var explicitTests = SortedNames(leaves.Where(IsExplicit));
             var runnable = leaves.Where(t => !IsExplicit(t)).Select(t => (t.FullName, Fixture(t)));

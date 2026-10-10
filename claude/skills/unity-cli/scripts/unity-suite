@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <seconds>]
 #             [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
-# unity-suite <project> --shards <N> --shard-root <dir> [--timeout <s>] [--output <report.xml>]
+# unity-suite <project> --shards <N> --shard-root <dir> [--timeout <s>] [--filter <A|B>] [--category <expr>] [--output <report.xml>]
 #
-# --shards runs the full Edit-Mode suite across N warm copies <dir>/shard-<k>/<project name>, one
+# --shards runs the Edit-Mode suite, or the part --filter/--category select, across N warm copies <dir>/shard-<k>/<project name>, one
 # batch editor each, and leaves <project> and its editor alone (run_shards).
 # A filtered Edit-Mode run goes to the open editor through unity-test, leaving it open, when that
 # editor never entered Play this session and its run selects what a batch run would (live_blocker,
@@ -23,7 +23,7 @@ DIE_CODE=2
 # TIMEOUT: 30 min is many times a full suite (Pipeline.UI runs ~2 min) yet still ends a hung batch
 # editor, which `unity test` alone would wait on forever.
 USAGE="usage: unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
-       unity-suite <project> --shards <N> --shard-root <dir> [--timeout <s>] [--output <report.xml>]"
+       unity-suite <project> --shards <N> --shard-root <dir> [--timeout <s>] [--filter <A|B>] [--category <expr>] [--output <report.xml>]"
 # A bare call would close the editor and run the full suite, so it must name what to run.
 [[ $# -eq 0 ]] && die "$USAGE"
 ARG="."; MODE=EditMode; FAILED=""; OUTPUT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""; CATEGORY=""
@@ -45,8 +45,9 @@ PROJECT=$(resolve_project "$ARG") || exit 2
 
 if [[ -n "$SHARDS$SHARD_ROOT" ]]; then
   [[ "$SHARDS" =~ ^[1-9][0-9]*$ && -n "$SHARD_ROOT" ]] || die "--shards <N ≥ 1> and --shard-root <dir> go together"
-  [[ -z "$FAILED$FILTER$ASSEMBLIES$CATEGORY" && "$MODE" == EditMode ]] \
-    || die "--shards runs the whole Edit-Mode suite: no --mode, --failed-only, --filter, --assemblies or --category"
+  [[ -z "$FAILED$ASSEMBLIES" && "$MODE" == EditMode ]] \
+    || die "--shards runs Edit Mode only: no --mode, --failed-only or --assemblies"
+  [[ -z "$CATEGORY" || "$CATEGORY" =~ ^!?[A-Za-z0-9_]+$ ]] || die "--shards takes one --category: <Name> or !<Name>"
 fi
 
 # Unity reads neither list with commas: the run matches 0 tests and still exits 0.
@@ -244,7 +245,8 @@ run_shard() {
   trap 'exit 143' TERM
   mkdir -p "$2/Logs" && rm -f "$out" "$out.plan.json" || die "could not prepare shard $1's reports"
   "$UNITY" -batchmode -projectPath "$2" -logFile "$2/Logs/Editor.log" -executeMethod UnitySuite.ShardRunner.Run \
-    -shard "$1/$SHARDS" -shardOut "$out" ${TIMINGS[@]:+"${TIMINGS[@]}"} >/dev/null 2>&1 &
+    -shard "$1/$SHARDS" -shardOut "$out" ${TIMINGS[@]:+"${TIMINGS[@]}"} \
+    ${FILTER:+-shardFilter "$FILTER"} ${CATEGORY:+-shardCategory "$CATEGORY"} >/dev/null 2>&1 &
   pid=$!
   while kill -0 "$pid" 2>/dev/null; do
     (( SECONDS < deadline )) || { echo "shard $1 timed out after ${TIMEOUT}s" >&2; exit 124; }
@@ -338,7 +340,8 @@ run.attrib.update(total=str(len(seen) + len(explicit)), passed=count("Passed"), 
 ET.ElementTree(run).write(report, encoding="utf-8", xml_declaration=True)
 MERGE
   (( broken == 0 )) || DIE_CODE=2 die "a shard editor crashed or timed out (see its Logs/Editor.log)"
-  cp "$REPORT" "$timings"
+  # A partial run would drop every unselected test's duration from the next full split.
+  [[ -n "$FILTER$CATEGORY" ]] || cp "$REPORT" "$timings"
 }
 
 if [[ -n "$SHARDS" ]]; then

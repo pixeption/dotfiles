@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Offline test for the shard runner's planner (scripts/shard-runner/ShardPlan.cs), compiled with
 # plain dotnet: the split is deterministic whatever the input order, disjoint, covers every test,
-# keeps a fixture lighter than a bin whole and splits one heavier than a bin.
+# keeps a fixture lighter than a bin whole and splits one heavier than a bin; selection matches a
+# batch run's --filter and --category.
 set -uo pipefail
 command -v dotnet >/dev/null || { echo "FAIL: dotnet not on PATH - install the .NET SDK"; exit 1; }
 PLAN="$(cd "$(dirname "$0")/.." && pwd)/scripts/shard-runner/ShardPlan.cs"
@@ -57,6 +58,11 @@ Check(BinsHolding(four, "Ns.Huge") > 1, "a fixture heavier than a bin is split")
 Check(Enumerable.Range(0, 30).All(f => BinsHolding(four, $"Ns.F{f:D2}") == 1), "a fixture lighter than a bin stays whole");
 var two = tests.Where(t => t.Name.EndsWith(".M1") && t.Fixture.CompareTo("Ns.F02") < 0);
 Check(ShardPlan.Pack(two, durations, 4).Count(b => b.Count == 0) == 2, "more shards than tests leaves bins empty");
+var integration = new[] { "Integration" };
+Check(ShardPlan.Selected("Ns.Apply.M", integration, "Apply|Theme", "Integration"), "a test matching a filter term and the category is selected");
+Check(!ShardPlan.Selected("Ns.Seed.M", integration, "Apply|Theme", "Integration"), "a test matching no filter term is not");
+Check(!ShardPlan.Selected("Ns.Apply.M", new string[0], "", "Integration"), "a test outside the category is not");
+Check(ShardPlan.Selected("Ns.Apply.M", new string[0], "", "!Integration") && !ShardPlan.Selected("Ns.Apply.M", integration, null, "!Integration"), "!Name excludes the category");
 return failed == 0 ? 0 : 1;
 CS
 out=$(dotnet run --project "$TMP/t.csproj" 2>&1); code=$?

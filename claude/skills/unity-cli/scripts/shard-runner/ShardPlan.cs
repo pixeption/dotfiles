@@ -1,12 +1,22 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace UnitySuite
 {
     // Pure planning, no Unity types, so tests/shard-plan.sh can compile it with plain dotnet.
     public static class ShardPlan
     {
+        // Mirrors a batch run's selection: --filter is a regex per |-term on the full name, --category
+        // one name, kept (Name) or excluded (!Name).
+        public static bool Selected(string name, IEnumerable<string> categories, string filter, string category)
+        {
+            var byName = string.IsNullOrEmpty(filter) || filter.Split('|').Any(term => Regex.IsMatch(name, term));
+            if (!byName || string.IsNullOrEmpty(category)) return byName;
+            return categories.Contains(category.TrimStart('!')) != category.StartsWith("!");
+        }
+
         // Longest-processing-time packing of tests into `shards` bins. A fixture stays whole unless it
         // alone outweighs a bin; an unseen test weighs the median. Every tie breaks by ordinal name,
         // so every shard computes the same, disjoint, covering split from the same inputs.

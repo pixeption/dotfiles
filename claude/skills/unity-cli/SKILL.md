@@ -299,10 +299,11 @@ rather than guessing from the exit code. Under the count line it prints
 `error CS` lines and does **not** reopen the editor (it would only fail on the same errors): fix, then
 `unity-editor up`.
 
-**Sharded.** `unity-suite <project> --shards N --shard-root <dir> [--output <report.xml>]` runs the
-full Edit-Mode suite in N batch editors at once, one per warm copy `<dir>/shard-<k>/<project name>`,
-and never touches `<project>` or its editor. It takes no `--mode`, `--filter`, `--assemblies`,
-`--category` or `--failed-only`, and picks no N: one editor per shard counts against the host
+**Sharded.** `unity-suite <project> --shards N --shard-root <dir> [--filter <A|B>] [--category <Name|!Name>]
+[--output <report.xml>]` runs the Edit-Mode suite, or the part `--filter` (a regex per term) and one
+`--category` select, in N batch editors at once, one per warm copy `<dir>/shard-<k>/<project name>`,
+and never touches `<project>` or its editor. A filtered run keeps the last full run's timings. It
+takes no `--mode`, `--assemblies` or `--failed-only`, and picks no N: one editor per shard counts against the host
 budget, so the caller sizes N. What each run does, and why:
 
 - **A missing shard is seeded once**: `cp -cR` of `<project>/Library` (refused while `<project>`'s

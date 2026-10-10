@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Offline test for `unity-suite --shards`: a stub editor binary stands in for the shard runner. A
 # missing shard is seeded as a git checkout with the runner installed; the shard reports and the
-# explicit tests merge into one report, which also becomes the next run's -timings. A duplicate
+# explicit tests merge into one report, which also becomes the next run's -timings unless the run
+# was filtered; --filter and --category reach every shard. A duplicate
 # test, a shard without a report, shards listing different tests, a crashed or hung shard editor, a
 # failed suite and an occupied shard fail the run; stopping the run stops its editors.
 set -uo pipefail
@@ -65,6 +66,12 @@ grep -q -- "-timings $ROOT/timings.xml" "$TMP/args" || fail "second run did not 
 [[ ! -e "$ROOT/shard-1/GameCore/Assets/Editor/Tool.cs" && -f "$ROOT/shard-1/GameCore/Assets/Editor/ShardRunner/ShardRunner.cs" ]] \
   || fail "resync deletes removed sources and keeps the runner"
 echo "ok   the next run times its split from the last report, and resync keeps the runner"
+cp "$ROOT/timings.xml" "$TMP/timings.before"; rm "$TMP/args"
+out=$(suite ok --filter 'A|B' --category Integration) || fail "filtered run"
+[[ $(grep -c -- "-shardFilter A|B -shardCategory Integration" "$TMP/args") == 2 ]] || fail "filter and category reach both shards"
+cmp -s "$ROOT/timings.xml" "$TMP/timings.before" || fail "a filtered run replaced the timings"
+out=$(suite ok --category 'A || B'); [[ $? == 2 && $out == *"one --category"* ]] || fail "category expression refused"
+echo "ok   --filter and --category reach every shard, keep the full run's timings, and take one category"
 
 out=$(suite dup); code=$?
 [[ $code == 2 && $out == *"duplicate: A.a in shards 1 and 2"* ]] || fail "duplicate (exit $code)"
