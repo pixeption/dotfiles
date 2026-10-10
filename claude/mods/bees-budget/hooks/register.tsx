@@ -3,7 +3,7 @@ import type { EngineInterface, ModelUsage, Register } from 'claude-code'
 
 import type { CodexLaunch, CodexSession } from '../types'
 
-const CONTINUE_LINE = 150_000
+const CONTINUE_LINE = 120_000
 const RETIRE_AT = 200_000
 const COLD_LIMIT = 100_000
 const CLAUDE_TTL_MS = 5 * 60_000
@@ -146,7 +146,7 @@ const attach = async ($: EngineInterface, s: CodexSession) => {
 }
 
 const cacheText = (r: Row, now: number) =>
-  r.isRunning ? 'running' : isCold(r, now) ? 'cold' : `warm ${Math.ceil((r.ttlMs - (now - r.at)) / 60_000)}m`
+  r.isRunning ? 'running' : `warm ${Math.ceil((r.ttlMs - (now - r.at)) / 60_000)}m`
 
 const statusColor = (r: Row, now: number) => (isBlocked(r, now) ? 'red' : r.isRunning ? 'green' : undefined)
 
@@ -192,18 +192,16 @@ export const register: Register = on => {
     const codexRows = (await read($, codex)).map(s => ({
       ...s, vendor: 'codex', model: modelEffort(s.model?.split('-').pop() ?? '?', s.effort), ttlMs: CODEX_TTL_MS, codex: s,
     }))
-    const rows = [...(await beeRows($)), ...codexRows].filter(r => r.isRunning || now - r.at < SHOWN_FOR_MS)
+    const rows = codexRows.filter(r => !isCold(r, now))
     if (rows.length === 0) return next(e)
 
     const { Box, Button, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
         {rows.map(r => (
-          <Box key={r.codex?.id ?? r.label} gap={2}>
+          <Box key={r.codex.id} gap={2}>
             <Text dimColor>{r.vendor} {r.model}</Text>
-            {r.codex
-              ? <Button key={r.codex.id} plain onPress={() => void attach($, r.codex!)}>{r.label}</Button>
-              : <Text wrap="truncate-end">{r.label}</Text>}
+            <Button key={r.codex.id} plain onPress={() => void attach($, r.codex)}>{r.label}</Button>
             <Text color={tokenColor(r.tokens)}>{kilo(r.tokens)}</Text>
             <Text dimColor={!statusColor(r, now)} color={statusColor(r, now)}>
               {cacheText(r, now)}{isBlocked(r, now) ? ' · spawn fresh' : ''}

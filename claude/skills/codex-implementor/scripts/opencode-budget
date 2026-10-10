@@ -13,7 +13,7 @@
 set -euo pipefail
 sid="${1:?usage: opencode-budget <session-id> <prompt-file>}"
 promptfile="${2:?usage: opencode-budget <session-id> <prompt-file>}"
-continue_line=150000                # bees: no new brief at 150k; a fix round past it outgrows 200k
+continue_line=120000                # bees: no new brief at 120k; a fix round past it outgrows 200k
 cold_limit=100000                   # bees: past the clock, continue only under ~100k
 cache_ttl_ms=$((30 * 60 * 1000))    # codex's cache clock is 30 minutes
 

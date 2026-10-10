@@ -25,7 +25,7 @@ What the rules below protect:
 - **Capability is bought per unit.** Most units are bounded and sol at medium handles them; higher
   effort only where it changes the outcome, a stronger model only as a consultant on a blocker.
 - **Neither a spawn nor a resume is free.** A fresh agent pays ~40–60k of onboarding; a resumed
-  one re-reads its session every step. Below ~150k the resume wins, past it the spawn does.
+  one re-reads its session every step. Below ~120k the resume wins, past it the spawn does.
 - **Rework is the second cost** (a review → fix → recheck round is 10–15M), **the orchestrator's
   own context the third** — compaction loses things nobody chose; a curated handoff does not.
 - **A blocked agent costs the owner's wall-clock**, so a background task is inspected, never
@@ -115,13 +115,15 @@ Choosing "full" for a small plan is the error, not the safe default.
    waits. Disjoint files inside one slot are not enough: sequence the units. A second orchestrator
    session reads the plan's status file (Resources) and `tools/workspace.sh list` before touching
    any slot. A blind codex worktree is outside every slot; **validating its diff** in a lane is not.
-4. **Session budget, both vendors: continue below 150k, finish the current round below 200k.** The
+4. **Session budget, both vendors: continue below 120k, finish the current round below 200k.** The
    figure is the harness's token count on a Claude agent's final notification, or `context_tokens`
-   in the codex wrapper's `.usage` — never the agent's own estimate, which runs low. At 150k it
+   in the codex wrapper's `.usage` — never the agent's own estimate, which runs low. At 120k it
    gets no new brief, not even a fix round or recheck: one sent there grows past 200k and pays
    twice. Spawn fresh and hand the resource over; an implementor bee pauses itself when
    its context hook says 200k. **A unit in a different repo or area always gets a fresh session**:
    the old context is dead weight, and a codex session is pinned to the directory it was created in.
+   **The same area is the point of a split**: an agent that finishes a sub-item (`STEP-07a`) below
+   120k gets the next ready sibling (`07b`, or `07c` if `07b` is taken or blocked) as its next brief.
    Check the figure before every SendMessage or `-s` resume;
    the `bees-budget` mod shows it above the prompt and enforces it on SendMessage to a `bee-*`
    agent, `opencode-budget` on `-s`.
@@ -315,6 +317,7 @@ starts from `cat ~/.claude/skills/plan/templates/status.md`.
 
 ```text
 - [ ] Checklist: Status ✅.
+- [ ] Lane: close its editors and release the claim (`workspaces` skill "End a lane session").
 - [ ] Log: - <date '+%F %H:%M'> [<unit>] accept: <evidence — suite count, review verdict, commit>
 ```
 

@@ -28,13 +28,13 @@ const send = ($: Engine, text = 'next unit') =>
   $.session.send({ to: 'worker', text, origin: { kind: 'model' } })
 
 test('a warm bee under the continue line gets the message', async ($, on) => {
-  hive(on, { tokens: 149_000 })
+  hive(on, { tokens: 119_000 })
   await stepAs($, 'a1')
   expect((await send($)).isDelivered).toBe(true)
 })
 
 test('a warm bee at the continue line is refused', async ($, on) => {
-  hive(on, { tokens: 150_000 })
+  hive(on, { tokens: 120_000 })
   await stepAs($, 'a1')
   const sent = await send($)
   expect(sent.isDelivered).toBe(false)
@@ -70,7 +70,7 @@ test('a cold bee under 100k gets the message', async ($, on) => {
 })
 
 test('a running bee is never cold', async ($, on) => {
-  const clock = hive(on, { tokens: 120_000, status: 'running' })
+  const clock = hive(on, { tokens: 110_000, status: 'running' })
   await stepAs($, 'a1')
   await clock.advance(30 * MINUTE)
   expect((await send($)).isDelivered).toBe(true)
@@ -94,15 +94,6 @@ const band = async ($: Engine) => {
   const ui = await mountBand($)
   return (await ui.findAll({})).map(t => t.text).filter(Boolean).join(' ')
 }
-
-test('the band shows a bee warm with its countdown, then cold past the clock', async ($, on) => {
-  const clock = hive(on, { tokens: 120_000 })
-  await stepAs($, 'a1')
-  await clock.advance(2 * MINUTE)
-  expect(await band($)).toMatch(/claude opus-low worker 120k warm 3m/)
-  await clock.advance(4 * MINUTE)
-  expect(await band($)).toMatch(/worker 120k cold · spawn fresh/)
-})
 
 type Codex = { id: string; label: string; tokens: number; at: number; createdAt?: number; isRunning: 0 | 1 }
 
@@ -150,6 +141,21 @@ test('the band shows a codex session mid-round as running', async ($, on) => {
   await clock.advance(60 * MINUTE)
   await codex.show($, [{ id: 's1', label: 'GAP-05a', tokens: 101_000, at: clock.now() - 40 * MINUTE, isRunning: 1 }])
   expect(await band($)).toMatch(/GAP-05a 101k running/)
+})
+
+test('the band leaves claude bees to the tasks list and drops cold codex sessions', async ($, on) => {
+  const clock = hive(on, { tokens: 120_000 })
+  const codex = codexWorld(on, clock)
+  await stepAs($, 'a1')
+  await codex.launch($, IMPLEMENT)
+  await clock.advance(60 * MINUTE)
+  await codex.show($, [
+    { id: 's1', label: 'GAP-05a', tokens: 10_000, at: clock.now() - 31 * MINUTE, isRunning: 0 },
+    { id: 's2', label: 'GAP-05a', tokens: 10_000, at: clock.now() - 1 * MINUTE, createdAt: clock.now(), isRunning: 0 },
+  ])
+  const rows = await (await mountBand($)).findAll({ type: 'Button' })
+  expect(rows.map(r => r.text)).toEqual(['GAP-05a'])
+  expect(await band($)).not.toMatch(/claude|cold/)
 })
 
 test('the band shows only codex sessions this session launched or resumed', async ($, on) => {

@@ -21,6 +21,8 @@ At the next safe point:
 - [ ] Start nothing new. Every running unit reports; a reviewer mid-recheck finishes.
 - [ ] Retire every Claude bee (the successor cannot receive their notifications). A codex session
       under 200k may stay for the successor to resume by id, in its pinned directory, same server.
+- [ ] Every lane a retired bee held: close its editors and release its claim (nono4u's `workspaces`
+      skill "End a lane session" steps 2–3) — a retired holder never comes back to do it.
 - [ ] Every gap a report listed since the last handoff is a tooling-gaps row or a `gap:` log line.
 - [ ] Write <plan>.status.md so the successor needs nothing from this tab:
       Setup — owner answers, each environment check with machine and date
