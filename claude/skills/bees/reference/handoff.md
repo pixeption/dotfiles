@@ -35,6 +35,8 @@ At the next safe point:
       named); accepted-but-unintegrated ranges; blockers; open review ids; each kept codex session
       (id, pinned dir, last out-file, context); the last verification command and result.
 - [ ] Queue: the running row's Stage and Lanes current; the next row's AC in the Owner list.
+- [ ] `git diff --numstat -- <plan>.md`: a handoff edits only the checklist, Rules and Resume, so
+      more deletions than those edits mean a truncated write — restore the plan before committing.
 - [ ] Log `handoff: phase N → <tab name>`; the handoff commit, by path:
       `git commit -m 'docs(plans): handoff …' -- <plan>.md <plan>.log.md docs/queue.md`
       (one of the docs-only commits bees "Commit cadence" permits).
