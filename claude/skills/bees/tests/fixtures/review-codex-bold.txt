@@ -1,0 +1,21 @@
+Two findings.
+
+**F1 — Full captures silently omit removed cells.** [capture.mjs:443](capture.mjs:443)
+
+The loop skips a cell whose node is gone, so the capture looks complete.
+
+Replace the loop with:
+
+```js
+for (const cell of cells) {
+  if (!cell.node) { missing.push(cell.id); continue; }
+  capture(cell);
+}
+```
+
+- **F2 — Anchoring hints are wrong for two profiles.** [facts.mjs:49](facts.mjs:49)
+
+Drop the hint for stretch profiles.
+
+BEES: reviews=CAP-01:F1,F2
+CHANGES_REQUIRED

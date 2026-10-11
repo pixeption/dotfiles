@@ -84,8 +84,8 @@ def finding_blocks(raw, lines, wanted):
         for i in starts:
             level, end = heading_level(raw[i]), len(lines)
             for j in range(i + 1, len(lines)):
-                l = lines[j]
-                if (FINDING_ID.match(l) or heading_level(raw[j]) <= level or l.startswith("BEES: ")
+                l, next_level = lines[j], heading_level(raw[j])
+                if (FINDING_ID.match(l) or next_level < 7 and next_level <= level or l.startswith("BEES: ")
                         or l in VERDICT or (level == 7 and FIELD.match(l))):
                     end = j
                     break
@@ -114,7 +114,8 @@ def git(lane, *args):
 
 
 def lane_state(lane, since):
-    commits = git(lane, "log", "--oneline", f"{since}..HEAD")
+    base = git(lane, "rev-parse", "--verify", "--end-of-options", f"{since}^{{commit}}")[0]
+    commits = git(lane, "log", "--oneline", f"{base}..HEAD", "--")
     dirty = git(lane, "status", "--short")
     return ([f"== lane {lane} · {len(commits)} commits since {since}"] + commits
             + [f"dirty: {len(dirty)} files"] + dirty)
