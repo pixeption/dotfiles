@@ -36,7 +36,8 @@ What the rules below protect:
 ## Setup (every new bees session)
 
 Read, in this order, and nothing else: `docs/queue.md`, then the running plan's checklist
-(`awk '/^\| ID \|/{f=1} f&&!/^\|/{exit} f' <plan>`), its `## Rules` and `## Resume`, then
+(`awk '/^\| ID \|/{f=1} f&&!/^\|/{exit} f&&!/\| ✅/' <plan>` — open rows only: a ✅ row is a
+satisfied dependency, and its evidence cell would be re-read every turn), its `## Rules` and `## Resume`, then
 `tools/workspace.sh list` — that is the whole committed state, so a session on any machine resumes
 from it. Score, route, phase, dependencies and status are all you schedule from; a whole plan stays
 in your context every turn. A unit's section is its implementor's to read; open one yourself
@@ -87,7 +88,7 @@ many units there are and how many sessions they need:
 |---|---|
 | one or two units, one sitting | **No bees.** Do it yourself, or one agent, one brief, no plan checklist, no reviewer unless the change is risky. |
 | a handful of units, one session | **Light.** One implementor, continued across units until its budget is spent; review per `reference/review.md` "Once per unit", so the smaller bookkeeping mode preserves the review boundary; status in your final message, no checklist. |
-| multi-session, two exclusive resources, or any unit scored ≥ 8 | **Full.** A queue row and a plan in the `plan` skill's format with its Rules, Resume and log, rounds in its `.work/`, review per `reference/review.md`. |
+| multi-session, two exclusive resources, or any unit scored ≥ 8 | **Full.** A queue row (added by the owner) and a plan in the `plan` skill's format with its Rules, Resume and log, rounds in its `.work/`, review per `reference/review.md`. |
 
 Choosing "full" for a small plan is the error, not the safe default.
 
@@ -389,7 +390,9 @@ reviewed lane SHA and counts; the landed commit is found by the unit id in its s
 
 Any agent reports a gap — source, evidence, minutes lost, workaround — in its report; **only the
 orchestrator writes** `docs/plans/tooling-gaps.md`, `docs/backlog.md` and the queue, because two
-lanes appending to one table is a merge conflict. This table is the only place gap routing is
+lanes appending to one table is a merge conflict. **Only the owner adds a queue row**, so the queue
+stays the owner's priority list: the orchestrator updates an existing row's Stage and Lanes and the
+Owner list, never adds a row or a plan for one. This table is the only place gap routing is
 stated; `tooling-gaps.md` and the root `CLAUDE.md` link here.
 
 | Found | Where it goes |
@@ -419,8 +422,9 @@ At every phase end only, by the successor orchestrator, before it dispatches any
 3. **Pick-up**, one batch: cluster the `fix` rows by area (one scout answers "which files does
    each touch?" when it isn't obvious); take at most **3 clusters**, highest summed minutes lost
    first — `unknown` stays unknown, never zero; among unknowns more `Hits`, then the lower id, or
-   one costing scout where the pick would be arbitrary. Each picked cluster is a queue row at
-   `to plan`; its AC draft joins the Owner batch. The rest wait for the next phase end. Backlog
+   one costing scout where the pick would be arbitrary. Each picked cluster is proposed in the queue's
+   Owner list (title, gap rows, recommendation), not added as a row; the owner adds the row, then
+   its AC is drafted. The rest wait for the next phase end. Backlog
    items are owner-ordered and queued only by the owner.
 
 ## Retro
