@@ -56,8 +56,9 @@ every "ask"; only `deny` holds. `external_directory` is deny-by-default with the
 config, Unity and temp directories allowed; bash denies `git reset --hard`, `git checkout --
 <path>`, `git stash`, `git clean`, force push and `rm -rf` on root/home. If a unit reports a denied
 path it legitimately needed, the owner widens the fence; the unit never works around it. After an
-edit, `opencode-preflight` restarts an idle server itself; by hand, `pkill -f "opencode serve"`
-when no session is busy.
+edit, `opencode-preflight` restarts an idle server itself, as it does one whose resident memory
+passes `--max-rss-mb` (default 1024: the server keeps every session it has served on its heap); by
+hand, `pkill -f "opencode serve"` when no session is busy.
 
 ## Running a round: flags and files
 
