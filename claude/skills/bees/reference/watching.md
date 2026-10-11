@@ -16,9 +16,7 @@ agent; launching, naming and the `bees-watch` commands are SKILL.md "Watching ro
   SKILL.md says. An astra consult is `review-<unit>-consult-r<N>.txt`.
 - **Launching.** `run_in_background: true` covers every wrapper (`opencode-implement`,
   `opencode-review`, the CLI fallbacks): the harness re-invokes you when the round exits.
-- Batch `unity test` writes its report to a cwd-relative `test-results.xml`, prints nothing and
-  can exit 1 on a green run. Briefs say: run from the project dir or pass an absolute `--output`,
-  parse the XML, ignore stdout and exit code (unity-cli skill).
+- Batch Unity brief instructions are SKILL.md "Briefing an agent"'s.
 
 ## Watching: `bees-watch` states
 

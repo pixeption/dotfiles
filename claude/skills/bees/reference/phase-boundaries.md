@@ -31,6 +31,9 @@ SKILL.md "Lifecycle" steps 1–4, from `to plan` to `ready`:
 4. Plan review: one codex discovery round per expanded phase (`codex-review` plan-review mode).
    Apply or disposition every finding; no High or Med open → stage `ready`.
 
+Convergence tasks: freeze metric, threshold, reference set and known floor before the loop; put
+open owner questions in one decision packet with costs.
+
 ## Size the plan first
 
 Score every item (SKILL.md "Routing") — the score is difficulty, not size, so the mode is picked by

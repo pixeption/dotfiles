@@ -51,9 +51,8 @@ planning, sizing or adoption passage for those, "Preflight" before the session's
    **`integration`** (the owner's checkout, only to merge and run the final check), claimed and
    released by its holder per the `workspaces` skill (reuse a warm lane first); a shared runtime
    claim the plan names (`perf-tests-<project>`) likewise. Others work read-only, in another slot
-   or a blind worktree no editor loads — or wait; disjoint files in one slot are not enough. A
-   second orchestrator session reads `## Resume` and `tools/workspace.sh list` before touching a
-   slot. A blind codex worktree is outside every slot; validating its diff in a lane is not.
+   or a blind worktree no editor loads — or wait; disjoint files in one slot are not enough. A blind
+   codex worktree is outside every slot; validating its diff in a lane is not.
 4. **Session budget, both vendors: continue below 120k, finish the round below 200k** — the
    harness's count or `.usage` `context_tokens`, never the agent's estimate. At 120k no new brief,
    not even a fix or recheck (it would pass 200k and pay twice): spawn fresh, hand the resource
@@ -71,7 +70,7 @@ planning, sizing or adoption passage for those, "Preflight" before the session's
 6. **A background task is inspected, never waited on** ("Watching rounds").
 7. **Review once per unit, at the parent boundary**, in proportion to risk, until the recheck is
    clean; the churn check, not a round count, stops a loop that is not converging
-   (`reference/review.md`).
+   (`reference/review.md`, read when choosing or briefing a reviewer).
 8. **State is the queue and two committed files per plan** (full mode): `<plan>.md` — checklist,
    `## Rules`, `## Resume` — and `<plan>.log.md`, nothing derived ("Status and acceptance").
 9. **Hand off at phase end, or at the first safe point past 170k, by 200k**
@@ -116,7 +115,7 @@ A unit taking a pipeline where no committed consumer has gone gets a **path map*
 | 5 | `-e high` | `bee-opus-high` |
 | 8 | `-e xhigh` | `bee-opus-high` |
 | 13 | `-e xhigh` | `bee-opus-xhigh` |
-| support, no points | — | `bee-haiku-runner`: named commands, raw results (baseline, suite, log evidence). `bee-sonnet-medium`: codex-diff validation, a run needing judgment, a one-area diagnosis |
+| support, no points | — | `bee-haiku-runner`, `bee-sonnet-medium` (above) |
 
 Model and effort live in the agent files and wrapper flags — **never pass `model:` on the Agent
 call**. **Usage limits**: no usage check runs before a round; a codex round failing on one (429)
@@ -132,14 +131,15 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
 
 ```text
 - [ ] 1–4. Plan the row (phase-boundaries "Planning a row"): AC draft → owner gate → expand
-         one phase → plan review → `ready`. Draft the next row's AC while this one runs and expand
-         the next phase while the current runs.
-- [ ] 5. Run: score, bucket, mode (phase-boundaries "Size the plan first", "Routing"); a scout,
+         one phase → plan review → `ready`. Draft the next row's AC and expand the next phase
+         while the current runs.
+- [ ] 5. Run: score and bucket ("Routing"), mode (phase-boundaries "Size the plan first"); a scout,
          diagnosis or path map only for a decision you must make first; roster resources →
          holders → slots → order; delegate, continue or spawn (reference/budgets.md).
 - [ ] 6. Each hand-back: evaluate; review at an item or complete parent's boundary
-         (reference/review.md), fix, recheck; a piece is a ☑ checkpoint, only an item or complete
-         parent is accepted and landed ("Status and acceptance"); route every gap ("Intake"); one
+         (reference/review.md), fix, recheck; accept only an item or complete parent; a piece is a
+         ☑ checkpoint, private if serial, integrated if parallel ("Status and acceptance"); route
+         every gap ("Intake"); one
          scheduling pass (a `ready` row or item with a free lane?); report. Only the Owner list
          waits on the owner; nothing `ready` and Owner non-empty → report starvation and stop, never
          inventing work or bypassing the owner gate.
@@ -150,15 +150,14 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
 - [ ] 8. Context hook fired at any pause, decision or acceptance? → reference/handoff.md
 ```
 
-Convergence tasks: freeze metric, threshold, reference set and known floor before the loop; put
-open owner questions in one decision packet with costs.
-
 ## Briefing an agent
 
 `bees-brief` builds a Claude bee's brief from the unit's own lines (objective, decisions and
 overrides since the plan, may-change, extra verification), adding units, BEES order, plan-section
 pointers, slot block, standing rules and return contract. Feed a quoted heredoc (an unquoted one
-runs backticks); in a lane repo `reuse` the lane first; hand over `Read <brief> and do what it says.`:
+runs backticks); in a lane repo `reuse` the lane first; hand over `Read <brief> and do what it says.`
+Copy "May change" and "Test filter" from the item's Reach, never re-derived, keeping the planned
+verification boundary.
 
 ```sh
 ~/.claude/skills/bees/scripts/bees-brief --plan docs/plans/<plan>.md --units DR-02,DR-01 \
@@ -168,6 +167,7 @@ runs backticks); in a lane repo `reuse` the lane first; hand over `Read <brief> 
 Objective: <one sentence>
 Decision: <each owner decision or override since the plan was written>
 May change: <the item's Reach changes entries>; nothing else.
+Test filter: <the item's Reach test classes>
 EOF
 ```
 
@@ -181,21 +181,25 @@ or scout brief, a blocker or consult.
 - **Point, don't paste**: acceptance is the plan section, a fix the review file and ids; the brief
   adds only what is not written down, since a pasted line is paid again in your context.
 - A brief with a live check says never to substitute an emulation without saying so in `Outcome`.
+- For batch `unity test`, the brief says: run from the project dir or pass an absolute
+  `--output`, parse the XML, ignore stdout and exit code — it prints nothing and can exit 1 on
+  a green run.
 
 **The BEES line** (`results=` from an implementor, `reviews=` above a reviewer's verdict) is the
-outcome. Missing, duplicated, wrapped or wrong-unit is malformed — you decide what is repeated, never an automatic re-run. A `replan`
-goes to a `plan-expand` round before any implementor resumes, logged on the unit. A hand-back that
-ignores its contract is acted on as it is; the next brief says so in one line.
+outcome. Missing, duplicated, wrapped or wrong-unit is malformed — you decide what is repeated,
+never an automatic re-run. A `replan` goes to a `plan-expand` round before any implementor
+resumes, logged on the unit. A hand-back that ignores its contract is acted on as is; the next
+brief says so in one line.
 
 ## Watching rounds
 
 Launch each codex round as its own Bash call with `run_in_background: true` (a trailing `&`'s
 finish goes unnoticed), its `-o` out-file `docs/plans/<plan>.work/impl-<unit>[+<unit>…]-r<N>.txt`
 or `review-…-r<N>.txt`, N counting up per unit and role. Watch with
-`~/.claude/skills/bees/scripts/bees-watch <out-file>...` or `--dir docs/plans/<plan>.work`, never
-the `.log`; a round quiet ~20 min gets a `bees-watch`. On a flag, a termination, a worktree or a
-pause read `reference/watching.md`. A stuck round goes to the owner in one line, never left for the
-next session.
+`~/.claude/skills/bees/scripts/bees-watch <out-file>...` or `--dir docs/plans/<plan>.work`;
+a round quiet ~20 min gets a `bees-watch`. On a flag, a termination, a worktree or a pause read
+`reference/watching.md`. A stuck round goes to the owner in one line, never left for the next
+session.
 
 ## Status and acceptance
 
@@ -208,17 +212,22 @@ context). The queue: what's next and what waits on the owner.
 **Accepting** an unsplit item or complete parent: Status ✅ `<reviewed lane SHA> <count>`, and the
 log line `- <date '+%F %H:%M'> [<unit>] accept: <suite count, review verdict, reviewed lane SHA>`;
 then land it with `tools/workspace.sh land` — editors closed, claim released, plan and log folded
-into the item's squash, the post-integrate check run (its flags: `workspaces` skill "Integrate a
-lane"). A piece records ☑ and its checkpoint SHA instead, its parent's review still pending.
+into the item's squash (flags: `workspaces` skill "Integrate a lane").
+**Post-integrate**, after every landing: hold `integration` and run the landed unit's filter
+plus Game full once as background Bash. Finish before the next landing moves the target; a red
+target is the next lane unit, ahead of the queue. Record tested SHA, command, filter and count.
+A GameCore filter selecting more than one Integration test borrows the test shards (`workspaces`
+"Borrow the test shards"); Game runs in one editor. It is target evidence, not acceptance:
+a piece records ☑ and its checkpoint SHA, unreviewed until its parent review.
 
 Also log each round (`[<unit>] round: impl r2 codex sol high, done, ctx 96k, impl-<unit>-r2.txt`),
 review verdict, owner decision (`decision: …`; one still applying next session is a Rules line),
 `gap: …`, `replan` and escape. More than one line is a checklist row or plan section instead.
 
 **Commit cadence**: one commit per item — the plan and log, written uncommitted in `integration`,
-land folded into it; lines `land` cannot fold wait for the next landing. The only docs-only commits are a plan stage, a phase end and a mid-phase handoff,
-each by path (`git commit -m … -- <paths>`). A landed commit is found by its unit id
-(`git log --grep '<ID>'`).
+land folded into it; lines `land` cannot fold wait for the next landing. The only docs-only
+commits are a plan stage, a phase end and a mid-phase handoff, each by path
+(`git commit -m … -- <paths>`). A landed commit is found by its unit id (`git log --grep '<ID>'`).
 
 ## Intake
 
@@ -248,13 +257,8 @@ for dependencies; numbers on the unit's line.
 
 ## Reference
 
-| file | read when |
-|---|---|
-| [`reference/phase-boundaries.md`](reference/phase-boundaries.md) | as "Setup" says |
-| [`reference/budgets.md`](reference/budgets.md) | a continue-or-spawn decision or a resource handover |
-| [`reference/routing.md`](reference/routing.md) | choosing a channel, a validation or a test level |
-| [`reference/briefs.md`](reference/briefs.md) | a brief "Briefing an agent" does not cover, a blocker or consult |
-| [`reference/review.md`](reference/review.md) | choosing or briefing a reviewer |
-| [`reference/watching.md`](reference/watching.md) | a `bees-watch` flag, a termination, a worktree or a pause |
-| [`reference/intake.md`](reference/intake.md) | a report lists a gap |
-| [`reference/handoff.md`](reference/handoff.md) | phase end, or the context hook fires |
+Read each when its linking passage says: [`phase-boundaries`](reference/phase-boundaries.md),
+[`budgets`](reference/budgets.md), [`routing`](reference/routing.md),
+[`briefs`](reference/briefs.md), [`review`](reference/review.md),
+[`watching`](reference/watching.md), [`intake`](reference/intake.md),
+[`handoff`](reference/handoff.md).

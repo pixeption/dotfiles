@@ -45,8 +45,7 @@ dispatch because the bee only claims it.
 - `--kind` picks the role's standing rules and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor,
   reviewer or planner also gets its return contract; a consult answers directly, no report file or
   BEES line, ending `CHANGES_REQUIRED`.
-- "May change" is the item's Reach *changes* entries and the test filter its Reach's test classes
-  (the `plan` skill's item fields), copied, not re-derived. An item without a Reach (every live plan)
+- Reach copying is SKILL.md "Briefing an agent"'s. An item without a Reach (every live plan)
   gets one from a `bee-scout` first: when the section names one side of a pair (writer/reader,
   export/import, check/apply, seed/parity), the scout lists the readers, validators and lowerings of
   what changes, and its `Answer` lines become the brief's "May change" and filter.

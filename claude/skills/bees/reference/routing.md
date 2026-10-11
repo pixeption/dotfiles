@@ -40,12 +40,7 @@ filter, the post-integrate check, the phase gate). SKILL.md "Routing" holds the 
   - *Round* — the bee, holding its lane: the fail-before plus the item's test filter, its own and
     its callers' test classes, once at the end of the round
     (`templates/standing-rules-implementor.txt`); it never re-runs Game full or another unit's filter.
-  - *Post-integrate* — you, after each landing, holding `integration`, as background Bash: the
-    landed unit's filter on the target plus Game full, once (about 2 min), so the target never
-    goes red. Landings are serialised: this check finishes before the next landing moves
-    the target, and a red target is the next unit on a lane, ahead of the queue. It is a target
-    check, not acceptance: a parallel piece that passes it is still unreviewed until its parent
-    review.
+  - *Post-integrate* — SKILL.md "Status and acceptance" owns the per-landing check.
   - *Phase gate* — the sharded runner, holding `integration` and `test-shards`: the full suites,
     once per phase, on a `bee-haiku-runner`, because it outlasts the 5-minute cache clock and a
     cold turn is cheapest on Haiku and keeps the run out of your context.
