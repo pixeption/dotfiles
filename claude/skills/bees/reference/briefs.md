@@ -34,9 +34,11 @@ later turn:
   `<repo>/docs/plans/<plan>.work/report-<unit>-<impl|fix|review|recheck>-r<N>.md`, in your
   scratchpad in light mode. The `report-` prefix keeps it out of `bees-watch --dir`.
 - Read finished reports and codex out-files with
-  `~/.claude/skills/bees/scripts/bees-report <file>...`: outcome, suite lines, what it needs from
-  you, blocker and options, each finding's first line, BEES and verdict, in a few lines. Open a
-  file only for the detail a decision needs, and then only that part (`grep -n -A3 MAJ-02 <file>`).
+  `~/.claude/skills/bees/scripts/bees-report <file>...`: outcome, suite lines, sizing, what it needs
+  from you, blocker and options, each finding's first line, the `.usage` context, BEES and verdict,
+  in a few lines. In the same call, add `--finding MAJ-02,F3` for each named finding's whole block
+  with its fix (an id the file lacks prints `MISSING:`), and `--lane <path> --since <base sha>` for
+  the lane's commits and dirty files — instead of follow-up `sed`, `grep` or `git` reads.
 - A hand-back that ignores the contract is acted on as it is; the next brief to that agent says so
   in one line.
 

@@ -1,0 +1,22 @@
+**CHANGES_REQUIRED — two findings.**
+
+Reviewed the diff against the unit's AC.
+
+## Findings
+
+### F1 — High: the retry loop never ends on a 404
+
+**Location:** `tools/fetch.sh:20–28`
+
+A 404 is retried like a 503, so the loop spins until the timeout.
+
+**Recommended replacement for line 24:**
+
+> case $code in 5??) retry ;; *) fail ;; esac
+
+### F3 — Low: the log line drops the URL
+
+Print `$url` in the failure line.
+
+BEES: reviews=FETCH-01:F1,F3
+CHANGES_REQUIRED

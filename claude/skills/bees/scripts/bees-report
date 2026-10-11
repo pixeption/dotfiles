@@ -1,24 +1,31 @@
 #!/usr/bin/env python3
 """Print the lines of a bees report or codex out-file the orchestrator acts on, never the prose.
 
-  bees-report <file>...
+  bees-report [--finding <IDs>] [--lane <path> --since <sha>] <file>...
 
 Per file: its size, the Outcome, any Blocked/STOP line, unity-suite's count and report lines, the
-Verification, Concerns, Blocker, Options and Need-from-orchestrator sections unless they say none, each finding's
-and each non-blocking suggestion's first line, and the trailing BEES and verdict lines. Open the file itself only for the detail a decision
-needs (bees reference/briefs.md "Reports").
-Exit 1 when a file is missing or has no BEES line: a malformed report, the orchestrator's call.
+Sizing, Verification, Concerns, Blocker, Options and Need-from-orchestrator sections unless they say
+none (a heading listing several, like `Resources / Cost / Need from orchestrator`, counts as its
+last), each finding's and each non-blocking suggestion's first line, the out-file's `.usage` context,
+and the trailing BEES and verdict lines.
+--finding MAJ-02,F3 adds each named finding's whole block, its fix included; an id the file lacks
+is named as missing. --lane/--since add the lane's commits since <sha> and its dirty files.
+Exit 1 when a file is missing or has no BEES line, a named finding is missing, or the lane cannot be
+read: the orchestrator's call. See bees reference/briefs.md "Reports".
 """
-import re, sys
+import argparse, json, re, subprocess, sys
 
-FIELD = re.compile(r"^(#+\s*|[-*]\s+)?(?:Concerns\s*/\s*)?(Outcome|Findings|Changes|Verification|Resources|Cost|Concerns|Suggestions|Goal|Discovered|Blocker|Tried|Options|Need from orchestrator)\b")
-SHOWN = ("Verification", "Concerns", "Blocker", "Options", "Need from orchestrator")
+LABELS = ("Outcome", "Findings", "Changes", "Verification", "Resources", "Cost", "Concerns", "Sizing",
+          "Suggestions", "Goal", "Discovered", "Blocker", "Tried", "Options", "Need from orchestrator")
+LABEL = "|".join(LABELS)
+FIELD = re.compile(rf"^(#+\s*|[-*]\s+)?(?:(?:{LABEL})\s*/\s*)*({LABEL})\b")
+SHOWN = ("Sizing", "Verification", "Concerns", "Blocker", "Options", "Need from orchestrator")
 BULLET = re.compile(r"^(?:[-*]|\d+[.)])\s+")
 NEED_NONE = re.compile(r"^[\s:*_-]*(none|nothing|n/?a)?\W*$", re.I)
 KEEP = re.compile(r"^(Blocked:|STOP\.|\d+/\d+ passed, |report: .* · finished |BEES: )")
 FINDING_ID = re.compile(r"^(?:#+\s*)?[-*\s]*((?:CRIT|MAJ|MIN|NIT)-\d+|F\d+)\b")
 VERDICT = ("APPROVE", "CHANGES_REQUIRED")
-FINDING_CHARS = 200  # the claim and usually its file:line; the exact fix stays in the file
+FINDING_CHARS = 200  # the claim and usually its file:line; --finding prints the whole block
 
 
 def field_body(lines, i):
@@ -64,16 +71,86 @@ def compact(lines):
     return out
 
 
+def heading_level(raw):
+    return len(raw) - len(raw.lstrip("#")) if raw.startswith("#") else 7
+
+
+def finding_blocks(raw, lines, wanted):
+    """Each wanted id's whole block: from its line to the next finding, an equal-or-higher heading,
+    a report field, BEES or verdict line. Ids absent from the file come back as missing."""
+    out, missing = [], []
+    for fid in wanted:
+        starts = [i for i, l in enumerate(lines) if (m := FINDING_ID.match(l)) and m.group(1) == fid]
+        for i in starts:
+            level, end = heading_level(raw[i]), len(lines)
+            for j in range(i + 1, len(lines)):
+                l = lines[j]
+                if (FINDING_ID.match(l) or heading_level(raw[j]) <= level or l.startswith("BEES: ")
+                        or l in VERDICT or (level == 7 and FIELD.match(l))):
+                    end = j
+                    break
+            out += [raw[k].rstrip() for k in range(i, end)]
+            while out and not out[-1]:
+                out.pop()
+            out.append("")
+        missing += [fid] * (not starts)
+    return out, missing
+
+
+def usage_line(path):
+    try:
+        usage = json.load(open(path + ".usage"))
+    except (OSError, ValueError):
+        return []
+    ctx = usage.get("context_tokens")
+    return [f"Context: {ctx:,} tokens (.usage)"] if isinstance(ctx, int) else []
+
+
+def git(lane, *args):
+    r = subprocess.run(["git", "-C", lane, *args], capture_output=True, text=True)
+    if r.returncode:
+        raise RuntimeError(r.stderr.strip() or f"git {' '.join(args)} exited {r.returncode}")
+    return r.stdout.splitlines()
+
+
+def lane_state(lane, since):
+    commits = git(lane, "log", "--oneline", f"{since}..HEAD")
+    dirty = git(lane, "status", "--short")
+    return ([f"== lane {lane} · {len(commits)} commits since {since}"] + commits
+            + [f"dirty: {len(dirty)} files"] + dirty)
+
+
+ap = argparse.ArgumentParser(usage="bees-report [--finding <IDs>] [--lane <path> --since <sha>] <file>...")
+ap.add_argument("--finding", default="", help="comma-separated ids, e.g. MAJ-02,F3")
+ap.add_argument("--lane")
+ap.add_argument("--since")
+ap.add_argument("files", nargs="+")
+args = ap.parse_args()
+if bool(args.lane) != bool(args.since):
+    ap.error("--lane and --since go together")
+wanted = [f for f in re.split(r"[,\s]+", args.finding) if f]
+
 rc = 0
-for path in sys.argv[1:]:
+for path in args.files:
     try:
         text = open(path, errors="replace").read()
     except OSError as e:
         print(f"== {path}: {e.strerror}"); rc = 1; continue
-    lines = [l.strip().replace("**", "") for l in text.splitlines()]
+    raw = text.splitlines()
+    lines = [l.strip().replace("**", "") for l in raw]
     print(f"== {path} · {len(lines)} lines · ~{len(text) // 4} tok")
     body = compact(lines)
-    print("\n".join(body))
+    print("\n".join(body + usage_line(path)))
     if not any(l.startswith("BEES: ") for l in body):
         print("(no BEES line: malformed report)"); rc = 1
+    if wanted:
+        blocks, missing = finding_blocks(raw, lines, wanted)
+        print("\n".join(["-- findings"] + blocks).rstrip())
+        if missing:
+            print(f"MISSING: {', '.join(missing)} not in {path}"); rc = 1
+if args.lane:
+    try:
+        print("\n".join(lane_state(args.lane, args.since)))
+    except RuntimeError as e:
+        print(f"== lane {args.lane}: {e}"); rc = 1
 sys.exit(rc)
