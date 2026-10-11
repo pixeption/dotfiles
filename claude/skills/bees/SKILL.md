@@ -150,6 +150,9 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
 - [ ] 8. Context hook fired at any pause, decision or acceptance? → reference/handoff.md
 ```
 
+Convergence tasks: freeze metric, threshold, reference set and known floor before the loop; put
+open owner questions in one decision packet with costs.
+
 ## Briefing an agent
 
 `bees-brief` builds a Claude bee's brief from the unit's own lines (objective, decisions and
@@ -250,10 +253,6 @@ for dependencies; numbers on the unit's line.
 | pause or end | changed rows, `Next`, uncommitted state | ≤ 10 lines |
 | handoff | tab name, successor's first unit, "this session stays open" | 3 lines |
 | completion | changes, decisions by id, verification, review, risks, owner decisions | as needed |
-
-> G1 (3 · codex sol medium) round 3 landed at `3b73b3a`: one projected-basis helper replaces two
-> walk fallbacks, closes CX-03/04. Slot 2 (`bee-opus-high`, 110k, area loaded) continues into B4
-> (8), not a fresh spawn.
 
 ## Reference
 
