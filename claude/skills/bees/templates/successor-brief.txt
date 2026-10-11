@@ -1,6 +1,8 @@
 Continue <plan path>, phase <N>.
 Read, in this order and nothing else: docs/queue.md, the plan's checklist, its ## Rules and
 ## Resume, then `tools/workspace.sh list`.
-Load the bees skill; you are the orchestrator for this phase. After a phase-end handoff, run
-Triage (including pick-up) and Retro before dispatching anything. On a context handoff within
-an unfinished phase, resume that phase without repeating its opening obligations.
+Load the bees skill; you are the orchestrator for this phase. After a phase-end handoff, read
+the bees reference/phase-boundaries.md "Triage" and "Retro" and run them (including pick-up)
+before dispatching anything. On a context handoff within an unfinished phase, resume that phase
+without repeating its opening obligations; read only that reference's "Preflight", before your
+first codex unit.

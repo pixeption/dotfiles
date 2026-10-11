@@ -10,8 +10,8 @@ ways nobody chose. It hands off to a fresh orchestrator — one role, chained �
 - **Phase end**: every parent item in phase N is accepted, including parents represented by ☑
   piece rows, so checkpoints are not mistaken for missing or completed acceptance, and the GATE
   row's full suites are green. You decide this from the checklist and parent acceptance log
-  lines; no tool does. Triage, pick-up and the retro are the successor's opening (bees "Triage",
-  "Retro"), never the retiring session's.
+  lines; no tool does. Triage, pick-up and the retro are the successor's opening
+  (`reference/phase-boundaries.md` "Triage", "Retro"), never the retiring session's.
 - **Context**: the `PostToolUse` hook (`scripts/context-nudge`) injects "Context at 170k: … hand
   off" once per session, since a handoff there costs least for the measured startup cost and
   growth. Finish the running unit, then hand off by ~200k. The hook reads the transcript, which

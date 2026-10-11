@@ -9,25 +9,21 @@
 
 ## Naming and launching a codex round
 
-- **Naming.** The wrappers take `-o` verbatim, so name every out-file
-  `docs/plans/<plan>.work/impl-<unit>[+<unit>…]-r<N>.txt` or `review-…-r<N>.txt`, N counting up per
-  unit and role; `bees-watch --dir` reads only files named that way. An astra consult is
-  `review-<unit>-consult-r<N>.txt`.
-- **Launching.** Run the wrapper (`opencode-implement`, `opencode-review`, the CLI fallbacks) as
-  its own Bash call with `run_in_background: true`, never with a trailing `&`: the harness then
-  re-invokes you when the round exits, while a `&`-detached round's finish goes unnoticed.
+Read when `bees-watch` flags a round, a round terminates, or you set up a worktree or pause an
+agent; launching, naming and the `bees-watch` commands are SKILL.md "Watching rounds"'s.
+
+- **Naming.** The wrappers take `-o` verbatim, and `bees-watch --dir` reads only files named as
+  SKILL.md says. An astra consult is `review-<unit>-consult-r<N>.txt`.
+- **Launching.** `run_in_background: true` covers every wrapper (`opencode-implement`,
+  `opencode-review`, the CLI fallbacks): the harness re-invokes you when the round exits.
 - Batch `unity test` writes its report to a cwd-relative `test-results.xml`, prints nothing and
   can exit 1 on a green run. Briefs say: run from the project dir or pass an absolute `--output`,
   parse the XML, ignore stdout and exit code (unity-cli skill).
 
 ## Watching: `bees-watch` states
 
-Never tail or Read the wrapper's `.log` — it stays in your context every later turn. Run:
-
-```sh
-~/.claude/skills/bees/scripts/bees-watch <out-file>...
-~/.claude/skills/bees/scripts/bees-watch --dir docs/plans/<plan>.work   # running or flagged rounds; --all for every one
-```
+The wrapper's `.log` stays in your context every later turn, hence `bees-watch` (SKILL.md "Watching
+rounds"); `--dir` lists running or flagged rounds, `--all` every one.
 
 One line per round — running/finished, minutes since the log last grew, BUSY/idle, context
 tokens, session id — and a flag, exit 1, when something needs you. BUSY is the server's status for
@@ -35,7 +31,7 @@ the round's directory (`/session/status` is scoped per directory) or a live wrap
 
 | flag | meaning | do |
 |---|---|---|
-| `ASK WAITING` | a permission ask nobody headless can answer | answer it through the attach TUI if the pattern is inside the fence's allowlist, else kill the run and re-brief; then fix the cause — the server predates the fence (SKILL.md "Setup"), or the session was resumed for a directory it is not pinned to |
+| `ASK WAITING` | a permission ask nobody headless can answer | answer it through the attach TUI if the pattern is inside the fence's allowlist, else kill the run and re-brief; then fix the cause — the server predates the fence (phase-boundaries "Preflight"), or the session was resumed for a directory it is not pinned to |
 | `STALE` | no log growth in 20 minutes and not BUSY: the run died | check the editor, re-run |
 | `quiet but BUSY (tool running)` | a long tool call — a Unity suite can be silent for 20 minutes | leave it |
 | `quiet but BUSY (model stream …)` | a provider holding a stream open with no output | leave it: `opencode-round` fails the round itself (`Blocked: the model stream stalled`) after `OPENCODE_ROUND_STALL_MIN` (15) minutes unchanged; resume with `-s` and the same prompt |
@@ -45,8 +41,8 @@ the round's directory (`/session/status` is scoped per directory) or a live wrap
 
 Under `--dir`, `failed` and `DEAD` show as `history`, not flagged, once the unit has a newer round
 of that role or a `[<unit>] accept:` line in `<plan>.log.md`. Then check the editor's state if the
-unit held a project. A stuck round is reported to the owner in one line with what `bees-watch`
-printed; it is never left for the next session.
+unit held a project. A stuck round's one-line owner report (SKILL.md "Watching rounds") quotes what
+`bees-watch` printed.
 
 ## After a termination
 

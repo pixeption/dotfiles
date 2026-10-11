@@ -1,13 +1,15 @@
 # Returns, the last-line contract, blockers and consults
 
-Read when writing any brief (SKILL.md "Briefing an agent" says what goes in it) or handling a
-report.
+Read when a brief or report needs more than SKILL.md "Briefing an agent" and rule 10 give: a brief
+kind other than `impl`, an item without a Reach, light mode, a codex or scout brief, the BEES line's
+exact form, or a blocker or consult.
 
 ## Contents
 
 - Return format
 - Reports
 - Composing a brief
+- Codex and scout briefs
 - Repeated findings
 - Standing rules
 - The last line is a contract
@@ -19,48 +21,28 @@ A Claude implementor or reviewer brief carries its role's return contract
 (`templates/return-implementor.txt` or `templates/return-reviewer.txt`, which `bees-brief` fills
 with the report path): the full report goes to that file and the hand-back is a few lines ending in
 the BEES line. Codex returns
-its final message in the out-file, and you fill the same fields from the diff and `.usage`.
-
-A suite count is evidence only with the `report: … · finished <HH:MM>` line quoted beside it:
-compare the time with the round's and never open the XML, since a count alone can come from an
+its final message in the out-file, and you fill the same fields from the diff and `.usage`. A
+suite count needs its `report:` line (SKILL.md rule 5) because a count alone can come from an
 earlier run.
 
 ## Reports
 
-Every report is read once, compact, because a hand-back or a `cat` stays in your context every
-later turn:
+Every report is read once, compact, through `bees-report` (SKILL.md rule 10), because a hand-back
+or a `cat` stays in your context every later turn. It prints outcome, suite lines, sizing, what it
+needs from you, blocker and options, each finding's first line, the `.usage` context, BEES and
+verdict; `--finding MAJ-02,F3` adds each named finding's whole block with its fix (an id the file
+lacks prints `MISSING:`).
 
-- A Claude bee's report path is absolute — a lane bee runs in another worktree —
-  `<repo>/docs/plans/<plan>.work/report-<unit>-<impl|fix|review|recheck>-r<N>.md`, in your
-  scratchpad in light mode. The `report-` prefix keeps it out of `bees-watch --dir`.
-- Read finished reports and codex out-files with
-  `~/.claude/skills/bees/scripts/bees-report <file>...`: outcome, suite lines, sizing, what it needs
-  from you, blocker and options, each finding's first line, the `.usage` context, BEES and verdict,
-  in a few lines. In the same call, add `--finding MAJ-02,F3` for each named finding's whole block
-  with its fix (an id the file lacks prints `MISSING:`), and `--lane <path> --since <base sha>` for
-  the lane's commits and dirty files — instead of follow-up `sed`, `grep` or `git` reads.
-- A hand-back that ignores the contract is acted on as it is; the next brief to that agent says so
-  in one line.
+A Claude bee's report path is absolute — a lane bee runs in another worktree —
+`<repo>/docs/plans/<plan>.work/report-<unit>-<impl|fix|review|recheck>-r<N>.md`, in your scratchpad
+in light mode. The `report-` prefix keeps it out of `bees-watch --dir`.
 
 ## Composing a brief
 
-Run `bees-brief` with only the unit's own lines on stdin, then hand the agent the path it prints
-(`Read <brief> and do what it says.`). Feed stdin from a quoted heredoc (`<<'EOF'`): an unquoted one runs the brief's backticks. In a lane repo, `reuse` the lane before dispatch — the bee only claims it:
+The command, its stdin and the kinds are SKILL.md "Briefing an agent"'s. The lane is `reuse`d before
+dispatch because the bee only claims it.
 
-```sh
-~/.claude/skills/bees/scripts/bees-brief --plan docs/plans/<plan>.md --units DR-02,DR-01 \
-  --kind impl --round 1 \
-  --include .claude/skills/workspaces/templates/lane-brief.txt \
-  --set lane=lane-1 --set 'task branch=task/lane-1-x' --set "full base sha=$B" \
-  --set 'target branch=feat/x' <<'EOF'
-Objective: <one sentence>
-Decision: <each owner decision or override since the plan was written, one line each>
-May change: <paths>; nothing else.
-EOF
-```
-
-- `--kind` is `impl`, `fix`, `review`, `recheck`, `consult`, `gate`, `plan-ac` or `plan-expand`; it picks the role's
-  standing rules and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor,
+- `--kind` picks the role's standing rules and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor,
   reviewer or planner also gets its return contract; a consult answers directly, no report file or
   BEES line, ending `CHANGES_REQUIRED`.
 - "May change" is the item's Reach *changes* entries and the test filter its Reach's test classes
@@ -68,9 +50,9 @@ EOF
   gets one from a `bee-scout` first: when the section names one side of a pair (writer/reader,
   export/import, check/apply, seed/parity), the scout lists the readers, validators and lowerings of
   what changes, and its `Answer` lines become the brief's "May change" and filter.
-- A fix round (`--kind fix`) goes back to the implementor by SendMessage while it is under 120k and
-  inside its cache clock (`reference/budgets.md` "Continue, spawn or hand over"), because a fresh
-  bee re-reads what the implementor still holds; spawn fresh only past either line.
+- A fix round goes back to the implementor (SKILL.md "Briefing an agent"; `reference/budgets.md`
+  "Continue, spawn or hand over") because a fresh bee re-reads what the implementor still holds;
+  spawn fresh only past either line.
 - `--kind plan-ac` and `--kind plan-expand` are the read-only planner at stage 1 and stage 2 of the
   `plan` skill's "Item fields by stage": each adds its stage block (`templates/planner-ac.txt`,
   `templates/planner-expand.txt`) before the planner's standing rules and return contract, because
@@ -94,6 +76,33 @@ EOF
   unit's acceptance criteria and all required verification on stdin, because no plan section
   supplies them.
 - A codex brief is not built this way: it follows codex-implementor's `templates/brief.md`.
+
+## Codex and scout briefs
+
+- A **codex** brief gives passages, not documents (codex-implementor "What the session loads, and
+  what it doesn't"), and runs with `-C` set to the repo the unit edits — the session is
+  pinned to it for life. Pass every other repo it names, a read-only one too, as an absolute
+  `--repo` to the OpenCode wrapper so preflight checks the fence allows it.
+- A **blind-worktree** codex brief states it cannot run Unity and must report what it could not
+  verify; an **in-place lane** codex brief carries the editor card and requires live verification.
+- Point rather than paste (SKILL.md "Briefing an agent"): restating a section means reading it
+  first.
+
+Examples:
+
+- Bad: "Investigate this and tell me what you think."
+- Bad: "Check the lock before running the suite and retry if another agent is using it."
+- Good: "You hold `lane-1` (`~/code/workspaces/lane-1`, its `Game/` and `GameCore/`). Another
+  agent holds `lane-2`, and `integration` is off-limits; do not run or edit anything there. If a
+  command fails because the project is held, stop and report."
+
+A **scout brief** is one question, the area to look in, what "answered" looks like, and
+"read-only, no editor, no sub-agents, stop when answered, `Needs diagnosis` if it needs a run or a
+judgment". Its return is the scout format in `bee-scout.md`; paste its `Answer`/`Constraints`
+lines into the implementor's brief, never the transcript.
+
+- Bad: "Diagnose why selection breaks after undo." (a diagnosis unit)
+- Good: "List every writer of `PuzzleProgress` and the tests that cover `UndoStack`; file:line each."
 
 ## Repeated findings
 
@@ -124,18 +133,16 @@ per unit the round serves (the wrapper's `-u` list), hashes comma-separated, `-`
 that finishes F2 and blocks LV-02 ends `BEES: results=F2:done:4a31ceeb;LV-02:blocked:-`.
 
 `replan` is the implementor's `Re-plan` return under `templates/standing-rules-implementor.txt`;
-its report's `Sizing` carries the real counts. The item goes back to a `--kind plan-expand` round that
-rewrites its Sizing and pieces before any implementor resumes, and the `Re-plan` is logged on the
-unit, since it means planning missed something. A planner ends
+its report's `Sizing` carries the real counts, which the `plan-expand` round SKILL.md "Briefing an
+agent" names rewrites with the pieces; it is logged because it means planning missed something. A planner ends
 `BEES: results=<unit>:<done|partial|blocked>:-`; `partial` lists the items still `to expand`, and an
 incomplete expansion never becomes `ready`.
 
 Every review brief keeps the terminal `APPROVE`/`CHANGES_REQUIRED` as the last line and puts
 `BEES: reviews=<unit>:<open-ids|->[;…]` on the line directly above it.
 
-You read that one line, not the prose, for the outcome. A report whose line is missing,
-duplicated, wrapped or names the wrong units is malformed — you decide whether the work or only
-the report is repeated, never an automatic re-run. Commit subjects name the unit
+You read that one line, not the prose, for the outcome; a malformed one is handled as SKILL.md
+"Briefing an agent" says. Commit subjects name the unit
 (`feat(ui): STEP-03 …`); nothing parses them.
 
 ## Blocker cap and consults

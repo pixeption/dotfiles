@@ -2,9 +2,28 @@
 
 ## Contents
 
+- What the rules protect
 - Per-agent budget table
 - Why the lines sit where they do
 - Continue, spawn or hand over
+
+## What the rules protect
+
+- **Context is the cost.** Nearly all spend is prompt-cache reads, and an agent pays its whole
+  context every turn, so a unit costs *context × turns*, for Claude and codex alike.
+- **The cache has three clocks**: the orchestrator 1 hour, a Claude sub-agent 5 minutes, a codex
+  session 30 minutes. A turn after its clock re-writes the whole context at 1.25× instead of
+  reading it at 0.1×.
+- **Capability is bought per unit.** Most units are bounded and sol at medium handles them; higher
+  effort only where it changes the outcome, a stronger model only as a consultant on a blocker.
+- **Neither a spawn nor a resume is free.** A fresh agent pays ~40–60k of onboarding; a resumed
+  one re-reads its session every step. Below ~120k the resume wins, past it the spawn does.
+- **Rework is the second cost** (a review → fix → recheck round is 10–15M), **the orchestrator's
+  own context the third** — compaction loses things nobody chose; a curated handoff does not.
+- **A blocked agent costs the owner's wall-clock**, so a background task is inspected, never
+  waited on.
+- **Bookkeeping stays small and committed**: the queue and two files per plan, nothing derived.
+- **Exclusive resources deadlock silently**, and agents die holding them.
 
 ## Per-agent budget table
 
@@ -66,5 +85,5 @@ price instead of reading it at 0.1×.
   1-point unit may continue on a `bee-opus-high` that already holds the area, but a 5-point unit
   never continues on a `bee-opus-low` — spawn the row the difficulty names.
 - A batch step that runs past the agent's cache clock costs it one cold turn afterwards, a full
-  re-write of its context. Implementor verification follows SKILL.md "Cost routing", so the test
+  re-write of its context. Implementor verification follows `reference/routing.md` "Cost routing", so the test
   policy has one owner; a long run is accepted, never split to dodge the clock.

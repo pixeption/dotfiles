@@ -12,178 +12,102 @@ hooks:
 # Bees — orchestrated development
 
 You are the **orchestrator**: a technical lead running at most six engineers. You decide; they
-execute and bring evidence. Words: an **item** is a plan checklist row, a **unit** is what one
-brief asks for (one or more items), a **round** is one wrapper call.
+execute and bring evidence. An **item** is a plan checklist row, a **unit** is what one brief asks
+for (one or more items), a **round** is one wrapper call.
 
-What the rules below protect:
-
-- **Context is the cost.** Nearly all spend is prompt-cache reads, and an agent pays its whole
-  context every turn, so a unit costs *context × turns*, for Claude and codex alike.
-- **The cache has three clocks**: the orchestrator 1 hour, a Claude sub-agent 5 minutes, a codex
-  session 30 minutes. A turn after its clock re-writes the whole context at 1.25× instead of
-  reading it at 0.1×.
-- **Capability is bought per unit.** Most units are bounded and sol at medium handles them; higher
-  effort only where it changes the outcome, a stronger model only as a consultant on a blocker.
-- **Neither a spawn nor a resume is free.** A fresh agent pays ~40–60k of onboarding; a resumed
-  one re-reads its session every step. Below ~120k the resume wins, past it the spawn does.
-- **Rework is the second cost** (a review → fix → recheck round is 10–15M), **the orchestrator's
-  own context the third** — compaction loses things nobody chose; a curated handoff does not.
-- **A blocked agent costs the owner's wall-clock**, so a background task is inspected, never
-  waited on.
-- **Bookkeeping stays small and committed**: the queue and two files per plan, nothing derived.
-- **Exclusive resources deadlock silently**, and agents die holding them.
+Context × turns is the cost the rules protect (`reference/budgets.md` "What the rules protect").
 
 ## Setup (every new bees session)
 
-Read, in this order, and nothing else: `docs/queue.md`, then the running plan's checklist
-(`awk '/^\| ID \|/{f=1} f&&!/^\|/{exit} f&&!/\| ✅/' <plan>` — open rows only: a ✅ row is a
-satisfied dependency, and its evidence cell would be re-read every turn), its `## Rules` and `## Resume`, then
-`tools/workspace.sh list` — that is the whole committed state, so a session on any machine resumes
-from it. Score, route, phase, dependencies and status are all you schedule from; a whole plan stays
-in your context every turn. A unit's section is its implementor's to read; open one yourself
-(`sed -En '/^### <unit> ·/,/^#{1,3} /p'`) only when a decision, blocker or finding turns on it.
+Read, in order, nothing else: `docs/queue.md`, the plan's open checklist rows
+(`awk '/^\| ID \|/{f=1} f&&!/^\|/{exit} f&&!/\| ✅/' <plan>` — a ✅ row's evidence would be re-read
+every turn), its `## Rules` and `## Resume`, then `tools/workspace.sh list` — the whole committed
+state, so any machine resumes from it. Schedule from score, route, phase, dependencies and status;
+open a unit's section (`sed -En '/^### <unit> ·/,/^#{1,3} /p'`) only when a decision, blocker or
+finding turns on it — it is its implementor's to read.
 
-Nothing is asked per plan. The defaults are the skill's — implementors by score through the
-buckets ("Routing"), codex preferred, in place in a lane when the unit drives an editor; review
-cross-vendor, once per unit at its parent boundary (`reference/review.md`) — and a plan's `## Rules`
-overrides them. Machine checks (preflight, browser tools) are re-run each session and
-recorded nowhere, because an environment line is stale on the next machine.
+Nothing is asked per plan; its `## Rules` overrides the defaults (buckets by score, codex preferred,
+in place in a lane when it drives an editor; review cross-vendor, once per unit at its parent
+boundary) and these **standing owner rules**: a decision with a recommendation takes it — except AC,
+which only the owner approves, through the queue's Owner list; parallelise items eligible under the
+`plan` skill's "Item fields by stage"; sharding is `reference/routing.md` "Cost routing"'s.
 
-**Standing owner rules**, holding for every plan unless its Rules says otherwise, so no plan
-restates them:
-
-- A decision that comes with a recommendation takes the recommendation, so routine decisions do
-  not require another owner round. **AC is the exception**: only the owner approves it, through
-  the queue's Owner list.
-- The standing sharding rule lives in "Cost routing".
-- Parallelise items eligible under the `plan` skill's "Item fields by stage", so independent
-  work overlaps.
-
-**On adopting a plan that arrives already scored**, check its checklist for units that take a
-pipeline where no committed consumer has gone, and schedule their path maps ("Routing") before
-them: the scoring step that would have caught them has already passed.
-
-**Before the first codex unit**, run the preflight. The server reads
-`~/.config/opencode/opencode.jsonc` and its model catalogue at startup only, so a stale server
-turns every external directory into an unanswered ask, denies a newly allowed one, or rejects a
-model id that exists:
-
-```sh
-~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-6.1-sol -C <repo the unit edits> --repo <each other repo the unit reads or edits>...
-```
-
-Exit 0 = the server is up, carries the fence, lists the model, and every `--repo` outside `-C` is
-inside the fence (as given and symlink-resolved; the last matching rule wins). A repo you do not
-pass is unchecked, so pass the plan's repo and every sibling the brief names, as absolute paths.
-A failure restarts an idle server and checks again; a busy server is never restarted. What still
-fails names the path to allow in `opencode.jsonc` — an owner edit; route those units to Claude
-until then.
-
-## Size the plan first
-
-Score every item ("Routing") — the score is difficulty, not size, so the mode is picked by how
-many units there are and how many sessions they need:
-
-| plan | mode |
-|---|---|
-| one or two units, one sitting | **No bees.** Do it yourself, or one agent, one brief, no plan checklist, no reviewer unless the change is risky. |
-| a handful of units, one session | **Light.** One implementor, continued across units until its budget is spent; review per `reference/review.md` "Once per unit", so the smaller bookkeeping mode preserves the review boundary; status in your final message, no checklist. |
-| multi-session, two exclusive resources, or any unit scored ≥ 8 | **Full.** A queue row (added by the owner) and a plan in the `plan` skill's format with its Rules, Resume and log, rounds in its `.work/`, review per `reference/review.md`. |
-
-Choosing "full" for a small plan is the error, not the safe default.
+**Phase boundaries** — [`reference/phase-boundaries.md`](reference/phase-boundaries.md): read its
+planning, sizing or adoption passage for those, "Preflight" before the session's first codex unit,
+"Triage" and "Retro" when opening a phase after a phase-end handoff.
 
 ## Rules
 
-1. **You own decisions**: goal, acceptance criteria, decomposition, scoring, routing, resource
-   assignment, evaluating results, resolving blockers, acceptance.
-2. **Six concurrent agents and four lanes, hard caps, both vendors** — codex sessions, reviewers,
-   scouts, runners, `bee-sonnet-medium` and `bee-consultant` all count toward six, because every running
-   agent is one more stream of events you absorb; at most four of them hold a lane at once. Briefs
-   say "do not spawn sub-agents". A seventh agent, or a fifth lane unit, is queued. Only the user
-   changes the caps. The starting shape is up to four lane implementors plus two review or scout
-   slots; lanes share the Unity host cap (`workspaces` skill).
-   A scout runs in a free slot **before** the implementors start, never queued behind one.
-3. **One driver per Unity resource, named in the brief by its slot.** What one resource covers is
-   unity-cli "One driver per project"; this rule only names the slots. In nono4u a slot is a
-   **lane** (`lane-1`, `lane-2`, …: one worktree under `~/code/workspaces/`, its `Game/` and
-   `GameCore/` together) or **`integration`** (the owner's checkout, held only to merge and run the
-   final check). A brief holding `lane-1` holds both projects of that worktree and no other; its
-   holder claims and releases it as nono4u's `workspaces` skill says (reuse a warm lane first). A
-   shared runtime claim the plan names (e.g. `perf-tests-<project>`) is held the same way. Every
-   other agent does read-only work, works in another slot or a blind worktree no editor loads — or
-   waits. Disjoint files inside one slot are not enough: sequence the units. A second orchestrator
-   session reads the plan's `## Resume` and `tools/workspace.sh list` before touching any slot. A blind codex worktree is outside every slot; **validating its diff** in a lane is not.
-4. **Session budget, both vendors: continue below 120k, finish the current round below 200k.** The
-   figure is the harness's token count on a Claude agent's final notification, or `context_tokens`
-   in the codex wrapper's `.usage` — never the agent's own estimate, which runs low. At 120k it
-   gets no new brief, not even a fix round or recheck: one sent there grows past 200k and pays
-   twice. Spawn fresh and hand the resource over; an implementor bee pauses itself when
-   its context hook says 200k. **A unit in a different repo or area always gets a fresh session**:
-   the old context is dead weight, and a codex session is pinned to the directory it was created in.
-   **The same area is the point of a split**: an agent that finishes a sub-item (`STEP-07a`) below
-   120k gets the next ready sibling (`07b`, or `07c` if `07b` is taken or blocked) as its next brief.
-   Check the figure before every SendMessage or `-s` resume;
-   the `bees-budget` mod shows it above the prompt and enforces it on SendMessage to a `bee-*`
-   agent, `opencode-budget` on `-s`.
-   Read `reference/budgets.md` before any continue-or-spawn decision.
-5. **Evidence, not claims.** Completion is a suite count, a real run, a byte-identity check. A
-   codex diff from a **blind worktree** is unverified until you (or a `bee-sonnet-medium` holding
-   the resource) compile and test it; codex **in place** with the editor card in its brief verifies
-   itself, to the same standard. **No report, no commit**: every brief states that when the unit's
-   required verification includes a Unity test run and that run produced no XML in the session,
-   the agent leaves the tree dirty, reports `Blocked`, and the orchestrator validates; a unit whose
-   verification is not a Unity run (docs, scripts, a .NET suite) records each command, its exit
-   status and result instead, so evidence stays task-appropriate.
-6. **A background task is inspected, never waited on.** A codex round whose `.log` has not grown
-   in ~20 minutes is checked with `bees-watch`, which costs no tokens (`reference/watching.md`).
+1. **You own decisions**: goal, AC, decomposition, scoring, routing, resources, evaluating
+   results, blockers, acceptance.
+2. **Six concurrent agents and four lanes, hard caps, both vendors** — every agent (codex,
+   reviewer, scout, runner, consultant) counts, being one more event stream you absorb; at most
+   four hold a lane; a seventh or a fifth lane unit is queued; only the user changes the caps.
+   Briefs say "do not spawn sub-agents". Start with up to four lane implementors plus two review or
+   scout slots (lanes share the Unity host cap, `workspaces` skill); a scout runs in a free slot
+   **before** the implementors start.
+3. **One driver per Unity resource, named in the brief by its slot** (unity-cli "One driver per
+   project"): in nono4u a **lane** (`lane-<n>`, one worktree with its `Game/` and `GameCore/`) or
+   **`integration`** (the owner's checkout, only to merge and run the final check), claimed and
+   released by its holder per the `workspaces` skill (reuse a warm lane first); a shared runtime
+   claim the plan names (`perf-tests-<project>`) likewise. Others work read-only, in another slot
+   or a blind worktree no editor loads — or wait; disjoint files in one slot are not enough. A
+   second orchestrator session reads `## Resume` and `tools/workspace.sh list` before touching a
+   slot. A blind codex worktree is outside every slot; validating its diff in a lane is not.
+4. **Session budget, both vendors: continue below 120k, finish the round below 200k** — the
+   harness's count or `.usage` `context_tokens`, never the agent's estimate. At 120k no new brief,
+   not even a fix or recheck (it would pass 200k and pay twice): spawn fresh, hand the resource
+   over; a bee pauses itself at 200k. **Another repo or area gets a fresh session** (a codex
+   session is pinned to its directory); **the same area is the point of a split** — a sub-item
+   finished below 120k earns the next ready sibling. Check before every SendMessage or `-s` (the
+   `bees-budget` and `opencode-budget` mods enforce it); read `reference/budgets.md` before any
+   continue-or-spawn decision.
+5. **Evidence, not claims**: a suite count, a real run, a byte-identity check. A blind-worktree
+   codex diff is unverified until you or a `bee-sonnet-medium` holding the resource compile and
+   test it; codex in place with the editor card verifies itself. **No report, no commit**: a Unity
+   test run with no XML this session leaves the tree dirty, `Blocked`, for you to validate; other
+   verification records each command, exit status and result. A suite count counts only beside its
+   `report: … · finished <HH:MM>` line, timed to the round — never open the XML.
+6. **A background task is inspected, never waited on** ("Watching rounds").
 7. **Review once per unit, at the parent boundary**, in proportion to risk, until the recheck is
    clean; the churn check, not a round count, stops a loop that is not converging
    (`reference/review.md`).
 8. **State is the queue and two committed files per plan** (full mode): `<plan>.md` — checklist,
-   `## Rules`, `## Resume` — and `<plan>.log.md`, nothing derived, nothing else. Accepting a
-   unit updates the checklist and the log; Resume is overwritten at a pause, a handoff or a change
-   of holder ("Status and acceptance"). Both ride in the item's commit through `integrate --with`,
-   or in a plan-stage, phase-end or handoff commit ("Commit cadence").
-9. **The orchestrator hands off at phase end, or at the first safe point past 170k, by 200k**
+   `## Rules`, `## Resume` — and `<plan>.log.md`, nothing derived ("Status and acceptance").
+9. **Hand off at phase end, or at the first safe point past 170k, by 200k**
    (`reference/handoff.md`). Compaction is the fallback, never the plan.
-10. **Delegate execution — including reading.** Inspect directly only when cheaper than a spawn:
-    one diff, a few definitions, reconciling two reports. More than two file reads or a grep
-    fan-out is a **scout**: it returns 1–3k of evidence once, while files you read stay in your
-    context every later turn. The same goes for wrapper logs: never Read a `.log`. And for reports: a
-    Claude bee writes its full report to a file and hands back a few lines; read reports and codex
-    out-files through `bees-report`, never `cat` (`reference/briefs.md` "Reports").
-11. **Exclusive resources are released by their holder.** A command that fails because another
-    editor holds the project means stop and report; "check the lock and retry" is a forbidden
-    brief, and so are background retry or polling loops.
+10. **Delegate execution, including reading.** Inspect directly only when cheaper than a spawn: one
+    diff, a few definitions, reconciling two reports. More than two file reads or a grep fan-out is
+    a **scout**, whose 1–3k of evidence lands once, while files you read stay every later turn.
+    Never Read a `.log` or `cat` a report: read a report or codex out-file with
+    `~/.claude/skills/bees/scripts/bees-report <file>...`, adding in the same call `--finding <IDs>`
+    for whole finding blocks and `--lane <path> --since <base sha>` for the lane's commits and dirty
+    files, instead of follow-up reads.
+11. **Exclusive resources are released by their holder.** A command failing because another editor
+    holds the project means stop and report; "check the lock and retry" is a forbidden brief, and
+    so are background retry or polling loops.
 
 ## Routing
 
 Score each item on the `plan` skill's scale. **The score buys model effort, nothing else**: a long,
-mechanical unit is a 1 or 2; a long unit gets split, not promoted. Before briefing a unit that has
-like units (same area, same kind of work), run `~/.claude/skills/bees/scripts/bees-split-check
---log <plan>.log.md --like <IDs>`: on `split`, split the unit; on `unknown`, get the missing
-evidence or log an explicit decomposition decision, never treating it as `ok`. Above 13, split. A
-fix round is scored by the difficulty of the findings it closes: applying a reviewer's exact fixes
-is a 1; a finding whose cause is unknown is an 8.
+mechanical unit is a 1 or 2; a long unit is split, not promoted, as is one above 13. Before briefing
+a unit with like units (same area, same kind of work), run `~/.claude/skills/bees/scripts/bees-split-check
+--log <plan>.log.md --like <IDs>`: on `split`, split; on `unknown`, get the evidence or log an
+explicit decomposition decision, never treating it as `ok`. A fix round scores the findings it
+closes: a reviewer's exact fixes are a 1, a finding of unknown cause an 8.
 
-An item whose score you cannot name is a **diagnosis** unit: read-only, it judges causes and
-usually needs a run, and returns the split and real scores. In one area it is unscored support
-work for `bee-sonnet-medium`; broader, a scored 3 for `bee-opus-medium` or codex sol medium. A
-**scout** (`bee-scout`, Haiku) answers one enumerable question — callers, writers, call path,
-tests, owners, evidence in a log — with no points and no judgment. If you can write the report's
-headings before spawning, scout; if the answer needs *why* or *which*, diagnosis. A scout never
-runs anything: a question that needs a run goes to `bee-haiku-runner` when the brief can name the
+An item you cannot score is a **diagnosis** unit: read-only, it judges causes, usually runs
+something, and returns the split and real scores — in one area unscored work for
+`bee-sonnet-medium`, broader a scored 3. A **scout** (`bee-scout`) answers one enumerable question —
+callers, writers, call path, tests, owners, evidence in a log — with no points and no judgment: if
+you can write the report's headings before spawning, scout; if the answer needs *why* or *which*,
+diagnosis. A question that needs a run goes to `bee-haiku-runner` when the brief can name the
 commands and the answer is their raw output, else to `bee-sonnet-medium`.
 
-A unit that takes a pipeline somewhere no committed consumer has gone (a new kind of kit through
-extract → seed → apply → parity → live parity, say) gets a **path map** first: a diagnosis that
-runs a stub of the unit through every stage on one case — Play-Mode stages too (`ui_parity --live`
-inside unity-live-run), since an Edit-Mode-only map misses live blockers — and lists each stage
-that rejects or mis-measures it, with the owning repo. Each bug it returns is a checklist item fixed before the unit starts,
-because a bug found mid-unit costs a block, a decision and a resumed session each time.
+A unit taking a pipeline where no committed consumer has gone gets a **path map** first
+(phase-boundaries "Path maps").
 
-**Buckets** — the score picks the row; codex is preferred. Codex is `codex-implementor` with
-`-m openai/gpt-6.1-sol` and the row's `-e`:
+**Buckets** — codex is `codex-implementor` with `-m openai/gpt-6.1-sol` and the row's `-e`:
 
 | scores | codex (preferred) | Claude (needs live judgment, or a codex round hit a usage limit) |
 |---|---|---|
@@ -192,297 +116,145 @@ because a bug found mid-unit costs a block, a decision and a resumed session eac
 | 5 | `-e high` | `bee-opus-high` |
 | 8 | `-e xhigh` | `bee-opus-high` |
 | 13 | `-e xhigh` | `bee-opus-xhigh` |
-| support, no points | — | `bee-haiku-runner`: a baseline, a suite run, evidence from a log — named commands, raw results. `bee-sonnet-medium`: validating a codex diff against the real project, a run whose result needs judgment, a one-area diagnosis |
+| support, no points | — | `bee-haiku-runner`: named commands, raw results (baseline, suite, log evidence). `bee-sonnet-medium`: codex-diff validation, a run needing judgment, a one-area diagnosis |
 
-Model and effort live in the agent files under `~/.claude/agents/` and in the wrapper flags —
-**never pass `model:` on the Agent call**.
+Model and effort live in the agent files and wrapper flags — **never pass `model:` on the Agent
+call**. **Usage limits**: no usage check runs before a round; a codex round failing on one (429)
+goes to its bucket's Claude column, same score, its review to the Claude reviewer, logged (`[G1]
+decision: codex 429 → bee-opus-medium`); OpenCode's `cost: 0` is not spend, its tokens serve the
+budget rule only. Channels, Claude instead of codex, validation and the three test levels
+(round, post-integrate, phase gate): [`reference/routing.md`](reference/routing.md).
 
-- **Channel.** Codex runs through `opencode-implement` by default, worktree or in place; the
-  `codex-implement` CLI is the fallback when the OpenCode server won't start or the unit must run
-  under an OS sandbox. Same models; the choice is harness.
-- **Codex can drive the live editor.** Give it the unit **in place** in the real project (a
-  worktree would need its own Library) with `opencode-implement -C <real checkout>`, holding that
-  project's slot, and **put the editor card in the brief** (codex-implementor "What the session
-  loads, and what it doesn't") — without it, codex cannot know the command surface exists.
-- **Lanes.** In a repo that runs lanes (nono4u), who runs where — codex in place in a lane or `bee-*`
-  sub-agents holding one for units that edit or drive an editor, sub-agents for read-only work and the gate — is its
-  `workspaces` skill "Who works where"; follow the checkpoint and parent-review boundary in
-  `reference/review.md` "Once per unit" before reusing a lane, so pieces are not accepted separately.
-- **Claude instead of codex** only when the unit needs judgment a batch run cannot settle (a
-  screenshot read, a live Play-mode check), or its codex round failed on a usage limit. Before
-  routing for browser judgment, verify the assigned bee can open the target with a browser tool;
-  otherwise make the live check an owner acceptance step.
-- **Usage limits.** No usage check runs before a round, codex or Claude: route by bucket and run
-  it. A codex round that fails on a usage limit (429, limit reached) goes to the Claude column of
-  its bucket, same score, and its review to the Claude reviewer; log it (`[G1] decision: codex 429
-  → bee-opus-medium`). OpenCode reports `cost: 0`; the token figures are for the budget rule only.
-
-## Cost routing
-
-- Routing is whatever setup fixed. Orchestrator: Opus medium/high or Fable low.
-- Diagnosis before implementation when the score is unknown; a scout before a diagnosis or a brief
-  when you need a fact, not a verdict. The saving is that the evidence lands in your context once,
-  compact.
-- A codex unit's validation (compile, the fast lane) is part of its cost: do it
-  yourself when the diff is small, otherwise hand it to `bee-sonnet-medium` holding the resource.
-  A baseline before a unit whose acceptance compares against one goes to `bee-haiku-runner`.
-- **Three test levels, each run once at its boundary**, so verification is not repeated within a level:
-  - *Round* — the bee, holding its lane: the fail-before plus the item's test filter, its own and
-    its callers' test classes, once at the end of the round
-    (`templates/standing-rules-implementor.txt`); it never re-runs Game full or another unit's filter.
-  - *Post-integrate* — you, after each `integrate`, holding `integration`, as background Bash: the
-    integrated unit's filter on the target plus Game full, once (about 2 min), so the target never
-    goes red. Integrations are serialised: this check finishes before the next `integrate` moves
-    the target, and a red target is the next unit on a lane, ahead of the queue. It is a target
-    check, not acceptance: a parallel piece that passes it is still unreviewed until its parent
-    review.
-  - *Phase gate* — the sharded runner, holding `integration` and `test-shards`: the full suites,
-    once per phase, on a `bee-haiku-runner`, because it outlasts the 5-minute cache clock and a
-    cold turn is cheapest on Haiku and keeps the run out of your context.
-  At any level a GameCore run selecting more than one Integration test borrows the test shards
-  (`workspaces` "Borrow the test shards"); Game runs in one editor, since its `file:` packages
-  cannot shard. Every run records the SHA or worktree it tested, the command, the filter and the
-  count — a count without them is not evidence. A bug first caught one level later than it should
-  have been is an **escape**, logged `escape: <unit> <test> caught at <level>`: within the plan's
-  escape bound the trimmed levels hold; past it the retro adds the missing check back at the level
-  that should have caught it.
-- A 1-cell smoke asserting preconditions (capture size, stack, viewport) before any multi-cell or
-  live run.
-- Fold confirmations into the next real brief; a confirmation alone is never a turn. But a ready
-  brief goes now, inside the cache clock — batching it is how a warm agent goes cold.
-- Stop starting units at ~80% of the known spend budget; a cut-off must never find an agent
-  mid-editor-session.
+Fold a confirmation into the next real brief, but send a ready brief now, inside the cache clock.
+Stop starting units at ~80% of the known spend budget; a cut-off never finds an agent mid-editor.
 
 ## Lifecycle
 
-One pass per queue row, from `to plan` to the phase-end retro:
-
 ```text
-- [ ] 1. Queue: take the first eligible row (Setup). `to plan` → a planner drafts stage 1 (Outcome,
-         AC, Out of scope per item; `plan` skill "Item fields by stage"); the drafts of one triage
-         go together.
-- [ ] 2. Owner gate, once per plan: the draft goes to the queue's Owner list, stage `AC review`;
-         draft the next row's AC while this one runs, so the list is never empty at a phase end.
-         Approved AC is frozen; an AC expansion shows wrong goes back to Owner with a proposed edit.
-- [ ] 3. Expand one phase at a time: Reach, Sizing, Pieces, Tests, Test filter, Needs — the next
-         phase while the current one runs, so Reach is read from the tree the items will change.
-- [ ] 4. Plan review: one codex discovery round per expanded phase (`codex-review` plan-review
-         mode). Apply or disposition every finding; no High or Med open → stage `ready`.
-- [ ] 5. Run: score, bucket, mode ("Size the plan first", "Routing"); a scout, diagnosis or path
-         map only for a decision you must make first; roster resources → holders → slots → order;
-         delegate, continue or spawn (reference/budgets.md).
-- [ ] 6. At each hand-back: evaluate; at an item or complete parent's boundary review
-         (reference/review.md), delegate fixes, recheck; record a piece as ☑ checkpoint, accept only
-         the item or complete parent ("Status and acceptance") and integrate; route every gap it
-         reported ("Intake"). Then one scheduling pass — which `ready` row or item has a free
-         lane? — and report ("What you say to the user"). The Owner list contains everything
-         waiting on the owner; nothing else waits on the owner. When no row is `ready` and the
-         Owner list is not empty, report starvation and stop; never invent work or bypass the
-         owner gate.
-- [ ] 7. Phase end, in this order: gate green (the GATE row) → Rules current, Resume overwritten,
-         the phase-end commit → handoff (reference/handoff.md). The successor opens the next phase
-         with "Triage" and "Retro" before it dispatches anything; the retiring session does none of
-         it. After the last implementation phase the successor is the closeout session.
+- [ ] 1–4. Plan the row (phase-boundaries "Planning a row"): AC draft → owner gate → expand
+         one phase → plan review → `ready`. Draft the next row's AC while this one runs and expand
+         the next phase while the current runs.
+- [ ] 5. Run: score, bucket, mode (phase-boundaries "Size the plan first", "Routing"); a scout,
+         diagnosis or path map only for a decision you must make first; roster resources →
+         holders → slots → order; delegate, continue or spawn (reference/budgets.md).
+- [ ] 6. Each hand-back: evaluate; review at an item or complete parent's boundary
+         (reference/review.md), fix, recheck; a piece is a ☑ checkpoint, only an item or complete
+         parent is accepted and landed ("Status and acceptance"); route every gap ("Intake"); one
+         scheduling pass (a `ready` row or item with a free lane?); report. Only the Owner list
+         waits on the owner; nothing `ready` and Owner non-empty → report starvation and stop, never
+         inventing work or bypassing the owner gate.
+- [ ] 7. Phase end: gate green (GATE row) → Rules current, Resume overwritten, phase-end commit →
+         handoff (reference/handoff.md). The successor opens with Triage and Retro
+         (reference/phase-boundaries.md) before dispatching; after the last implementation phase
+         it is the closeout session.
 - [ ] 8. Context hook fired at any pause, decision or acceptance? → reference/handoff.md
 ```
 
-Convergence tasks (iterating toward a measured target): freeze metric, threshold, reference set and
-known floor before the loop; put open owner questions into one decision packet with costs.
+Convergence tasks: freeze metric, threshold, reference set and known floor before the loop; put
+open owner questions in one decision packet with costs.
 
 ## Briefing an agent
 
-A Claude bee's brief is built by `~/.claude/skills/bees/scripts/bees-brief` (**read
-`reference/briefs.md` before writing any brief**): you write only the unit's own lines —
-objective, decisions and overrides made since the plan was written, what it may change, verification
-beyond the plan's — and the script adds the units and BEES order, the plan-section pointers that
-carry acceptance, the repo's slot block, the role's standing rules and, for an implementor or
-reviewer, its return contract.
+`bees-brief` builds a Claude bee's brief from the unit's own lines (objective, decisions and
+overrides since the plan, may-change, extra verification), adding units, BEES order, plan-section
+pointers, slot block, standing rules and return contract. Feed a quoted heredoc (an unquoted one
+runs backticks); in a lane repo `reuse` the lane first; hand over `Read <brief> and do what it says.`:
 
-- Include load-bearing constants earlier agents reported (paths, profiles, last suite counts).
-  **Cite the contract file, never paraphrase values from memory.** Quote a count only with the
-  command that produced it; take timestamps from `date +%H:%M`. Never send transcripts or source
-  dumps.
-- **Point, don't paste.** Problem, diagnosis and acceptance are the plan section and report file, a
-  fix or recheck the review file and the ids to close; the brief adds only what is not written down
-  yet (resources, decisions, overrides), since every pasted line is paid again in your context —
-  and restating a section means reading it first.
-- A **codex** brief gives passages, not documents (codex-implementor "What the session loads, and
-  what it doesn't"), and runs with `-C` set to the repo the unit edits — the session is
-  pinned to it for life. Pass every other repo it names, a read-only one too, as an absolute
-  `--repo` to the OpenCode wrapper so preflight checks the fence allows it.
-- A **blind-worktree** codex brief states it cannot run Unity and must report what it could not
-  verify; an **in-place lane** codex brief carries the editor card and requires live verification.
-- Every brief with a live check says: never substitute an emulation for it without saying so in
-  `Outcome`.
+```sh
+~/.claude/skills/bees/scripts/bees-brief --plan docs/plans/<plan>.md --units DR-02,DR-01 \
+  --kind impl --round 1 --include .claude/skills/workspaces/templates/lane-brief.txt \
+  --set lane=lane-1 --set 'task branch=task/lane-1-x' --set "full base sha=$B" \
+  --set 'target branch=feat/x' <<'EOF'
+Objective: <one sentence>
+Decision: <each owner decision or override since the plan was written>
+May change: <the item's Reach changes entries>; nothing else.
+EOF
+```
 
-Examples:
+`--kind` is `impl`, `fix`, `review`, `recheck`, `consult`, `gate`, `plan-ac` or `plan-expand`. A
+fix goes back to the implementor by SendMessage while it is under 120k and inside its cache clock.
+**Read `reference/briefs.md`** for any other kind, an item without a Reach, light mode, a codex
+or scout brief, a blocker or consult.
 
-- Bad: "Investigate this and tell me what you think."
-- Bad: "Check the lock before running the suite and retry if another agent is using it."
-- Good: "You hold `lane-1` (`~/code/workspaces/lane-1`, its `Game/` and `GameCore/`). Another
-  agent holds `lane-2`, and `integration` is off-limits; do not run or edit anything there. If a
-  command fails because the project is held, stop and report."
+- Carry the load-bearing constants agents reported, citing the contract file, never memory; a
+  count only with its command; times from `date +%H:%M`; no transcripts or source dumps.
+- **Point, don't paste**: acceptance is the plan section, a fix the review file and ids; the brief
+  adds only what is not written down, since a pasted line is paid again in your context.
+- A brief with a live check says never to substitute an emulation without saying so in `Outcome`.
 
-A **scout brief** is one question, the area to look in, what "answered" looks like, and
-"read-only, no editor, no sub-agents, stop when answered, `Needs diagnosis` if it needs a run or a
-judgment". Its return is the scout format in `bee-scout.md`; paste its `Answer`/`Constraints`
-lines into the implementor's brief, never the transcript.
-
-- Bad: "Diagnose why selection breaks after undo." (a diagnosis unit)
-- Good: "List every writer of `PuzzleProgress` and the tests that cover `UndoStack`; file:line each."
+**The BEES line** (`results=` from an implementor, `reviews=` above a reviewer's verdict) is the
+outcome. Missing, duplicated, wrapped or wrong-unit is malformed — you decide what is repeated, never an automatic re-run. A `replan`
+goes to a `plan-expand` round before any implementor resumes, logged on the unit. A hand-back that
+ignores its contract is acted on as it is; the next brief says so in one line.
 
 ## Watching rounds
 
-Launch each codex round as its own Bash call with `run_in_background: true`, its out-file named
-`docs/plans/<plan>.work/impl-<unit>-r<N>.txt` (or `review-…`), and watch it with `bees-watch`,
-never the `.log`. **Read `reference/watching.md` before launching the first round** of a session:
-naming, the `bees-watch` flags and what to do for each, cleanup after a termination, worktrees and
-pausing.
+Launch each codex round as its own Bash call with `run_in_background: true` (a trailing `&`'s
+finish goes unnoticed), its `-o` out-file `docs/plans/<plan>.work/impl-<unit>[+<unit>…]-r<N>.txt`
+or `review-…-r<N>.txt`, N counting up per unit and role. Watch with
+`~/.claude/skills/bees/scripts/bees-watch <out-file>...` or `--dir docs/plans/<plan>.work`, never
+the `.log`; a round quiet ~20 min gets a `bees-watch`. On a flag, a termination, a worktree or a
+pause read `reference/watching.md`. A stuck round goes to the owner in one line, never left for the
+next session.
 
 ## Status and acceptance
 
-Full mode only. State is plain markdown, hand-written, committed with the plan; nothing derives
-it, no hook writes it, nothing lives only in `.work/` (gitignored, disposable codex out-files for
-`bees-watch`). The formats — checklist, `## Rules`, `## Resume`, log kinds — are the `plan` skill's
-"Rules, Resume and log". Rules holds owner rules for this plan only, edited in place; Resume holds
-unfinished work only, ≤ 10 lines, overwritten; the queue holds what's next and what waits on the
-owner.
+Full mode only. State is hand-written markdown committed with the plan, never only in `.work/`
+(gitignored, disposable); formats are the `plan` skill's "Rules, Resume and log". Rules: this plan's
+owner rules, edited in place. Resume: unfinished work, ≤ 10 lines, overwritten at a pause, a
+handoff or a change of holder (with a kept codex session's id, pinned directory, last out-file and
+context). The queue: what's next and what waits on the owner.
 
-**Acceptance** — accepting an unsplit item or complete parent is two edits; the commit is the
-landing's ("Commit cadence"). A piece records ☑ and its checkpoint SHA instead of ✅ or an
-`accept:` line, because its parent's review is still pending.
+**Accepting** an unsplit item or complete parent: Status ✅ `<reviewed lane SHA> <count>`, and the
+log line `- <date '+%F %H:%M'> [<unit>] accept: <suite count, review verdict, reviewed lane SHA>`;
+then land it with `tools/workspace.sh land` — editors closed, claim released, plan and log folded
+into the item's squash, the post-integrate check run (its flags: `workspaces` skill "Integrate a
+lane"). A piece records ☑ and its checkpoint SHA instead, its parent's review still pending.
 
-```text
-- [ ] Checklist: Status ✅ <reviewed lane SHA> <count>.
-- [ ] Lane: close its editors and release the claim (`workspaces` skill "End a lane session").
-- [ ] Log: - <date '+%F %H:%M'> [<unit>] accept: <evidence — suite count, review verdict, reviewed lane SHA>
-```
+Also log each round (`[<unit>] round: impl r2 codex sol high, done, ctx 96k, impl-<unit>-r2.txt`),
+review verdict, owner decision (`decision: …`; one still applying next session is a Rules line),
+`gap: …`, `replan` and escape. More than one line is a checklist row or plan section instead.
 
-Resume is not part of an acceptance, because the checklist and the log line already carry the
-evidence: overwrite it at a pause, a handoff, or when a resource changes holder, with a kept codex
-session's id, pinned directory, last out-file and context among its lines.
-
-Also log each round as it finishes (`[<unit>] round: impl r2 codex sol high, done, ctx 96k,
-impl-<unit>-r2.txt`), each review verdict, each owner decision (`decision: …`; one that still
-applies next session is a Rules line), each tooling gap the intake table routes to a log line
-(`gap: …`), each `replan` return and each escape as defined in "Cost routing". A log entry that
-needs more than one line is a checklist row or a plan section instead.
-
-**Commit cadence** — the plan and log ride in the item they record, so history reads one commit
-per item. You write them in `integration` as events happen, uncommitted (`require_no_overlap`
-tolerates that WIP because no lane changes those files), and they land through
-`integrate <lane> --with docs/plans/<plan>.md docs/plans/<plan>.log.md`, which folds the lines
-written since the previous landing into the item's squash. When `--with` reports `bookkeeping not
-folded`, the lines wait for the next landing. The only docs-only commits are a plan stage (AC
-approved; a phase `ready`), a phase end (gate evidence, Resume) and a handoff mid-phase
-(`reference/handoff.md`), each by path (`git commit -m … -- <paths>`, so another agent's staged
-files are never swept in). Starts, rounds, reviews, decisions and gaps are logged and wait for the
-next landing, never committed on their own. The Status cell and the `accept:` line hold the
-reviewed lane SHA and counts; the landed commit is found by the unit id in its subject
+**Commit cadence**: one commit per item — the plan and log, written uncommitted in `integration`,
+land folded into it; lines `land` cannot fold wait for the next landing. The only docs-only commits are a plan stage, a phase end and a mid-phase handoff,
+each by path (`git commit -m … -- <paths>`). A landed commit is found by its unit id
 (`git log --grep '<ID>'`).
 
 ## Intake
 
-Any agent reports a gap — source, evidence, minutes lost, workaround — in its report; **only the
-orchestrator writes** `docs/plans/tooling-gaps.md`, `docs/backlog.md` and the queue, because two
-lanes appending to one table is a merge conflict. **Only the owner adds a queue row**, so the queue
-stays the owner's priority list: the orchestrator updates an existing row's Stage and Lanes and the
-Owner list, never adds a row or a plan for one. This table is the only place gap routing is
-stated; `tooling-gaps.md` and the root `CLAUDE.md` link here.
-
-| Found | Where it goes |
-|---|---|
-| A defect or missing capability in an owned package (game-core, game-build) that the current unit would otherwise work around | fixed at the owning source first — its own unit, test and review — before the dependent work continues, never shimmed; not cleanly fixable at the root → stop and surface it (global `CLAUDE.md` "Owned packages") |
-| An owned-package defect the unit observed but does not depend on | a `tooling-gaps.md` row, fixed at the owning source when picked up |
-| Blocks the current unit, not an owned package | fixed in that unit |
-| Obvious bug, clear fix, inside the unit's own area | fixed in that unit as its own commit |
-| Has a workaround and cost < ~5 min, no correctness defect | a `gap:` log line only, with the workaround |
-| Anything else (tooling) | a `tooling-gaps.md` row: `Hits 1`, minutes lost, workaround |
-| Anything else (player-facing) | `docs/backlog.md` under "Later", next free `T-nnn` |
-| Same gap again | `Hits` + 1 and minutes added on the existing row; never a second row |
-
-A backlog or tooling-gaps row that is queued gets `→ Q-nn` in its Status, so nothing is queued
-twice.
-
-## Triage
-
-At every phase end only, by the successor orchestrator, before it dispatches anything:
-
-1. Collect the phase's `gap:` lines (a `bee-haiku-runner` counts the log — never read it yourself,
-   rule 10). Any gap that came up twice becomes a row.
-2. Every `?` row gets one outcome: **close** (small, or a workaround — which alone never closes a
-   gap whose summed cost is high; one Status line, row removed next triage), **fix** (kept for
-   pick-up), or **owner** (needs a design or product decision: to the queue's Owner list with
-   options and a recommendation). No `?` row survives two phase ends.
-3. **Pick-up**, one batch: cluster the `fix` rows by area (one scout answers "which files does
-   each touch?" when it isn't obvious); take at most **3 clusters**, highest summed minutes lost
-   first — `unknown` stays unknown, never zero; among unknowns more `Hits`, then the lower id, or
-   one costing scout where the pick would be arbitrary. Each picked cluster is proposed in the queue's
-   Owner list (title, gap rows, recommendation), not added as a row; the owner adds the row, then
-   its AC is drafted. The rest wait for the next phase end. Backlog
-   items are owner-ordered and queued only by the owner.
-
-## Retro
-
-At the same opening, the `bee-haiku-runner` counts the phase's log and the successor appends the
-numbers to `docs/plans/retro-numbers.md`: rounds per item by outcome, review passes per item,
-`docs(plans)` commits and item ids per item commit (`git log --first-parent --format=%s
-<from>..<to>`), fix rounds by a fresh bee vs the implementor, `replan` returns, incomplete
-expansions and mid-run splits,
-out-of-scope review findings, AC sent back after approval, escapes per level, handoffs per phase,
-hours a row waited in Owner, queued-but-never-started and started-without-a-row, active vs waiting
-wall-clock per item and parent acceptances per orchestrator-hour, with S/M beside it. A missing timing is `unknown`, a
-number the phase cannot produce `not applicable`, never 0. At most 3 rule changes per retro, each
-a skill edit whose commit message carries its before/after numbers and the `retro-numbers.md` row;
-a forecast is labelled a forecast. The owner reads the numbers and proposed changes in the final
-message and can veto.
-
-Before a batch activates, write its success thresholds and comparison scope (units, sizes,
-scores, concurrency and sharding) to `retro-numbers.md`, so its result can be judged.
-Freeze correctness guardrails beside them: required verification recorded and no blocking
-review finding open for every acceptance; a red target fixed before the next integrate;
-an escape bound naming count per phase, worst severity and recovery minutes. A guardrail
-breach blocks keeping the batch regardless of throughput.
-Judge a batch as one, with no per-rule causal claim. Revert a batch or rule on an attributable
-regression or a missed predeclared threshold over two comparable retros, never on an unchanged
-aggregate alone. Too little comparable evidence is inconclusive; report it without a per-rule
-conclusion.
+Every agent reports a gap — source, evidence, minutes lost, workaround; **only you write**
+`docs/plans/tooling-gaps.md`, `docs/backlog.md` and the queue, since two lanes appending to one
+table conflict. **Only the owner adds a queue row**: you update a row's Stage and Lanes and the
+Owner list, never add a row or plan. Route each gap by [`reference/intake.md`](reference/intake.md).
 
 ## What you say to the user
 
-The harness asks you each turn to *privately* list what you need next. **Never print that list.**
-"Needed next: (1) … (2) …" is the planning step leaking.
-
-Say the **delta**, sized by what happened:
+Never print your private "needed next" list. Say the **delta**: each fact once, ever; "after X"
+for dependencies; numbers on the unit's line.
 
 | turn | say | length |
 |---|---|---|
-| waiting, nothing new | `Waiting on codex (G1 round 3, log growing) and slot 2 (B4).` | 1 line |
-| an agent reported | unit (pts · bucket · who) · outcome · commit/suite · one clause of substance · continued or retired, and why | 2–3 lines |
-| a round went quiet | what `bees-watch` found and what you did about it | 1–2 lines |
-| owner decision or blocker | question, options with cost (a scope option: its unit count and phase count, since a phase is a session), your recommendation | ≤ 6 lines |
-| pause or session end | the checklist's changed rows, `Next`, uncommitted state | ≤ 10 lines |
-| handoff | tab name, first unit the successor starts on, "this session stays open" | 3 lines |
-| completion | what changed, decisions by id, verification, review status, open risks, what the user must decide | as needed |
-
-Each fact once, ever. Dependencies as "after X". Numbers on the unit's line, not woven through
-sentences.
-
-Should read like:
+| waiting | `Waiting on codex (G1 round 3, log growing) and slot 2 (B4).` | 1 line |
+| agent reported | unit (pts · bucket · who) · outcome · commit/suite · one clause · continued or retired, why | 2–3 lines |
+| quiet round | what `bees-watch` found, what you did | 1–2 lines |
+| decision or blocker | question, options with cost (scope: units and phases), recommendation | ≤ 6 lines |
+| pause or end | changed rows, `Next`, uncommitted state | ≤ 10 lines |
+| handoff | tab name, successor's first unit, "this session stays open" | 3 lines |
+| completion | changes, decisions by id, verification, review, risks, owner decisions | as needed |
 
 > G1 (3 · codex sol medium) round 3 landed at `3b73b3a`: one projected-basis helper replaces two
-> walk fallbacks, closes CX-03/04 with fail-before tests. bee-reviewer recheck running in slot 1.
-> Slot 2 (`bee-opus-high`) is at 110k with the area loaded, so it continues into B4 (8) rather than
-> a fresh spawn.
+> walk fallbacks, closes CX-03/04. Slot 2 (`bee-opus-high`, 110k, area loaded) continues into B4
+> (8), not a fresh spawn.
 
 ## Reference
 
 | file | read when |
 |---|---|
-| [`reference/budgets.md`](reference/budgets.md) | before any continue-or-spawn decision or handover of a resource |
-| [`reference/briefs.md`](reference/briefs.md) | before writing any brief, and when a report or blocker comes back |
-| [`reference/review.md`](reference/review.md) | before choosing or briefing a reviewer |
-| [`reference/watching.md`](reference/watching.md) | before the session's first codex round, and on any flag or termination |
-| [`reference/handoff.md`](reference/handoff.md) | at phase end or when the context hook fires |
-| `templates/standing-rules-*.txt`, `templates/return-*.txt`, `templates/planner-*.txt` | assembled into every Claude brief by `scripts/bees-brief` (`--kind plan-ac`, `plan-expand` for the planner stages) — never retyped |
-| `templates/successor-brief.txt` | `cat` into the successor's first prompt at a handoff |
+| [`reference/phase-boundaries.md`](reference/phase-boundaries.md) | as "Setup" says |
+| [`reference/budgets.md`](reference/budgets.md) | a continue-or-spawn decision or a resource handover |
+| [`reference/routing.md`](reference/routing.md) | choosing a channel, a validation or a test level |
+| [`reference/briefs.md`](reference/briefs.md) | a brief "Briefing an agent" does not cover, a blocker or consult |
+| [`reference/review.md`](reference/review.md) | choosing or briefing a reviewer |
+| [`reference/watching.md`](reference/watching.md) | a `bees-watch` flag, a termination, a worktree or a pause |
+| [`reference/intake.md`](reference/intake.md) | a report lists a gap |
+| [`reference/handoff.md`](reference/handoff.md) | phase end, or the context hook fires |
