@@ -13,18 +13,17 @@ first round of a session, and when a round fails or goes quiet.
 - Failed rounds
 - Auto-compaction
 - Watching a round
-- Usage gating
 
 ## Round checklist
 
 ```text
-- [ ] codex-usage: exit 0 (exit 2 → one cheap codex turn, re-run; exit 1 → route to Claude)
 - [ ] prompt/brief written to a file in your scratchpad ($T), never /tmp
 - [ ] wrapper launched as its own Bash call with run_in_background: true
 - [ ] -o names a new out-file; under bees $W/<impl|review>-<unit>-r<N>.txt
 - [ ] every repo outside -C passed as an absolute --repo
 - [ ] while it runs: bees-watch <out-file>, never the .log
-- [ ] on finish: read the out-file and .usage; a Blocked: line is a failed round, not a result
+- [ ] on finish: read the out-file and .usage; a Blocked: line is a failed round, not a result;
+      one on a usage limit (429) goes to Claude per bees "Routing"
 ```
 
 ## Preflight and the server
@@ -118,8 +117,3 @@ that point as a summary: reopen source before trusting an exact claim or citatio
   `scripts/opencode-sessions` for a cross-repo list with a BUSY flag, or
   `scripts/opencode-sessions --attach` to pick one and attach. The wrapper prints the exact
   `opencode attach <url> --dir <dir> --session <id>` too.
-
-## Usage gating
-
-Follow bees "Routing" → "Usage gate" before every implementation or review, because OpenCode rounds
-write no usage snapshot.

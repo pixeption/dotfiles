@@ -46,7 +46,7 @@ in your context every turn. A unit's section is its implementor's to read; open 
 Nothing is asked per plan. The defaults are the skill's — implementors by score through the
 buckets ("Routing"), codex preferred, in place in a lane when the unit drives an editor; review
 cross-vendor, once per unit at its parent boundary (`reference/review.md`) — and a plan's `## Rules`
-overrides them. Machine checks (preflight, codex usage, browser tools) are re-run each session and
+overrides them. Machine checks (preflight, browser tools) are re-run each session and
 recorded nowhere, because an environment line is stale on the next machine.
 
 **Standing owner rules**, holding for every plan unless its Rules says otherwise, so no plan
@@ -185,7 +185,7 @@ because a bug found mid-unit costs a block, a decision and a resumed session eac
 **Buckets** — the score picks the row; codex is preferred. Codex is `codex-implementor` with
 `-m openai/gpt-6.1-sol` and the row's `-e`:
 
-| scores | codex (preferred) | Claude (needs live judgment, or codex is out of usage) |
+| scores | codex (preferred) | Claude (needs live judgment, or a codex round hit a usage limit) |
 |---|---|---|
 | 1 2 | `-e medium` | `bee-opus-low` |
 | 3 | `-e medium` | `bee-opus-medium` |
@@ -209,18 +209,13 @@ Model and effort live in the agent files under `~/.claude/agents/` and in the wr
   `workspaces` skill "Who works where"; follow the checkpoint and parent-review boundary in
   `reference/review.md` "Once per unit" before reusing a lane, so pieces are not accepted separately.
 - **Claude instead of codex** only when the unit needs judgment a batch run cannot settle (a
-  screenshot read, a live Play-mode check), or codex is out of usage. Before routing for browser
-  judgment, verify the assigned bee can open the target with a browser tool; otherwise make the
-  live check an owner acceptance step.
-- **Usage gate.** Before every codex unit, implementation or review, run
-  `~/.claude/skills/bees/scripts/codex-usage`. It reads the usage windows from the newest codex
-  snapshot and ends in a `ROUTE:` line. Exit 0: route to codex. Exit 1 (a window at 100% or the
-  limit reported): the unit goes to the Claude column of its bucket, same score, and its review to
-  the Claude reviewer. Exit 2 (`ROUTE: unknown` — no snapshot, or one older than two hours; a
-  stale reading has said "ok" at 100%): re-run as `~/.claude/skills/bees/scripts/codex-usage --refresh`, which spends one
-  cheap codex turn first (OpenCode rounds write no snapshot). Log the reading when it changed the routing
-  (`[G1] decision: codex weekly window 100% → bee-opus-medium`). OpenCode reports `cost: 0`; the
-  token figures are for the budget rule only.
+  screenshot read, a live Play-mode check), or its codex round failed on a usage limit. Before
+  routing for browser judgment, verify the assigned bee can open the target with a browser tool;
+  otherwise make the live check an owner acceptance step.
+- **Usage limits.** No usage check runs before a round, codex or Claude: route by bucket and run
+  it. A codex round that fails on a usage limit (429, limit reached) goes to the Claude column of
+  its bucket, same score, and its review to the Claude reviewer; log it (`[G1] decision: codex 429
+  → bee-opus-medium`). OpenCode reports `cost: 0`; the token figures are for the budget rule only.
 
 ## Cost routing
 

@@ -12,7 +12,7 @@ The reviewer is the **other vendor** from the implementor, so no model checks it
 | codex, unit scored 1–5 | `bee-reviewer` | one |
 | codex, unit scored 8–13 | `bee-reviewer-high` | one |
 
-When codex is out (usage limit, 429), the review goes to the Claude reviewer for its score, and a
+When a codex review round fails on a usage limit (429, limit reached), the review goes to the Claude reviewer for its score, and a
 log line says so.
 
 ## Once per unit

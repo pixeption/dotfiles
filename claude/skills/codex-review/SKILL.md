@@ -21,13 +21,13 @@ read-only shell use is instruction-enforced — the reviewer can run a suite or 
 between rounds routinely outlasts the CLI's 30-minute cache. **Read
 codex-implementor's [`reference/opencode-channel.md`](../codex-implementor/reference/opencode-channel.md)
 before the session's first round** — preflight, the fence, flags and files, failed rounds,
-compaction, watching, usage gating; this skill runs that skill's scripts.
+compaction, watching; this skill runs that skill's scripts.
 
 The **codex CLI** (`scripts/codex-review`, `codex exec --sandbox read-only`) is the fallback, only
 when the server won't start: codex-implementor's
 [`reference/codex-cli.md`](../codex-implementor/reference/codex-cli.md).
 
-Out of usage (`codex-usage` exit 1) → the review goes to `bee-reviewer` (scores 1–5) or
+A round that fails on a usage limit (429, limit reached) → the review goes to `bee-reviewer` (scores 1–5) or
 `bee-reviewer-high` (8–13), per bees `reference/review.md`.
 
 ## Run it
