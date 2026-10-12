@@ -6,7 +6,7 @@ description: >-
 
 # Unity CLI + Unity Pipeline
 
-> Written for **Unity CLI `1.0.0-beta.12`**, **Pipeline `0.8.0-exp.1`**, **Unity `6000.6.2f1`**.
+> Written for **Unity CLI `1.0.0-beta.13`**, **Pipeline `0.8.0-exp.1`**, **Unity `6000.6.2f1`**.
 > Both tools are pre-release and flags move on every upgrade: after any `unity self-update` or
 > `unity pipeline upgrade`, trust `unity <cmd> --help`, `unity commands --format json` and
 > `unity list --project-path <dir> --format json` over this file, and fix the file.
@@ -77,10 +77,12 @@ The rule is organisational; the `bees` orchestrator assigns resources and nono4u
   and report it. Never wrap it in a loop, a `sleep`, or a "wait for the lock".
 - **"Held" means a lock error on *your* project.** `unity status` listing a GUI editor on a
   *different* project is not a held project: batch `unity test` spins its own headless editor.
-- **Always name the project.** A bare `unity command <tool>` connects to *whatever* editor is
-  running, so with no editor on the project you meant it lands on another project's editor.
-  Pass `--project-path <dir>` on every `unity command`, or `unity run <project> --command …` for
-  batch. The helper scripts already do.
+- **Always name the project.** A bare `unity command <tool>` with no `UNITY_PROJECT_PATH` set
+  connects to *whatever* editor is running, so with no editor on the project you meant it lands on
+  another project's editor. Pass `--project-path <dir>` on every `unity command`, or `unity run
+  <project> --command …` for batch. The helper scripts already do. `unity status --project-path`
+  matches an existing directory as exactly that project, and any other value as a substring, so
+  pass the full path.
 - **No background retry loops, ever.** A `run_in_background` shell that re-launches `unity test`
   on failure keeps firing after the project has moved to someone else and disturbs their editor.
   One attempt in the foreground with a deadline; on failure read the error and decide.
