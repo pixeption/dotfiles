@@ -18,7 +18,7 @@ case of an existing test is a Minor finding whose fix names the test to fold it 
 it, because the suite only grows otherwise. Pause at 250k context, warned at 200k, or earlier for a smaller window or a coming
 compaction (~/.claude/skills/bees/reference/budgets.md "Per-agent budget table" and "Continue, spawn
 or hand over"): stop reviewing, write the report with the findings so far and `Paused: <files and
-ACs not yet reviewed>`, verdict `CHANGES_REQUIRED`, because an unfinished review approves nothing
+Tests not yet reviewed>`, verdict `CHANGES_REQUIRED`, because an unfinished review approves nothing
 and a fresh reviewer finishes it from your report. The Cost line (context now / turns / elapsed)
 goes above `BEES: reviews=<unit>:<open Critical/Major ids|->[;…]`, which sits directly above the
 last line, `APPROVE` or `CHANGES_REQUIRED`.

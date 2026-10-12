@@ -1,7 +1,7 @@
 # Returns, the last-line contract, blockers and advice
 
 Read when a brief or report needs more than SKILL.md "Briefing an agent" and rule 10 give: a brief
-kind other than `impl`, an item without a Reach, light mode, a codex or scout brief, the BEES line's
+kind other than `impl`, an item without Today and Approach, light mode, a codex or scout brief, the BEES line's
 exact form, or a blocker or a question for the owner.
 
 ## Contents
@@ -45,10 +45,10 @@ dispatch because the bee only claims it.
 - `--kind` picks the role's standing rules and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor,
   reviewer or planner also gets its return contract; an advisor writes its answer to its report file, no
   BEES line, ending `CHANGES_REQUIRED`, since the decision log points to the answer.
-- Reach copying is SKILL.md "Briefing an agent"'s. An item without a Reach (every live plan)
-  gets one from a `bee-scout` first: when the section names one side of a pair (writer/reader,
-  export/import, check/apply, seed/parity), the scout lists the readers, validators and lowerings of
-  what changes, and its `Answer` lines become the brief's "May change" and filter.
+- "Start at" and the filter are SKILL.md "Briefing an agent"'s. An item without Today and Approach
+  (a plan expanded before them) gets its starting points from a `bee-scout` first: the scout lists
+  the files and symbols that hold what changes and the test classes that exercise them, and its
+  `Answer` lines become the brief's "Start at" and filter.
 - A fix round goes back to the implementor (SKILL.md "Briefing an agent"; `reference/budgets.md`
   "Continue, spawn or hand over") because a fresh bee re-reads what the implementor still holds;
   spawn fresh only past either line.

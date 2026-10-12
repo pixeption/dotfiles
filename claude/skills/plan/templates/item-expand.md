@@ -1,12 +1,11 @@
 <the approved brief fields stay exactly as written; expansion appends below them>
 
-**AC:**
-- STEP-07-AC1 — a checkable statement
-- STEP-07-AC2 — the edge or failure case
-**Reach:**
-- `Game/Assets/Foo.cs` `Foo.Apply` — changes
-- `Game/Assets/Bar.cs` `Bar.Load` — reads
-- tests: `FooTests`, `BarTests`
-**Verify:** STEP-07-AC1 — `FooTests.Applies_x` (new, plain); STEP-07-AC2 — `BarTests.Rejects_y` (existing); `--filter "FooTests|BarTests"`; <an AC no test proves names its command or file:line inspection; a new Integration test names what a plain test cannot observe>
+**Today:** `Foo.Apply` (`Game/Assets/Foo.cs`) writes x on every call, so y drifts; evidence: <the failing output>.
+**Approach:** `Foo.Apply` writes x only when it changed, as `Bar.Load` already does; keep z's order, since `Baz` reads it. Guidance: <package> CLAUDE.md "<heading>".
+**Tests:**
+- an unchanged second apply writes nothing — `FooTests` (new, plain)
+- a changed x is written once — `FooTests` (new, plain)
+- loading still reads z in order — `BarTests` (existing)
+- `--filter "FooTests|BarTests"`
 **Score:** 3
-Done when: STEP-07-AC1 and STEP-07-AC2 are verified by their named checks and the review is APPROVE.
+Done when: the Tests pass and the review is APPROVE.

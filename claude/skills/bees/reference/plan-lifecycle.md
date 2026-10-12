@@ -27,13 +27,13 @@ SKILL.md "Lifecycle" steps 1–4, from `to plan` to `ready`:
 2. Brief review, once per plan: the brief goes to the queue's Owner list, stage `brief review`. The
    next row's brief is drafted while this one runs (SKILL.md "Lifecycle"), so the list is never
    empty when a plan closes. The approved brief is frozen.
-3. Expand once per plan, over all its items (`--kind plan-expand`, stage `expand`): AC, Reach,
-   Verify, Score (an 8 or 13 split into items ≤ 5), Done when — once the work it builds on has landed, so Reach is
+3. Expand once per plan, over all its items (`--kind plan-expand`, stage `expand`): Today,
+   Approach, Tests, Score (an 8 or 13 split into items ≤ 5), Done when — once the work it builds on has landed, so they are
    read from the tree the items will change. A finding that would change an Outcome or an
-   exclusion goes back to the Owner list with a proposed edit; every other AC question is yours,
+   exclusion goes back to the Owner list with a proposed edit; every other question is yours,
    the planner's and codex's.
 4. Plan review, stage `plan review`: one codex discovery round per expanded plan (`codex-review`
-   "Plan review under bees"), checking the AC against the brief. Apply or disposition every
+   "Plan review under bees"), checking the Tests against the brief. Apply or disposition every
    finding; no High or Med open → stage `ready`.
 
 ## Choose the mode
@@ -118,7 +118,7 @@ The `bee-haiku-runner` counts the plan's log and you append one row per plan to
 `docs/plans/retro-numbers.md`: rounds per item by outcome, review passes per item, `docs(plans)`
 commits and item ids per item commit (`git log --first-parent --format=%s <from>..<to>`), fix rounds by a fresh bee vs the implementor, orchestrator `replan` log events, incomplete
 expansions and mid-run splits,
-out-of-scope review findings, AC sent back after approval, escapes per level, handoffs per plan,
+out-of-scope review findings, brief changes sent back after approval, escapes per level, handoffs per plan,
 hours a row waited in Owner, queued-but-never-started and started-without-a-row, active vs waiting
 wall-clock per item and accepted items per orchestrator-hour, with their scores beside it. A missing timing is `unknown`, a
 number the plan cannot produce `not applicable`, never 0. At most 3 rule changes per retro, each

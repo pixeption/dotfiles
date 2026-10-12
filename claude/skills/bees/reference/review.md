@@ -23,7 +23,7 @@ log line says so.
 | A fix that applies the reviewer's exact fixes | orchestrator inspection ("Rechecks and the end of the loop") |
 | A production diff ≤ ~5 lines | orchestrator inspection (same) |
 
-Code reviews check the change against the item's ACs. An item's acceptance records its filter
+Code reviews check the change against the item's brief and Tests. An item's acceptance records its filter
 and the review verdict for the reviewed lane SHA. A recheck is a fresh session pointed at the review
 file whenever the first passed its review line (`codex-review` "One session for the whole loop").
 

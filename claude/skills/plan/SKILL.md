@@ -105,24 +105,27 @@ carries its Outcome, Right and Wrong.
 | | **Right** | a concrete example of the result working as meant |
 | | **Wrong** | a concrete example it must not produce, and what the item deliberately doesn't do |
 | brief review | — | adds no field: the owner approves the briefs of one group row in one sitting |
-| expand | **AC** | numbered, checkable statements (`<ID>-AC1`, `<ID>-AC2`…), edge and failure cases included, each inside the brief |
-| | **Reach** | every reader, writer, validator, lowering and caller of what changes, as `file` + symbol (a line only where it will not move), each marked *changes* or *reads*, plus the test classes that exercise them. Required for any item that changes a contract, a field, a grammar or one side of a pair (writer/reader, export/import, check/apply, seed/parity); a planner that cannot produce it makes the item a diagnosis first |
-| | **Verify** | for each AC the test or command that proves it, new or existing, and the test filter: the item's own test classes plus its callers', from the Reach, by class name, never a file name (`--filter` matches classes) |
+| expand | **Today** | what the code does now and why it falls short, naming files and symbols (a line only where it will not move); for a bug, the symptom and its evidence |
+| | **Approach** | the decided mechanism and where it goes, the invariants and traps it must not break, and the guidance sections that apply, by heading. A planner that cannot settle it from the code makes the item a diagnosis first |
+| | **Tests** | one bullet per behaviour that proves the brief, edge and failure cases included, each naming its test class (new or existing) or, where no test fits, its command; then the `--filter` of those classes and their callers' (`--filter` matches classes, never a file name) |
 | | **Score** | the item's points ("Scoring") |
-| | **Done when** | the item's last line, naming the ACs it closes |
-| plan review | — | adds no field: one codex plan review per expanded plan, over all its items (scores, where any 8 or 13 is a High finding, then AC against the brief, then reach); the plan is `ready` when no High or Med finding is open |
+| | **Done when** | the item's last line: its Tests pass, any check that is not a test, and the review is APPROVE |
+| plan review | — | adds no field: one codex plan review per expanded plan, over all its items (scores, where any 8 or 13 is a High finding, then Tests against the brief, then Today and Approach against the source); the plan is `ready` when no High or Med finding is open |
 
 - **The brief is the owner's one gate per plan**, frozen once approved. Expansion never edits it: a
   finding that would change an Outcome or an exclusion (a Wrong, or what is out of scope) goes to
-  the queue's Owner list with the reason and a proposed edit; every other AC question is settled by
-  planner, codex and orchestrator without the owner. AC ids stay stable when expansion splits
-  an item.
+  the queue's Owner list with the reason and a proposed edit; every other question is settled by
+  planner, codex and orchestrator without the owner.
 - **Expansion runs once per plan**, over all its items, once the work it builds on has landed, so
-  Reach is read from the tree the items will actually change. An incomplete expansion cannot become
-  `ready`.
+  Today and Approach are read from the tree the items will actually change. An incomplete expansion
+  cannot become `ready`.
+- **An item holds everything its implementor needs**, never "detail in report-…", because a pointer
+  makes every implementor reread what the planner already read.
+- **Named files are a starting point, not a limit**: the implementor changes what the work needs and
+  names any file outside Today and Approach in its report.
 
-"May change" is the Reach's *changes* entries. Two items may run in parallel when their *changes*
-sets are disjoint and neither's acceptance reads output the other changes; shared *reads* are fine.
+Two items may run in parallel when the files their Today and Approach name are disjoint and neither's
+Tests read output the other changes.
 
 ## Review, landing and the gate
 

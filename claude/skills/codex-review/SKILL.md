@@ -77,7 +77,7 @@ fix. Stop and rewrite the section before resubmitting.
 ## Plan review under bees
 
 An expanded plan (bees `reference/review.md` "Once per unit") gets **one discovery round at
-`-e high`** — round 1 above, over all the plan's items and the source their Reach names — and no
+`-e high`** — round 1 above, over all the plan's items and the source their Today and Approach name — and no
 loop: the orchestrator applies or dispositions every finding, and the plan is `ready` when no High
 or Med is open. There is **no final pass**, because a plan is re-read by every implementor that runs
 it and reviewed again as code; a second holistic pass buys little.
@@ -89,11 +89,11 @@ it and reviewed again as code; a second holistic pass buys little.
   ("Follow-up rounds"); its `Fixed` closes them.
 - The round checks scores first: any item scored 8 or 13 is a High finding, since such an item is
   split at planning (`plan` skill "Scoring").
-- The round checks the expanded AC against the plan's owner-approved brief (`plan` skill "Item
-  fields by stage"): each Outcome and Right is covered by an AC, no AC falls outside the brief, and
-  none contradicts a Wrong.
+- The round checks the expansion against the plan's owner-approved brief (`plan` skill "Item
+  fields by stage"): each Outcome and Right is proven by a Tests bullet, no bullet falls outside the
+  brief, none contradicts a Wrong, and Today and Approach match the source they name.
 - The brief is frozen: a finding against an Outcome, a Right or a Wrong is dispositioned "back to
-  owner", never applied. A finding against an AC alone is applied or dispositioned like any other.
+  owner", never applied. A finding against the expansion alone is applied or dispositioned like any other.
 
 Code reviews are unchanged: discovery, follow-up, final pass, `APPROVE`.
 

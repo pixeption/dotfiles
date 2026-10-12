@@ -4,7 +4,7 @@ Outcome: Done | Partial | Blocked
 Expanded: each finished item's full section text (brief or expansion), ready to paste into the plan.
 To expand: each unfinished item, with the reads not made.
 Back to owner (expansion): items whose approved Outcome or exclusion would have to change — reason, proposed edit.
-Diagnosis first (expansion): items whose Reach or a count could not be produced, and why.
+Diagnosis first (expansion): items whose Approach could not be settled from the code, and why.
 Cost: context now / turns / elapsed.
 Concerns: contradictions with the plan's sections or decisions.
 BEES: results=<unit>:<done|partial|blocked>:-

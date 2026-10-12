@@ -40,7 +40,7 @@ for kind in review recheck; do
   expect_rules "$kind gets the first three" "$b" 1 1 1 0
   has "$kind rules pause at the sub-agent line" "$b" "$PAUSE" 1
   has "$kind rules cite the budget sections" "$b" "$BUDGET" 1
-  has "$kind pause returns the unreviewed rest" "$b" "\`Paused: <files and ACs not yet reviewed>\`, verdict \`CHANGES_REQUIRED\`" 1
+  has "$kind pause returns the unreviewed rest" "$b" "\`Paused: <files and Tests not yet reviewed>\`, verdict \`CHANGES_REQUIRED\`" 1
 done
 
 b=$(brief --plan "$PLAN" --units U-02,U-01 --kind impl)
@@ -72,6 +72,8 @@ has "plan-expand carries the expand block" "$b" "$EXPAND_BLOCK" 1
 has "plan-expand keeps the brief read-only" "$b" "The brief is read-only" 1
 has "plan-expand rules pause at the sub-agent line" "$b" "$PAUSE" 1
 has "plan-expand pause returns the rest as to expand" "$b" "then return the items done and the rest under \`To expand\`" 1
+has "plan-expand asks for Today, Approach and Tests" "$b" "Append below the brief fields: Today" 1
+has "plan-expand bans report pointers" "$b" "never \"detail in report-…\"" 1
 has "plan-expand gives one judged score" "$b" "one judged score for how" 1
 has "plan-expand splits an 8 or 13 at planning" "$b" "you would score 8 or 13 is split here into items scored 5 or less" 1
 has "plan-expand return names the items to expand" "$b" "To expand:" 1

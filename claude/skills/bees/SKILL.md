@@ -32,7 +32,7 @@ in place in a lane when it drives an editor; review cross-vendor, once per item 
 lands) and these **standing owner rules**: a decision with a recommendation takes it — except a
 change to an approved brief, which goes to the queue's Owner list; a question for the owner during
 execution goes to the advisors first ([`reference/briefs.md`](reference/briefs.md) "Blocker cap and
-consults"); detailed AC need no owner approval; parallelise items eligible under the `plan`
+consults"); an expansion needs no owner approval; parallelise items eligible under the `plan`
 skill's "Item fields by stage"; sharding is `reference/routing.md` "Cost routing"'s.
 
 **Plan lifecycle** — [`reference/plan-lifecycle.md`](reference/plan-lifecycle.md): read its
@@ -41,7 +41,7 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
 
 ## Rules
 
-1. **You own decisions**: goal, AC, decomposition, scoring, routing, resources, evaluating
+1. **You own decisions**: goal, expansion, decomposition, scoring, routing, resources, evaluating
    results, blockers, acceptance.
 2. **Six concurrent agents and four lanes, hard caps, both vendors** — every agent (codex,
    reviewer, scout, runner, advisor) counts, being one more event stream you absorb; at most
@@ -156,8 +156,8 @@ open owner questions in one decision packet with costs.
 overrides since the plan, may-change, extra verification), adding units, BEES order, plan-section
 pointers, slot block, standing rules and return contract. Feed a quoted heredoc (an unquoted one
 runs backticks); in a lane repo `reuse` the lane first; hand over `Read <brief> and do what it says.`
-Copy "May change" and "Test filter" from the item's Reach, never re-derived, keeping the planned
-verification boundary.
+Copy "Start at" from the files and symbols the item's Today and Approach name, and "Test filter"
+from its Tests, never re-derived, keeping the planned verification boundary.
 
 ```sh
 ~/.claude/skills/bees/scripts/bees-brief --plan docs/plans/<plan>.md --units DR-02,DR-01 \
@@ -166,14 +166,14 @@ verification boundary.
   --set 'target branch=feat/x' <<'EOF'
 Objective: <one sentence>
 Decision: <each owner decision or override since the plan was written>
-May change: <the item's Reach changes entries>; nothing else.
-Test filter: <the item's Reach test classes>
+Start at: <the files and symbols the item's Today and Approach name> — a reference, not a limit.
+Test filter: <the item's Tests filter>
 EOF
 ```
 
 `--kind` is `impl`, `fix`, `review`, `recheck`, `advise`, `gate`, `plan-brief` or `plan-expand`. A
 fix goes back to the implementor by SendMessage while it is under 100k and inside its cache clock.
-**Read `reference/briefs.md`** for any other kind, an item without a Reach, light mode, a codex
+**Read `reference/briefs.md`** for any other kind, an item without Today and Approach, light mode, a codex
 or scout brief, a blocker or a question for the owner.
 
 - Carry the load-bearing constants agents reported, citing the contract file, never memory; a

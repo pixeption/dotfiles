@@ -25,7 +25,7 @@ it needs as `path:start-end`.>
 The item's score is an estimate: more files or work than expected is not a reason to stop.
 Stop only when the approach does not work or the work needs something the brief rules out, and
 report `Outcome: Needs decision` (`Blocked` after two attempts), which goes to the advisors.
-Reach: <the item's Reach, or "none">.
+Start at: <the files and symbols the item's Today and Approach name, or "none"> — a reference, not a limit.
 
 ## Commit gate
 When the required verification includes a Unity test run and no suite XML was produced in this

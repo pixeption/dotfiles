@@ -3,7 +3,7 @@ from the owner-added queue row named above, write the plan's one-page brief: a `
 saying how the result is used and an architecture note of a few lines, then one `### <ID> · <title>`
 section per outcome with Outcome (what the result looks like and how it is used), Right (a concrete
 example of it working as meant) and Wrong (a concrete example it must not produce, and what is out
-of scope). Short, plain words, no code references and no AC: the owner reads the briefs of one
+of scope). Short, plain words, no code references and no Tests: the owner reads the briefs of one
 group row once, in one sitting, so nothing here needs the tree — read code only to tell whether an
 outcome is one item or several. If the queued row names a gap cluster, name the gap rows each item
 closes. Return the sections under `Expanded`; the orchestrator writes them into the plan and
