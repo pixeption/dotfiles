@@ -37,7 +37,7 @@ filter, the post-integrate check, the phase gate). SKILL.md "Routing" holds the 
   yourself when the diff is small, otherwise hand it to `bee-sonnet-medium` holding the resource.
   A baseline before a unit whose acceptance compares against one goes to `bee-haiku-runner`.
 - **Three test levels, each run once at its boundary**, so verification is not repeated within a level:
-  - *Round* — the bee, holding its lane: the fail-before plus the item's test filter, its own and
+  - *Round* — the bee, holding its lane: the item's test filter and any red run the fail-before rule requires, its own and
     its callers' test classes, once at the end of the round
     (`templates/standing-rules-implementor.txt`); it never re-runs Game full or another unit's filter.
   - *Post-integrate* — SKILL.md "Status and acceptance" owns the per-landing check.

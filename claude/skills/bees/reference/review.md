@@ -23,7 +23,7 @@ log line says so.
 | An item implemented in one piece | one review of the item, then fix → recheck under `codex-review`'s contract |
 | An item split into pieces | **no per-piece review**. A serial piece is a private lane checkpoint (builds, its `Done when` holds, committed on the task branch, not integrated); a parallel piece integrates only if it leaves the target green under the post-integrate check. When the last piece lands, **one review of the complete parent change** at the parent's effort — on the lane for a serial group, before it integrates; on the target for parallel pieces, over their recorded SHAs so unrelated commits are excluded. Its fix round runs on the same lane, or on a lane from the reviewed target |
 | A fix that applies the reviewer's exact fixes | orchestrator inspection ("Rechecks and the end of the loop") |
-| A production diff ≤ ~5 lines with a fail-before test | orchestrator inspection (same) |
+| A production diff ≤ ~5 lines | orchestrator inspection (same) |
 
 Code reviews check the change against the item's ACs. Parallel pieces sit on the target green but
 unreviewed until the parent review; the parent review and the phase gate both precede anything
@@ -61,7 +61,7 @@ less than a spawn:
 
 - a fix round that applies a reviewer's exact fixes — inspect the fix diff yourself and tick every
   finding id against its fix text;
-- a unit whose production diff is about five lines or fewer and comes with a fail-before test.
+- a unit whose production diff is about five lines or fewer.
 
 Log either as `review: orchestrator inspection`; a clean inspection closes the loop. Anything
 else, including a fix that departs from the reviewer's fix text, goes to the reviewer.

@@ -12,6 +12,8 @@ code or text; only Critical/Major block. Reopen the source before every file:lin
 from memory. On a recheck, work from the named fix diff: verify each listed finding from it and
 the finding's rationale, review the delta and its dependencies, re-read nothing else; return
 Fixed / Partial / Open / Regressed id lists, then new findings continuing the id sequence. A clean
-review is valid. The Cost line (context now / turns / elapsed) goes above
+review is valid. A new test that duplicates existing coverage, pins a private detail or could be a
+case of an existing test is a Minor finding whose fix names the test to fold it into or says drop
+it, because the suite only grows otherwise. The Cost line (context now / turns / elapsed) goes above
 `BEES: reviews=<unit>:<open Critical/Major ids|->[;…]`, which sits directly above the last line,
 `APPROVE` or `CHANGES_REQUIRED`.
