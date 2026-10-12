@@ -45,25 +45,6 @@ At the next safe point:
       further. This session stays open as a fallback and starts nothing.
 ```
 
-## Early successor
-
-Only when the owner asks for it, the successor may start while some of your bees still run, so
-free lanes stop idling. The checklist holds except its first three items, for the running bees:
-
-1. Resume names, besides the usual: "lanes held by the previous orchestrator's running bees:
-   <lane — unit>" (the successor dispatches nothing there), the free lanes and what is ready now.
-2. Commit the handoff and spawn the successor at once; take its name from ListAgents.
-3. From the spawn, never write the plan, log or queue again — the successor owns them, so no file
-   has two writers.
-4. On each remaining hand-back: close that lane's editors and release its claim (a retired bee
-   never returns), then send the successor one SendMessage with the unit, outcome, checkpoint SHA,
-   suite counts with their `report: … · finished` lines, report path and the stream's next piece,
-   asking it to record ☑ and log the round.
-5. After the last one, tell the successor so and start nothing more.
-
-You keep the ~200k hard stop: if you near it before your bees report, message the successor to take
-their lanes over as stale holders instead.
-
 ## Spawning the successor
 
 Fill `<plan path>`, `<plan>` and `<N>` in the template and pipe it to the handoff script, which
