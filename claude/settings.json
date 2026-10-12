@@ -14,7 +14,7 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "fable",
+  "model": "opus",
   "enableArtifact": false,
   "statusLine": {
     "type": "command",
@@ -41,7 +41,7 @@
       "effortLevel": "low"
     },
     "claude-opus-5-5": {
-      "effortLevel": "low"
+      "effortLevel": "medium"
     }
   },
   "autoCompactWindow": 600000,
