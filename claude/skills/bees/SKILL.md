@@ -112,7 +112,7 @@ A unit taking a pipeline where no committed consumer has gone gets a **path map*
 |---|---|---|
 | 1 2 | `-e medium` | `bee-opus-low` |
 | 3 | `-e medium` | `bee-opus-medium` |
-| 5 | `-e high` | `bee-opus-high` |
+| 5 | `-e high` | `bee-opus-medium` |
 | 8 | `-e xhigh` | `bee-opus-high` |
 | 13 | `-e xhigh` | `bee-opus-xhigh` |
 | support, no points | — | `bee-haiku-runner`, `bee-sonnet-medium` (above) |
