@@ -1,12 +1,12 @@
-<the stage-1 fields stay exactly as approved; stage 2 appends below them>
+<the approved brief fields stay exactly as written; expansion appends below them>
 
+**AC:**
+- STEP-07-AC1 — a checkable statement
+- STEP-07-AC2 — the edge or failure case
 **Reach:**
 - `Game/Assets/Foo.cs` `Foo.Apply` — changes
 - `Game/Assets/Bar.cs` `Bar.Load` — reads
 - tests: `FooTests`, `BarTests`
-**Sizing:** files 3 · call sites 7 · test classes 2 · runs 2 → S
-**Pieces:** none — or `STEP-07a`, `STEP-07b`, each S/M with its own `Done when` and the ACs it proves
-**Tests:** AC-1 — `FooTests.Applies_x` (new); AC-2 — `BarTests.Rejects_y` (existing)
-**Test filter:** `--filter "FooTests|BarTests"`
-**Needs:** STEP-03, or `-`
-Done when: AC-1 and AC-2 pass in the filter and the review is APPROVE.
+**Verify:** STEP-07-AC1 — `FooTests.Applies_x` (new, plain); STEP-07-AC2 — `BarTests.Rejects_y` (existing); `--filter "FooTests|BarTests"`; <an AC no test proves names its command or file:line inspection; a new Integration test names what a plain test cannot observe>
+**Score:** 3
+Done when: STEP-07-AC1 and STEP-07-AC2 are verified by their named checks and the review is APPROVE.

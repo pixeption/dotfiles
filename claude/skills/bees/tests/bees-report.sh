@@ -30,7 +30,6 @@ check codex-bulleted-finding 0 'Drop the hint for stretch profiles\.' 'BEES|capt
 check several-ids 0 'F3 — Low' - -- --finding F1,F3 "$FIX/review-codex.txt"
 check missing-id-named 1 'MISSING: F2 not in' - -- --finding F1,F2 "$FIX/review-codex.txt"
 check digest-unchanged-without-flags 0 '^### MAJ-02 — Major' 'var key' -- "$FIX/report-claude-review.md"
-check digest-sizing 0 '^S: two files changed' - -- "$FIX/impl-codex.txt"
 check digest-need-in-combined-heading 0 'keep the 30 s timeout' - -- "$FIX/impl-codex.txt"
 check digest-usage-context 0 '^Context: 74,291 tokens' - -- "$FIX/impl-codex.txt"
 

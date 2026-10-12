@@ -13,7 +13,7 @@ Read when `bees-watch` flags a round, a round terminates, or you set up a worktr
 agent; launching, naming and the `bees-watch` commands are SKILL.md "Watching rounds"'s.
 
 - **Naming.** The wrappers take `-o` verbatim, and `bees-watch --dir` reads only files named as
-  SKILL.md says. An astra consult is `review-<unit>-consult-r<N>.txt`.
+  SKILL.md says. A Sol advisor is `review-<unit>-advice-r<N>.txt`.
 - **Launching.** `run_in_background: true` covers every wrapper (`opencode-implement`,
   `opencode-review`, the CLI fallbacks): the harness re-invokes you when the round exits.
 - Batch Unity brief instructions are SKILL.md "Briefing an agent"'s.
@@ -29,7 +29,7 @@ the round's directory (`/session/status` is scoped per directory) or a live wrap
 
 | flag | meaning | do |
 |---|---|---|
-| `ASK WAITING` | a permission ask nobody headless can answer | answer it through the attach TUI if the pattern is inside the fence's allowlist, else kill the run and re-brief; then fix the cause — the server predates the fence (phase-boundaries "Preflight"), or the session was resumed for a directory it is not pinned to |
+| `ASK WAITING` | a permission ask nobody headless can answer | answer it through the attach TUI if the pattern is inside the fence's allowlist, else kill the run and re-brief; then fix the cause — the server predates the fence (plan-lifecycle "Preflight"), or the session was resumed for a directory it is not pinned to |
 | `STALE` | no log growth in 20 minutes and not BUSY: the run died | check the editor, re-run |
 | `quiet but BUSY (tool running)` | a long tool call — a Unity suite can be silent for 20 minutes | leave it |
 | `quiet but BUSY (model stream …)` | a provider holding a stream open with no output | leave it: `opencode-round` fails the round itself (`Blocked: the model stream stalled`) after `OPENCODE_ROUND_STALL_MIN` (15) minutes unchanged; resume with `-s` and the same prompt |

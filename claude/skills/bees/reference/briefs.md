@@ -1,8 +1,8 @@
-# Returns, the last-line contract, blockers and consults
+# Returns, the last-line contract, blockers and advice
 
 Read when a brief or report needs more than SKILL.md "Briefing an agent" and rule 10 give: a brief
 kind other than `impl`, an item without a Reach, light mode, a codex or scout brief, the BEES line's
-exact form, or a blocker or consult.
+exact form, or a blocker or a question for the owner.
 
 ## Contents
 
@@ -28,7 +28,7 @@ earlier run.
 ## Reports
 
 Every report is read once, compact, through `bees-report` (SKILL.md rule 10), because a hand-back
-or a `cat` stays in your context every later turn. It prints outcome, suite lines, sizing, what it
+or a `cat` stays in your context every later turn. It prints outcome, suite lines, what it
 needs from you, blocker and options, each finding's first line, the `.usage` context, BEES and
 verdict; `--finding MAJ-02,F3` adds each named finding's whole block with its fix (an id the file
 lacks prints `MISSING:`).
@@ -43,8 +43,8 @@ The command, its stdin and the kinds are SKILL.md "Briefing an agent"'s. The lan
 dispatch because the bee only claims it.
 
 - `--kind` picks the role's standing rules and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor,
-  reviewer or planner also gets its return contract; a consult answers directly, no report file or
-  BEES line, ending `CHANGES_REQUIRED`.
+  reviewer or planner also gets its return contract; an advisor writes its answer to its report file, no
+  BEES line, ending `CHANGES_REQUIRED`, since the decision log points to the answer.
 - Reach copying is SKILL.md "Briefing an agent"'s. An item without a Reach (every live plan)
   gets one from a `bee-scout` first: when the section names one side of a pair (writer/reader,
   export/import, check/apply, seed/parity), the scout lists the readers, validators and lowerings of
@@ -52,18 +52,17 @@ dispatch because the bee only claims it.
 - A fix round goes back to the implementor (SKILL.md "Briefing an agent"; `reference/budgets.md`
   "Continue, spawn or hand over") because a fresh bee re-reads what the implementor still holds;
   spawn fresh only past either line.
-- `--kind plan-ac` and `--kind plan-expand` are the read-only planner at stage 1 and stage 2 of the
-  `plan` skill's "Item fields by stage": each adds its stage block (`templates/planner-ac.txt`,
-  `templates/planner-expand.txt`) before the planner's standing rules and return contract, because
-  one owned block per stage keeps the fields and budget rules consistent. A `plan-ac` for a queue
-  row or gap cluster that has no plan yet runs with `--work <plan>.work` and the row or cluster on
-  stdin. You write its `Expanded` text into the plan — stage-1 drafts go to the queue's Owner list,
-  an `AC back to owner` item too. Under batch A a live item scored 5 or more gets `plan-expand`, recording Reach
-  and Sizing; one below 5 is sized by its implementor's first-read check, since a planner round per
-  2-point item costs more than the overrun it prevents. Either way no item proceeds on an inherited
-  M or `unknown`: that is a `Re-plan`.
+- `--kind plan-brief` and `--kind plan-expand` are the read-only planner at the `brief draft` and
+  `expand` stages of the `plan` skill's "Item fields by stage": each adds its stage block
+  (`templates/planner-brief.txt`, `templates/planner-expand.txt`) before the planner's standing
+  rules and return contract, because one owned block per stage keeps the fields and budget rules
+  consistent. A `plan-brief` for an owner-added queue row that has no plan yet runs with
+  `--work <plan>.work` and the row on stdin. You write its `Expanded` text into the plan
+  — the queued row's brief goes to the Owner list for `brief review`, a `Back to owner` item too.
+  An implementor treats the item's score as an estimate and never re-sizes it
+  (`templates/standing-rules-implementor.txt`).
 - A `--plan` unit without a `### <ID> · ` section fails the run, so every pointer resolves.
-- A phase gate a `bee-sonnet-medium` runs is `--kind gate --units GATE-<phase>`: no plan section,
+- A gate a `bee-sonnet-medium` runs is `--kind gate --units GATE-<n>`: no plan section,
   implementor rules and return contract, so its report lands in a file like any other — a
   hand-written brief lacks the heredoc line, and the Write tool refuses subagent report files.
 - The brief points the agent at each unit's plan section as its acceptance, so write acceptance
@@ -117,25 +116,23 @@ The bee agent files carry only model and effort; every Claude brief carries its 
 | role | template |
 |---|---|
 | implementor (`bee-opus-*`, `bee-sonnet-medium`, `bee-haiku-runner`) | `~/.claude/skills/bees/templates/standing-rules-implementor.txt` |
-| reviewer (`bee-reviewer`, `bee-reviewer-high`) | `~/.claude/skills/bees/templates/standing-rules-reviewer.txt` |
-| consultant (`bee-consultant`, and the astra consult) | `~/.claude/skills/bees/templates/standing-rules-consultant.txt` |
-| planner (`--kind plan-ac`, `--kind plan-expand`, a read-only `bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-planner.txt` |
+| reviewer (`bee-reviewer`) | `~/.claude/skills/bees/templates/standing-rules-reviewer.txt` |
+| advisor (`--kind advise`: `bee-opus-high`, then Sol; "Blocker cap and consults") | `~/.claude/skills/bees/templates/standing-rules-advisor.txt` |
+| planner (`--kind plan-brief`, `--kind plan-expand`, a read-only `bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-planner.txt` |
 
-The consultant's terminal `CHANGES_REQUIRED` is there because `opencode-review` fails an answer
-without a verdict; it carries no meaning in a consult.
+The advisor's terminal `CHANGES_REQUIRED` is there because `opencode-review` fails an answer
+without a verdict; it carries no meaning in advice.
 
 ## The last line is a contract
 
 Codex and bee alike; a Claude brief's return template carries it. Every implementor brief ends with: *"Your final message's last line is exactly
-`BEES: results=<unit>:<done|blocked|paused|needs-decision|replan>:<hashes|->[;…]`"* — one entry
+`BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]`"* — one entry
 per unit the round serves (the wrapper's `-u` list), hashes comma-separated, `-` for none: a round
 that finishes F2 and blocks LV-02 ends `BEES: results=F2:done:4a31ceeb;LV-02:blocked:-`.
 
-`replan` is the implementor's `Re-plan` return under `templates/standing-rules-implementor.txt`;
-its report's `Sizing` carries the real counts, which the `plan-expand` round SKILL.md "Briefing an
-agent" names rewrites with the pieces; it is logged because it means planning missed something. A planner ends
-`BEES: results=<unit>:<done|partial|blocked>:-`; `partial` lists the items still `to expand`, and an
-incomplete expansion never becomes `ready`.
+A planner ends `BEES: results=<unit>:<done|partial|blocked>:-`; `partial` lists the items still
+`to expand`, an incomplete expansion never becomes `ready`, and only the items under `Back to
+owner` wait on the owner.
 
 Every review brief keeps the terminal `APPROVE`/`CHANGES_REQUIRED` as the last line and puts
 `BEES: reviews=<unit>:<open-ids|->[;…]` on the line directly above it.
@@ -152,21 +149,24 @@ attempts) / Options (1–3) / Need from orchestrator`. It stops before any attem
 decision or a held resource. A brief that says "keep trying" or "retry until it works" is
 forbidden; the implementor standing rules carry the cap.
 
-**A capped-out blocker goes to a consultant** one tier up, same vendor, read-only, with the
-consultant standing rules:
+**A question for the owner goes to the advisors first** — a capped blocker, an implementor's
+`Needs decision` — because a lane must never wait on the
+owner. First grep the plan log's `decision:` lines and reuse a matching answer unless new evidence
+changes the question. Otherwise, in order:
 
-| blocked implementor | consultant |
-|---|---|
-| codex gpt-6.1-sol | `opencode-review -m openai/gpt-6-astra -e high` (read-only channel, background) |
-| `bee-opus-*`, `bee-sonnet-medium` | `bee-consultant` (one slot) |
+1. An Opus 5.5 high advisor: `bee-opus-high`, read-only, `--kind advise`.
+2. If it cannot decide, a Sol high advisor on the same brief: `opencode-review -m
+   openai/gpt-6.1-sol -e high --no-subagents` in a fresh session (never `-s` into the implementor
+   or review loop), out-file `review-<unit>-advice-r<N>.txt`, so `bees-watch --dir` sees it.
+3. If neither decides: one line in the queue's Owner list; the item is 🔴, its lane is released or
+   handed to the next ready item, and other work continues.
 
-Run an astra consult with `--no-subagents` in a fresh session (never `-s` into the implementor or
-review loop), out-file `review-<unit>-consult-r<N>.txt`, so `bees-watch --dir` sees it and its
-history stays out of both loops. The consultant returns a root cause and a way through, not a
-diff.
+An advisor decides only within the approved brief and the owner's rules (the plan's Rules, the
+standing owner rules); a question that needs either changed comes back `Cannot decide` and goes to
+the Owner list. Log each answer `- <date> [<ID>] decision: <answer> (advisor <opus|sol>,
+<report or out-file>)`.
 
-Re-brief the implementor with that answer: continue the blocked agent if it is under the
+Re-brief the implementor with the decision: continue the blocked agent if it is under the
 continuation line (`reference/budgets.md`), otherwise a fresh one in the same bucket whose brief
-carries the STOP report and the consultant's answer. A unit blocked again after a consultant's way
-through, or a `Needs owner` answer, is an **owner decision** (options with cost), never a third
-silent attempt. Log the consult on the unit (`[G1] consult: astra — root cause …`).
+carries the STOP report and the decision. A unit blocked again after an advised way through goes to
+the next step of the chain, never a third silent attempt.

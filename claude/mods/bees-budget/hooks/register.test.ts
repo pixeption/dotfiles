@@ -28,13 +28,13 @@ const send = ($: Engine, text = 'next unit') =>
   $.session.send({ to: 'worker', text, origin: { kind: 'model' } })
 
 test('a warm bee under the continue line gets the message', async ($, on) => {
-  hive(on, { tokens: 119_000 })
+  hive(on, { tokens: 99_000 })
   await stepAs($, 'a1')
   expect((await send($)).isDelivered).toBe(true)
 })
 
 test('a warm bee at the continue line is refused', async ($, on) => {
-  hive(on, { tokens: 120_000 })
+  hive(on, { tokens: 100_000 })
   await stepAs($, 'a1')
   const sent = await send($)
   expect(sent.isDelivered).toBe(false)
@@ -42,11 +42,17 @@ test('a warm bee at the continue line is refused', async ($, on) => {
 })
 
 test('a bee at the retire line is refused', async ($, on) => {
-  hive(on, { tokens: 200_000 })
+  hive(on, { tokens: 250_000 })
   await stepAs($, 'a1')
   const sent = await send($)
   expect(sent.isDelivered).toBe(false)
   expect(sent.reason).toMatch(/retire/)
+})
+
+test('a bee just under the retire line gets the continue-line refusal', async ($, on) => {
+  hive(on, { tokens: 249_999 })
+  await stepAs($, 'a1')
+  expect((await send($)).reason).toMatch(/continue line/)
 })
 
 test('a handover message reaches a bee past the retire line', async ($, on) => {
@@ -59,21 +65,30 @@ test('a cold bee at 100k or more is refused', async ($, on) => {
   const clock = hive(on, { tokens: 100_000 })
   await stepAs($, 'a1')
   await clock.advance(6 * MINUTE)
-  expect((await send($)).reason).toMatch(/cold/)
+  expect((await send($)).reason).toMatch(/continue line/)
 })
 
 test('a cold bee under 100k gets the message', async ($, on) => {
-  const clock = hive(on, { tokens: 90_000 })
+  const clock = hive(on, { tokens: 99_000 })
   await stepAs($, 'a1')
   await clock.advance(6 * MINUTE)
   expect((await send($)).isDelivered).toBe(true)
 })
 
 test('a running bee is never cold', async ($, on) => {
-  const clock = hive(on, { tokens: 110_000, status: 'running' })
+  const clock = hive(on, { tokens: 99_000, status: 'running' })
   await stepAs($, 'a1')
   await clock.advance(30 * MINUTE)
   expect((await send($)).isDelivered).toBe(true)
+})
+
+test('a running bee at 100k is refused a new brief', async ($, on) => {
+  const clock = hive(on, { tokens: 100_000, status: 'running' })
+  await stepAs($, 'a1')
+  await clock.advance(30 * MINUTE)
+  const sent = await send($)
+  expect(sent.isDelivered).toBe(false)
+  expect(sent.reason).toMatch(/continue line/)
 })
 
 test('agents that are not bees pass untouched', async ($, on) => {

@@ -4,7 +4,7 @@
   bees-report [--finding <IDs>] [--lane <path> --since <sha>] <file>...
 
 Per file: its size, the Outcome, any Blocked/STOP line, unity-suite's count and report lines, the
-Sizing, Verification, Concerns, Blocker, Options and Need-from-orchestrator sections unless they say
+Verification, Concerns, Blocker, Options and Need-from-orchestrator sections unless they say
 none (a heading listing several, like `Resources / Cost / Need from orchestrator`, counts as its
 last), each finding's and each non-blocking suggestion's first line, the out-file's `.usage` context,
 and the trailing BEES and verdict lines.
@@ -15,11 +15,11 @@ read: the orchestrator's call. See bees reference/briefs.md "Reports".
 """
 import argparse, json, re, subprocess, sys
 
-LABELS = ("Outcome", "Findings", "Changes", "Verification", "Resources", "Cost", "Concerns", "Sizing",
+LABELS = ("Outcome", "Findings", "Changes", "Verification", "Resources", "Cost", "Concerns",
           "Suggestions", "Goal", "Discovered", "Blocker", "Tried", "Options", "Need from orchestrator")
 LABEL = "|".join(LABELS)
 FIELD = re.compile(rf"^(#+\s*|[-*]\s+)?(?:(?:{LABEL})\s*/\s*)*({LABEL})\b")
-SHOWN = ("Sizing", "Verification", "Concerns", "Blocker", "Options", "Need from orchestrator")
+SHOWN = ("Verification", "Concerns", "Blocker", "Options", "Need from orchestrator")
 BULLET = re.compile(r"^(?:[-*]|\d+[.)])\s+")
 NEED_NONE = re.compile(r"^[\s:*_-]*(none|nothing|n/?a)?\W*$", re.I)
 KEEP = re.compile(r"^(Blocked:|STOP\.|\d+/\d+ passed, |report: .* · finished |BEES: )")

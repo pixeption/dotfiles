@@ -1,0 +1,10 @@
+Brief draft (`plan` skill "Item fields by stage"; copy `cat ~/.claude/skills/plan/templates/item-brief.md`):
+from the owner-added queue row named above, write the plan's one-page brief: a `## Brief` section
+saying how the result is used and an architecture note of a few lines, then one `### <ID> · <title>`
+section per outcome with Outcome (what the result looks like and how it is used), Right (a concrete
+example of it working as meant) and Wrong (a concrete example it must not produce, and what is out
+of scope). Short, plain words, no code references and no AC: the owner reads the briefs of one
+group row once, in one sitting, so nothing here needs the tree — read code only to tell whether an
+outcome is one item or several. If the queued row names a gap cluster, name the gap rows each item
+closes. Return the sections under `Expanded`; the orchestrator writes them into the plan and
+puts the queued row's brief in the Owner list for brief review, because only the brief needs approval.

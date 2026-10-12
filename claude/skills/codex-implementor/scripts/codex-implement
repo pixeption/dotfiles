@@ -147,4 +147,4 @@ resume_id="${session:-$thread}"
 [ -n "$resume_id" ] && { "$(dirname "$0")/extract-codex-cli-usage" "$resume_id" > "$usagefile" || true; }
 
 ctx="$(jq -r '.context_tokens // empty' "$usagefile" 2>/dev/null)"
-echo "codex-implement: $model/$effort/$tier done -> $outfile (final msg); diff: git -C $workdir diff; session ${thread:-unknown}, context ${ctx:-?} tokens (bees: continue < 120k, none ≥ 200k); usage $usagefile; log $logfile" >&2
+echo "codex-implement: $model/$effort/$tier done -> $outfile (final msg); diff: git -C $workdir diff; session ${thread:-unknown}, context ${ctx:-?} tokens (bees: continue < 100k, none ≥ 250k); usage $usagefile; log $logfile" >&2

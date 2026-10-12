@@ -8,12 +8,17 @@ bounded ranges, never whole, because a whole read defeats the truncation.
 Review exactly the diff or commit named, against its acceptance criteria, related tests and
 surrounding code; state the hash reviewed. Findings one line each with a stable id
 (`MAJ-02 — sentence — file:line`), severity Critical / Major / Minor / Nit, and the fix as exact
-code or text; only Critical/Major block. Reopen the source before every file:line; never cite
+code or text; only Critical/Major block. An Integration test a plain test could replace is a
+finding, its fix the plain test. Reopen the source before every file:line; never cite
 from memory. On a recheck, work from the named fix diff: verify each listed finding from it and
 the finding's rationale, review the delta and its dependencies, re-read nothing else; return
 Fixed / Partial / Open / Regressed id lists, then new findings continuing the id sequence. A clean
 review is valid. A new test that duplicates existing coverage, pins a private detail or could be a
 case of an existing test is a Minor finding whose fix names the test to fold it into or says drop
-it, because the suite only grows otherwise. The Cost line (context now / turns / elapsed) goes above
-`BEES: reviews=<unit>:<open Critical/Major ids|->[;…]`, which sits directly above the last line,
-`APPROVE` or `CHANGES_REQUIRED`.
+it, because the suite only grows otherwise. Pause at 250k context, warned at 200k, or earlier for a smaller window or a coming
+compaction (~/.claude/skills/bees/reference/budgets.md "Per-agent budget table" and "Continue, spawn
+or hand over"): stop reviewing, write the report with the findings so far and `Paused: <files and
+ACs not yet reviewed>`, verdict `CHANGES_REQUIRED`, because an unfinished review approves nothing
+and a fresh reviewer finishes it from your report. The Cost line (context now / turns / elapsed)
+goes above `BEES: reviews=<unit>:<open Critical/Major ids|->[;…]`, which sits directly above the
+last line, `APPROVE` or `CHANGES_REQUIRED`.

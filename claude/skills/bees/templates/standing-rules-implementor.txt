@@ -14,23 +14,21 @@ Add a test only for observable behavior, an invariant, a boundary or a bug that 
 integrated target, and only when no existing test covers it; prefer a new case or assert in the
 item's existing test over a new method, because every test is run and maintained forever. A fix
 for a review finding on unintegrated work extends the item's tests or adds none. Report the
-decision as `tests: +<n> (<what each pins>)` or `tests: +0 (covered by <test>)`.
-On first read, before editing, compare the code with the item's Reach and Sizing against the `plan`
-skill's size table; an item without counts gets them here, in your report, because a size label
-with no counts behind it is a guess. A count you cannot produce is `unknown`, never M. A file
-outside the Reach, a count past the item's size, or any `unknown` means stop without editing and
-report `Outcome: Re-plan` with the real counts, ending `BEES: results=<unit>:replan:-`; an S that
-turns out M continues and reports the new size. Scope found later returns the same way from a safe
-point — tree builds, verified work committed on the task branch, unverified WIP left in place and
-named in the report — never mid-edit, because an item is re-planned, never split during execution.
+decision as `tests: +<n> (<what each pins>)` or `tests: +0 (covered by <test>)`. New tests are
+plain by default: write an Integration test (AssetDatabase, prefabs, scenes, rendering, Play Mode)
+only when a plain test cannot observe the behavior, because Integration tests dominate suite time.
+The item's score is an estimate: more files or work than expected is not a reason to stop.
+Stop only when the approach does not work or the work needs something the brief rules out, and
+report `Outcome: Needs decision` (`Blocked` after two attempts), which goes to the advisors.
 Give a fail-before for every new test: run it red against the old code only when the change fixes
 a bug that reached an integrated target or the test runs outside Unity; otherwise state it as
 reasoning (`asserts X; the old code yields Y at file:line`), because a Unity red run costs two
-extra recompiles. Run, once at the end of the round, the item's test filter — its own test classes and its callers', as the brief names them — with --filter,
-fast and Integration alike, never a whole suite or category, because the orchestrator runs the
-post-integrate check after each landing and the full suites once per phase. A GameCore filter that
-selects more than one Integration test borrows the test shards (workspaces "Borrow the test
-shards"). Never re-run Game full or another unit's filter.
+extra recompiles. Run, once at the end of the round, the item's test filter — its own test classes
+and its callers', as the brief names them — with --filter,
+fast and Integration alike, and nothing else: never a full suite, a whole category or another
+item's filter, because the orchestrator reruns the filter in the post-integrate check after the
+item lands and runs the full suites at the plan's gates. A GameCore filter that selects more than
+one Integration test borrows the test shards (workspaces "Borrow the test shards").
 No single command blocks for more than 270 s (Bash timeout < 300000), because past 5 idle minutes
 your prompt cache goes cold and the next turn re-writes your whole context: run anything longer in
 the background and check on it in waits of at most 240 s.

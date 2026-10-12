@@ -2,6 +2,9 @@
 
 ## Objective and acceptance
 <what to build or change>. Done when: <the suite filter that proves it> reaches <count>.
+Run only that filter and the red runs the Style section requires, never a full suite or
+another item's filter: the post-integrate check reruns the filter and the plan's gates run the full
+suites.
 Touch: <files, with line ranges where the change is local>. Do not touch: <files>.
 
 ## Context
@@ -18,15 +21,11 @@ Read first: <the CLAUDE.md of the one game-core package the unit edits, by absol
 <`cat` templates/editor-card.md here and fill <project>. A `ui_*` unit adds the one skill section
 it needs as `path:start-end`.>
 
-## Size check (first read)
-Before editing, compare the code with the item's Reach and Sizing below against the `plan` skill's
-size table; an item without counts gets them here, in your report, since a size label with no counts
-behind it is a guess. A count you cannot produce is `unknown`, never M. A file outside the Reach, a
-count past the item's size, or any `unknown`: stop without editing and report `Outcome: Re-plan` with
-the real counts. An S that turns out M continues and reports the new size. Scope found later returns
-the same way from a safe point — tree builds, verified work committed, unverified WIP left in place
-and named — never mid-edit; an item is re-planned, never split during execution.
-Reach: <the item's Reach, or "none — count it">. Sizing: <the item's counts and size, or "none">.
+## When to stop
+The item's score is an estimate: more files or work than expected is not a reason to stop.
+Stop only when the approach does not work or the work needs something the brief rules out, and
+report `Outcome: Needs decision` (`Blocked` after two attempts), which goes to the advisors.
+Reach: <the item's Reach, or "none">.
 
 ## Commit gate
 When the required verification includes a Unity test run and no suite XML was produced in this
@@ -45,10 +44,16 @@ before any attempt, on a held resource or a missing decision. No retry or pollin
 
 ## Style
 Short and obviously correct; no restating comments; no unrelated refactors. Classify every failure
-as introduced / pre-existing (with evidence) / unknown.
+as introduced / pre-existing (with evidence) / unknown. New tests are plain by default: write an
+Integration test (AssetDatabase, prefabs, scenes, rendering, Play Mode) only when
+a plain test cannot observe the behavior, because Integration tests dominate suite time.
+Add a test only for observable behavior, an invariant, a boundary or a bug that reached an
+integrated target, when no existing test covers it, preferring a new case in an existing test.
+Run a new test red against the old code only for such a bug or a test outside Unity; otherwise
+state why it would fail there (`asserts X; the old code yields Y at file:line`).
 
 ## Return
-Outcome / Findings / Sizing (the counts from your first read) / Changes / Verification (commands verbatim + parsed counts) / Resources
+Outcome / Findings / Changes / Verification (commands verbatim + parsed counts) / Resources
 (editor state before/after) / Cost / Concerns / Need from orchestrator. Every commit subject names
 <unit>. Your final message's last line is exactly
-`BEES: results=<unit>:<done|blocked|paused|needs-decision|replan>:<hashes|->`
+`BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->`

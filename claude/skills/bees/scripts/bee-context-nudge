@@ -9,8 +9,8 @@ context-nudge) or no reading yet means no output; the next tool call retries. Pa
 run their hooks in parallel, so each step runs under a nonblocking per-agent flock and a call that
 cannot take it exits silently. State and lock live in $TMPDIR, which the OS cleans; they survive a
 hand-back because the same agent may be resumed.
-  BEE_NUDGE_WARN   default 150000: leaves room to finish a step and plan the pause before 200k
-  BEE_NUDGE_PAUSE  default 200000: the implementor pause line (bees reference/budgets.md)
+  BEE_NUDGE_WARN   default 200000: leaves room to finish a step and plan the pause before 250k
+  BEE_NUDGE_PAUSE  default 250000: the implementor pause line (bees reference/budgets.md)
 """
 import fcntl, json, os, pathlib, sys
 
@@ -45,8 +45,8 @@ if not (sid and agent and transcript):
 path = pathlib.Path(transcript).parent / sid / "subagents" / f"agent-{agent}.jsonl"
 if not path.is_file():
     sys.exit(0)
-lines = {"warn": int(os.environ.get("BEE_NUDGE_WARN", 150000)),
-         "pause": int(os.environ.get("BEE_NUDGE_PAUSE", 200000))}
+lines = {"warn": int(os.environ.get("BEE_NUDGE_WARN", 200000)),
+         "pause": int(os.environ.get("BEE_NUDGE_PAUSE", 250000))}
 base = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / f"bee-context-nudge-{sid}-{agent}"
 lock = open(f"{base}.lock", "a")
 try:

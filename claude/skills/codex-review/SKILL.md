@@ -27,8 +27,8 @@ The **codex CLI** (`scripts/codex-review`, `codex exec --sandbox read-only`) is 
 when the server won't start: codex-implementor's
 [`reference/codex-cli.md`](../codex-implementor/reference/codex-cli.md).
 
-A round that fails on a usage limit (429, limit reached) → the review goes to `bee-reviewer` (scores 1–5) or
-`bee-reviewer-high` (8–13), per bees `reference/review.md`.
+A round that fails on a usage limit (429, limit reached) → the review goes to `bee-reviewer`
+(scores 1, 2, 3, 5), per bees `reference/review.md`.
 
 ## Run it
 
@@ -76,10 +76,10 @@ fix. Stop and rewrite the section before resubmitting.
 
 ## Plan review under bees
 
-A plan's expanded phase (bees `reference/review.md` "Once per unit") gets **one discovery round at
-`-e high`** — round 1 above, over the phase's items and the source their Reach names — and no loop:
-the orchestrator applies or dispositions every finding, and the phase is `ready` when no High or
-Med is open. There is **no final pass**, because a plan is re-read by every implementor that runs
+An expanded plan (bees `reference/review.md` "Once per unit") gets **one discovery round at
+`-e high`** — round 1 above, over all the plan's items and the source their Reach names — and no
+loop: the orchestrator applies or dispositions every finding, and the plan is `ready` when no High
+or Med is open. There is **no final pass**, because a plan is re-read by every implementor that runs
 it and reviewed again as code; a second holistic pass buys little.
 
 - A **Med** finding closed by pasting the reviewer's exact text is closed by orchestrator
@@ -87,8 +87,13 @@ it and reviewed again as code; a second holistic pass buys little.
 - A **High** finding, or any fix that departs from the reviewer's text, gets **one targeted
   recheck**: a follow-up round in the same session, `--no-subagents`, scoped to those ids
   ("Follow-up rounds"); its `Fixed` closes them.
-- Approved AC is frozen (bees P-02): a finding against an AC is dispositioned as "back to owner",
-  never applied.
+- The round checks scores first: any item scored 8 or 13 is a High finding, since such an item is
+  split at planning (`plan` skill "Scoring").
+- The round checks the expanded AC against the plan's owner-approved brief (`plan` skill "Item
+  fields by stage"): each Outcome and Right is covered by an AC, no AC falls outside the brief, and
+  none contradicts a Wrong.
+- The brief is frozen: a finding against an Outcome, a Right or a Wrong is dispositioned "back to
+  owner", never applied. A finding against an AC alone is applied or dispositioned like any other.
 
 Code reviews are unchanged: discovery, follow-up, final pass, `APPROVE`.
 

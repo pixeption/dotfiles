@@ -1,9 +1,6 @@
 ## Outcome
 **Done** on `task/lane-2-FETCH-01`, committed as `abc1234`.
 
-## Sizing
-**S:** two files changed, one test class, zero new types.
-
 ## Verification
 `bash tools/fetch-test.sh` exited **0**: 12 ok.
 

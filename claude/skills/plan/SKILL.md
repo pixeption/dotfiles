@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >-
-  Formats structured Markdown plans, audits and reviews with summary tables, stable item IDs, scoring, staged items, phases, source links and the companion Rules, Resume and log a fresh session resumes from. Use when writing, restructuring or deleting a structured Markdown deliverable with enumerated items, or when bees runs a plan.
+  Formats structured Markdown plans, audits and reviews with summary tables, stable item IDs, scoring, staged items, linked replans, source links and the companion Rules, Resume and log a fresh session resumes from. Use when writing, restructuring or deleting a structured Markdown deliverable with enumerated items, or when bees runs a plan.
 ---
 
 # Plan and audit format
@@ -19,14 +19,14 @@ Right under the title:
 **Focus:** why now, what the document is for
 **By:** claude-opus-5-5 · reasoning: high (name any subagent used)
 **Method:** real verification done — compile check, call-site tracing, a build/test run, a review loop
-**Stage:** expanding phase 2 · ready phase 1
-**AC approved:** 2026-09-25
+**Stage:** expand
+**Brief approved:** 2026-09-25
 ```
 
-`Method` only when something was actually verified. `Stage` is the plan's stage ("Item fields by
-stage" below) with the phase being expanded or `ready`; `AC approved` appears once the owner
-approves the AC and never changes after. A plan the owner shaped in conversation says so in its
-header instead of a stage-1 pass.
+`Method` only when something was actually verified. `Stage` is one of the stage names in "Item
+fields by stage" below. `Brief approved` appears once the owner approves the brief and never
+changes after: the brief is the only owner-approved part of a plan and is frozen from then on. A
+plan the owner shaped in conversation says so in its header instead of a brief review.
 
 ## Tables at the top
 
@@ -40,158 +40,119 @@ Checklist columns for a plan:
 | `ID` | anchor link to the item's heading: `[STEP-01](#step-01--title-slug)` |
 | `Item` | one line |
 | `Pts` | score (below) |
-| `Size` | S · M · L or `unknown`, counted from the item's Sizing (below), never a guess |
 | `Route` | who implements it (a bees "Routing" bucket or a named agent/model); `-` outside bees |
-| `Phase` | the session that should finish it (below) |
 | `Depends` | hard dependencies only — IDs, or `-` — so scheduling does not serialize independent work |
-| `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ☑ `<sha>` checkpoint (a piece landed, its parent's review pending) · ✅ `<sha> <count>` done — the acceptance evidence: the reviewed SHA and the count its review ran on |
-
-A piece row names its parent in its `Item` cell (`… — piece of STEP-07`), so a ☑ is never read as an
-acceptance when scheduling or counting accepted parents.
+| `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ✅ `<sha> <count>` done — the acceptance evidence: the reviewed SHA and the count its review ran on |
 
 An audit or review may use `ID | Severity | Item | Status` instead; the ID/anchor rules still hold.
+
+A plan holds at most ~20 checklist rows, so a fresh session reads its checklist, Rules and Resume
+whole. Larger work is several plans, which the owner may queue together as one group row.
+
+**Replanning an item mid-run** is the orchestrator's, on an advisor's decision: the new items go to
+`docs/plans/<plan>.<ID>.md` in this format, linked from the item's row, and share the parent's
+Rules, Resume and log. The parent item is ✅ only when every row of the linked file is.
 
 ## IDs and headings
 
 - Stable, category-prefixed, sequential: `BUG-01`, `PERF-01`, `STEP-01`. Never renumber; a new
-  item takes the next free number, a split takes a suffix (`STEP-03a`).
+  item takes the next free number; a split item's parts are `STEP-08.1`, `STEP-08.2` ("Scoring").
 - Each item is a `### <ID> · <title>` heading. The checklist link targets GitHub's auto-slug:
-  lowercase, spaces → `-`, most punctuation dropped, ` · ` and ` — ` each become `--`.
+  lowercase, spaces → `-`, most punctuation dropped, ` · ` and ` — ` each become `--`; the dot
+  goes too, so `### STEP-08.1 · Title` is `#step-081--title`.
 - Done: `✅` in the checklist's Status cell, nowhere else. The heading never changes, so its
   anchor link stays valid.
 - A re-run of an audit adds a compact "Resolved since previous" table instead of rewriting history.
 
-## Scoring and phases
+## Scoring
 
-Score the **difficulty** of the item — how much reasoning it takes to get right — not its size
-(Fibonacci). Length, file count, suite runs and information gathering do not raise a score; a
-long mechanical task is still a 1.
+Score each item by judgment, one number for how hard and how big it is together (Fibonacci):
 
-| Pts | Difficulty |
+| Pts | Item |
 |---|---|
-| 1 | mechanical: the change is fully specified; run a suite, collect output, rename, apply a given diff |
-| 2 | routine: known pattern in known files, nothing to design, failure modes obvious |
-| 3 | one design choice inside one area; locate the right place, implement, test |
-| 5 | several interacting parts or a non-obvious invariant; a wrong choice is not caught by the suite |
-| 8 | unknown cause, cross-area trade-offs, or a design with more than one defensible answer |
-| 13 | new architecture or a contract change with migration, where mistakes are expensive to undo |
+| 1 | mechanical: a fully specified change, a suite run, a rename, a given diff |
+| 2 | routine: a known pattern in known files, nothing to design |
+| 3 | one design choice inside one area, or routine work across many files |
+| 5 | several interacting parts or a non-obvious invariant, or a large change in one area |
 
-Above 13, split. Size is handled by splitting (below), never by the score. An
-item whose score you cannot name is a read-only diagnosis item (3) that returns the split.
+An item that would score 8 or 13 — an unknown cause, cross-area trade-offs, new architecture, or
+more than one agent can hold — is split at planning into items scored 5 or less, numbered after it:
+`STEP-08` becomes `STEP-08.1`, `STEP-08.2` …, which replace its row. Each is a normal checklist row
+with its own score, route, `Depends`, status and `### STEP-08.1 · <title>` section, built,
+reviewed, accepted and landed on its own; the parent's `### STEP-08` section keeps only the shared
+context. Split along a seam — contract or model first, then its callers; one screen, case or area
+at a time; a read-only diagnosis before the fix it scopes — keep code and its tests in one item,
+and never into items that need each other's uncommitted work. An item whose score you cannot name
+is a read-only diagnosis item (3) that returns the split.
 
 ## Item fields by stage
 
-A plan goes through three stages; each adds fields to its items and none rewrites an earlier
-stage's. Fields are bold labels after the item's shared context, so an implementor reads its scope
-and its filter from the item alone. Each stage has a template to copy:
-`cat ~/.claude/skills/plan/templates/item-ac.md`,
+A plan goes through `brief draft` (planner), `brief review` (owner), `expand` (planner), `plan
+review` (codex) and `ready`; the queue then shows it as `run`. Each stage adds fields to its items
+and none rewrites an earlier stage's. Fields are bold labels after the item's shared context, so an
+implementor reads its scope and its filter from the item alone. Each stage has a template to copy:
+`cat ~/.claude/skills/plan/templates/item-brief.md`,
 `cat ~/.claude/skills/plan/templates/item-expand.md`, or
 `cat ~/.claude/skills/plan/templates/item-review.md`.
 
+The **brief** is one page per plan, in plain words with no code references: a `## Brief` section
+after the tables holds how the result is used and an architecture note of a few lines, and each item
+carries its Outcome, Right and Wrong.
+
 | Stage | Field | Holds |
 |---|---|---|
-| 1 · AC draft | **Outcome** | what changes for the player or developer, in plain words |
-| | **AC** | numbered, checkable statements (`AC-1`, `AC-2`…), edge and failure cases included |
-| | **Approach** | optional: the how, only where the owner or planner has a view |
-| | **Out of scope** | what the item deliberately doesn't do |
-| 2 · Expand | **Reach** | every reader, writer, validator, lowering and caller of what changes, as `file` + symbol (a line only where it will not move), each marked *changes* or *reads*, plus the test classes that exercise them. Required for any item that changes a contract, a field, a grammar or one side of a pair (writer/reader, export/import, check/apply, seed/parity); a planner that cannot produce it makes the item a diagnosis first |
-| | **Sizing** | the four counts of the table below and the size they give |
-| | **Pieces** | when split: the sub-items or new items, each S/M with its own `Done when` and the ACs it proves |
-| | **Tests** | for each AC, the test that proves it, new or existing |
-| | **Test filter** | the item's own test classes plus its callers', from the Reach, by class name, never a file name (`--filter` matches classes) — what the implementor runs with `--filter` |
-| | **Needs** | hard dependencies only |
+| brief draft | **Outcome** | what the result looks like and how it is used |
+| | **Right** | a concrete example of the result working as meant |
+| | **Wrong** | a concrete example it must not produce, and what the item deliberately doesn't do |
+| brief review | — | adds no field: the owner approves the briefs of one group row in one sitting |
+| expand | **AC** | numbered, checkable statements (`<ID>-AC1`, `<ID>-AC2`…), edge and failure cases included, each inside the brief |
+| | **Reach** | every reader, writer, validator, lowering and caller of what changes, as `file` + symbol (a line only where it will not move), each marked *changes* or *reads*, plus the test classes that exercise them. Required for any item that changes a contract, a field, a grammar or one side of a pair (writer/reader, export/import, check/apply, seed/parity); a planner that cannot produce it makes the item a diagnosis first |
+| | **Verify** | for each AC the test or command that proves it, new or existing, and the test filter: the item's own test classes plus its callers', from the Reach, by class name, never a file name (`--filter` matches classes) |
+| | **Score** | the item's points ("Scoring") |
 | | **Done when** | the item's last line, naming the ACs it closes |
-| 3 · Review | — | adds no field: one codex plan review per expanded phase (sizing, then AC coverage, then reach); the phase is `ready` when no High or Med finding is open |
+| plan review | — | adds no field: one codex plan review per expanded plan, over all its items (scores, where any 8 or 13 is a High finding, then AC against the brief, then reach); the plan is `ready` when no High or Med finding is open |
 
-- **Stage 1 is the owner's one gate per plan**: short, no code references, the drafts of one
-  triage approved in one sitting. Approved AC is frozen — an AC that expansion shows wrong goes back
-  to the owner with the reason and a proposed edit, never edited in place — and AC ids stay stable
-  when expansion creates pieces.
-- **Stage 2 expands one phase at a time**, the next while the current runs, so Reach is read from
-  the tree the items will actually change. An incomplete expansion cannot become `ready`.
+- **The brief is the owner's one gate per plan**, frozen once approved. Expansion never edits it: a
+  finding that would change an Outcome or an exclusion (a Wrong, or what is out of scope) goes to
+  the queue's Owner list with the reason and a proposed edit; every other AC question is settled by
+  planner, codex and orchestrator without the owner. AC ids stay stable when expansion splits
+  an item.
+- **Expansion runs once per plan**, over all its items, once the work it builds on has landed, so
+  Reach is read from the tree the items will actually change. An incomplete expansion cannot become
+  `ready`.
 
 "May change" is the Reach's *changes* entries. Two items may run in parallel when their *changes*
 sets are disjoint and neither's acceptance reads output the other changes; shared *reads* are fine.
 
-## Sizing and splitting
+## Review, landing and the gate
 
-An implementor has a hard 200k context cap, and a unit that hits it pauses and its successor rebuilds
-the context, so **Size is counted, not guessed**: the item's **Sizing** field holds the four counts
-below, read from the tree and its Reach, and the size is the largest column that applies.
-
-| Size | Files changed | Call sites of changed symbols (production + test) | Test classes in the filter (unit-specific) | Planned runs |
-|---|---|---|---|---|
-| S | ≤ 4 | ≤ 10 | ≤ 4 | ≤ 2 |
-| M | ≤ 12 | ≤ 30 | ≤ 10 | ≤ 4 |
-| L | above M in any column — split before the run | | | |
-
-Counting rules:
-
-- A synced copy of a file (a skill mirrored into another project) counts once, at its source: it
-  is one edit.
-- Planned runs are the runs the expansion can name before the run — suite runs, editor or browser
-  sessions, live checks, the one review — never the fix rounds observed afterwards, which measure
-  churn, not size.
-- Standing filters that join every run are fixed overhead, not a size signal: count the distinct
-  unit-specific classes in the item's Test filter, including its own and its callers' tests.
-
-A count the planner cannot produce makes the size `unknown`: the item becomes a read-only diagnosis
-that returns the counts, never an M by default. An L cannot leave planning: split it there into S/M
-pieces. Every piece:
-
-- is a checkpoint, not an acceptance, so review covers the complete parent change. A **serial**
-  piece is a private lane checkpoint: the tree builds, its `Done when` holds, it is committed on
-  the task branch and not integrated; planned-red tests named in `Done when` stay off the target.
-  A **parallel** piece integrates on its own only when it leaves the target green. Pieces receive
-  no individual review. After the last checkpoint, review and accept the **parent once**: on the
-  lane before a serial group integrates, with the complete parent filter green; on the target for
-  parallel pieces, over their recorded SHAs so unrelated commits are excluded;
-- has its own `Done when` — a piece you cannot write one for is not a piece;
-- follows a seam: contract or model first, then its callers; one screen, case or area at a time;
-  a mechanical migration in batches; a read-only diagnosis before the fix it scopes; a bulk
-  re-seed or golden re-capture as its own piece after the code it reflects.
-
-Keep code and its tests in the same parent item, so acceptance covers both; its pieces follow the
-checkpoint boundary above. Never split into halves that need each other's uncommitted work.
-
-**Sub-items or new items.** Pieces that read the same files are sub-items, `STEP-07a`, `STEP-07b`:
-one agent carries its warm context from one to the next. Pieces in different areas, or that can run
-in parallel, are new items with the next free number. Sub-items replace the parent's checklist row,
-each with its own `Pts`, `Size` and `Depends`; the parent's `### STEP-07` section keeps the shared
-context, each sub-item gets its own `### STEP-07a · <title>` section.
-
-A **phase** is what one session should finish: ≈ 5–8 items. Phases are numbered from 1 and follow
-the `Depends` order.
-
-For an unsplit item, review is its last implementation step; split items use the parent review boundary above. Put this in shared context,
-never a `REV-nn` row, which doubles the checklist without adding work to track. Closing its editors
+Review is an item's last implementation step: once per item, after its build, on the lane before
+it lands. Put this in shared context, never a `REV-nn` row, which doubles the checklist without adding work to track. Closing its editors
 and integrating its lane are the unit's final shipping steps, never their own rows or part of a
 gate, so each landing remains attributable to its item. An item lands as **one commit** whose subject names its id, so the landed commit is
 found with `git log --grep '<ID>'`; the Status cell and the `accept:` log line hold the reviewed
 lane SHA and the counts the review ran on. Plan and log edits written before landing ride in that item's commit, so its change and evidence
 stay together. Post-integrate evidence and bookkeeping that cannot be folded wait for the next
-landing or a plan-stage, phase-end or handoff commit; log lines are never committed alone.
+landing or a plan-stage, plan-close or handoff commit; log lines are never committed alone.
 
-
-Every phase ends with a `GATE-<n>` row, `<n>` its phase number (1 pt, `Depends` listing each of the
-phase's item IDs), whose section is only this checklist, so the phase cannot close on a green suite
-alone:
+Every plan ends with a final `GATE-<n>` row (1 pt, `Depends` listing every item ID). In a plan of
+large items the planner may place more `GATE-<n>` rows between items, each depending on the items
+before it, so a break is caught while it is a few commits old. A gate's section is only a checklist
+whose first line is "Full suites green on the named target SHA, counts logged"; the final gate's
+closes the plan, so it cannot close on a green suite alone:
 
 ```text
-- [ ] Full suites green on the target, counts logged
-- [ ] Every post-integrate check of the phase recorded in the log
-- [ ] Rules current and Resume overwritten for the successor
-- [ ] Handoff to a fresh session for the next phase (bees reference/handoff.md); the successor waits
-      for the owner's go when the owner scoped the session to this phase
-Done when: the successor's tab is named, or the final message says why no handoff ran.
+- [ ] Full suites green on the named target SHA, counts logged
+- [ ] Every post-integrate check of the plan recorded in the log
+- [ ] Plan close: triage, pick-up and retro (bees `reference/plan-lifecycle.md` "Plan close")
+- [ ] Final report to the owner: retro numbers, proposed rule changes, picked fix clusters
+Done when: the final report is sent.
 ```
 
-The **successor** opens the phase, before it dispatches anything, with triage, pick-up and the retro
-numbers (bees `reference/phase-boundaries.md` "Triage" and "Retro"); these are its opening
-obligations, not prerequisites of the
-handoff, so the retiring session does none of them. After the last implementation phase the
-successor is a closeout session: the plan is complete when its triage, numbers and final report
-are in.
+A red gate is the orchestrator's: a reviewed repair is added as the next item and the gate reruns
+on the repaired target SHA. The plan closes once, on a green final gate, in whichever session
+holds it then; a context handoff resumes an unfinished close and never re-runs a step already
+logged.
 
 ## Sources and snippets
 
@@ -201,8 +162,8 @@ are in.
 
 ## Rules, Resume and log (plans that span sessions)
 
-What a successor resumes from is the checklist, `## Rules`, `## Resume` and the queue; it reads
-those and `tools/workspace.sh list`, nothing else. Rules and Resume are sections of `<plan>.md`
+A fresh session resumes from the checklist, `## Rules`, `## Resume` and the queue; it reads those
+whole and `tools/workspace.sh list`, nothing else. Rules and Resume are sections of `<plan>.md`
 after the items; the log is `<plan>.log.md` beside it, committed with it.
 
 ### Rules
@@ -225,14 +186,14 @@ a codex session is resumable only on the same server, so say so when the plan ma
 `<plan>.log.md`, append-only, one terse line per event — `- <YYYY-MM-DD HH:MM> [<ID>] <kind>:
 <text>` — carrying ids, SHA, counts and verdict only; reasoning lives in the review or report file
 the line points to. Kind one of `round`, `review`, `accept`, `decision`, `gap`, `concern`,
-`escape` (a bug caught one test level later than it should have been), `replan` (an item returned
-to expansion with its real counts), `handoff`, or none for a plain line:
+`escape` (a bug caught one test level later than it should have been), `replan` (an item replanned
+into its linked file), `handoff`, or none for a plain line:
 
 ```markdown
 - 2026-09-24 14:12 [STEP-05] review: codex sol r3 APPROVE (review-STEP-05-r3.txt)
 - 2026-09-24 14:20 [STEP-05] accept: 412 green; reviewed at 3b73b3a
-- 2026-09-24 14:25 decision: D7 phase 2 runs without a reviewer for 1-pt items
-- 2026-09-24 15:02 [STEP-07] replan: files 6 > S; back to expansion (report-STEP-07-impl-r1.md)
+- 2026-09-24 14:25 decision: D7 1-pt items run without a reviewer
+- 2026-09-24 15:02 [STEP-07] replan: D8 → STEP-07.1–07.3 in <plan>.STEP-07.md (review-STEP-07-advice-r1.txt)
 - 2026-09-24 16:40 [STEP-05] escape: UIStylePatchTests caught at post-integrate, fixed 9c1e2d0
 ```
 
@@ -241,7 +202,7 @@ greps to hide superseded rounds.
 
 ## Deleting a plan
 
-A plan is deleted after its last retro, whose numbers are counted from its log — never before.
+A plan is deleted after its retro, whose numbers are counted from its log — never before.
 "Delete a plan" means the plan **and every file that travels with it**: `<plan>.md`,
 `<plan>.log.md`, any other `<plan>.*` beside it, and the gitignored `.work/` — without asking about
 each one. List what you deleted and say that `.work/` is not recoverable, since it is gitignored.

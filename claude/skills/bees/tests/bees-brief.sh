@@ -15,6 +15,8 @@ SECTION="Start from the unit-section pointer in the brief"
 SAVED="Inspect a truncated output's saved file by search or bounded ranges"
 FILTER="Filter long command output to the actionable lines"
 
+PAUSE="Pause at 250k context, warned at 200k, or earlier for a smaller window or a coming compaction"
+BUDGET="reference/budgets.md \"Per-agent budget table\" and \"Continue, spawn or hand over\""
 PLAN="$TMP/plan.md"
 printf '# Plan\n\n### U-01 · first\n\nx\n\n### U-02 · second\n\ny\n\n### U-03 · unrelated\n\nz\n' > "$PLAN"
 round=0
@@ -23,6 +25,7 @@ brief() { # brief <args…>: builds a fresh round and prints the brief's path
   echo "Objective: test." | "$SCRIPT" "$@" --round "$round" | head -1 | sed 's/ · .*//'
 }
 count() { tr '\n' ' ' < "$1" | grep -oF -- "$2" | wc -l | tr -d ' '; }
+has() { if [ "$(count "$2" "$3")" == "$4" ]; then ok "$1"; else bad "$1: want $4 of [$3] got $(count "$2" "$3")"; fi; }
 expect_rules() { # expect_rules <name> <brief> <want-skill> <want-section> <want-saved> <want-filter>
   local got="$(count "$2" "$SKILL") $(count "$2" "$SECTION") $(count "$2" "$SAVED") $(count "$2" "$FILTER")"
   if [ "$got" == "$3 $4 $5 $6" ]; then ok "$1"; else bad "$1: hygiene rule counts want [$3 $4 $5 $6] got [$got]"; fi
@@ -33,9 +36,12 @@ for kind in impl fix; do
 done
 b=$(brief --plan "$PLAN" --units GATE-1 --kind gate); expect_rules "gate gets the four hygiene rules" "$b" 1 1 1 1; if [ -f "$b" ] && ! grep -q "sed -En" "$b"; then ok "plan-mode gate has no section pointer"; else bad "plan-mode gate: brief [$b]"; fi
 for kind in review recheck; do
-  expect_rules "$kind gets the first three" "$(brief --plan "$PLAN" --units U-01 --kind $kind)" 1 1 1 0
+  b=$(brief --plan "$PLAN" --units U-01 --kind $kind)
+  expect_rules "$kind gets the first three" "$b" 1 1 1 0
+  has "$kind rules pause at the sub-agent line" "$b" "$PAUSE" 1
+  has "$kind rules cite the budget sections" "$b" "$BUDGET" 1
+  has "$kind pause returns the unreviewed rest" "$b" "\`Paused: <files and ACs not yet reviewed>\`, verdict \`CHANGES_REQUIRED\`" 1
 done
-expect_rules "consult gets the first three" "$(brief --plan "$PLAN" --units U-01 --kind consult)" 1 1 1 0
 
 b=$(brief --plan "$PLAN" --units U-02,U-01 --kind impl)
 got=$(grep -oE "sed -En '/\^### U-0[0-9] ·" "$b" | grep -oE 'U-0[0-9]' | tr '\n' ' ')
@@ -44,45 +50,55 @@ if [ "$got" == "U-02 U-01 " ]; then ok "plan mode points at each named unit only
 b=$(brief --work "$TMP/work" --units GATE-1 --kind gate)
 if [ -f "$b" ] && ! grep -q "sed -En" "$b"; then ok "light-mode gate has no section pointer"; else bad "light-mode gate: brief [$b]"; fi
 
-SIZE="On first read, before editing, compare the code with the item's Reach and Sizing"
-REPLAN="BEES: results=<unit>:replan:-"
-has() { if [ "$(count "$2" "$3")" == "$4" ]; then ok "$1"; else bad "$1: want $4 of [$3] got $(count "$2" "$3")"; fi; }
+ESTIMATE="The item's score is an estimate: more files or work than expected is not a reason to stop."
 b=$(brief --plan "$PLAN" --units U-03 --kind impl)
-has "impl rules carry the first-read size check" "$b" "$SIZE" 1
-has "impl rules carry the Re-plan return" "$b" "$REPLAN" 1
-has "impl return vocabulary lists replan" "$b" "<done|blocked|paused|needs-decision|replan>" 2
+has "impl rules treat the score as an estimate" "$b" "$ESTIMATE" 1
+has "impl rules stop only to the advisors" "$b" "report \`Outcome: Needs decision\` (\`Blocked\` after two attempts)" 1
+has "impl return vocabulary has no replan" "$b" "<done|blocked|paused|needs-decision>" 2
+has "impl brief has no Sizing field" "$b" "Sizing" 0
+b=$(brief --plan "$PLAN" --units U-01 --kind advise)
+expect_rules "advise gets the first three" "$b" 1 1 1 0
+has "advise is limited to the approved brief and the owner's rules" "$b" "Decide only within the approved brief and the owner's rules" 1
+has "advise has no BEES line" "$b" "BEES: results" 0
+has "advise rules pause at the sub-agent line" "$b" "$PAUSE" 1
+has "advise rules cite the budget sections" "$b" "$BUDGET" 1
+has "advise pause returns what is established" "$b" "write \`Decision: Paused\`, what you established" 1
 
-AC_BLOCK="Stage 1, AC draft"
-EXPAND_BLOCK="Stage 2, expand"
+BRIEF_BLOCK="Brief draft (\`plan\` skill"
+EXPAND_BLOCK="Expand (\`plan\` skill"
 b=$(brief --plan "$PLAN" --units U-01 --kind plan-expand)
 expect_rules "plan-expand gets the four hygiene rules" "$b" 1 1 1 1
-has "plan-expand carries the stage-2 block" "$b" "$EXPAND_BLOCK" 1
-has "plan-expand keeps AC read-only" "$b" "AC is read-only" 1
-has "plan-expand rules stop at 120k and return the rest as to expand" "$b" "Stop at 120k context" 1
-has "plan-expand rules never default to M" "$b" "\`unknown\`, never M" 1
+has "plan-expand carries the expand block" "$b" "$EXPAND_BLOCK" 1
+has "plan-expand keeps the brief read-only" "$b" "The brief is read-only" 1
+has "plan-expand rules pause at the sub-agent line" "$b" "$PAUSE" 1
+has "plan-expand pause returns the rest as to expand" "$b" "then return the items done and the rest under \`To expand\`" 1
+has "plan-expand gives one judged score" "$b" "one judged score for how" 1
+has "plan-expand splits an 8 or 13 at planning" "$b" "you would score 8 or 13 is split here into items scored 5 or less" 1
 has "plan-expand return names the items to expand" "$b" "To expand:" 1
-has "plan-expand return sends an impossible AC to the owner" "$b" "AC back to owner" 2
+has "plan-expand sends a brief change to the owner" "$b" "Back to owner" 2
 has "plan-expand brief points at the unit section" "$b" "sed -En '/^### U-01 ·" 1
-has "plan-expand brief carries no implementor size check" "$b" "$SIZE" 0
-has "plan-expand brief carries no stage-1 block" "$b" "$AC_BLOCK" 0
+has "plan-expand brief carries no implementor estimate rule" "$b" "$ESTIMATE" 0
+has "plan-expand brief carries no brief block" "$b" "$BRIEF_BLOCK" 0
 
-b=$(brief --plan "$PLAN" --units U-02 --kind plan-ac)
-expect_rules "plan-ac gets the four hygiene rules" "$b" 1 1 1 1
-has "plan-ac carries the stage-1 block" "$b" "$AC_BLOCK" 1
-has "plan-ac names the stage-1 fields" "$b" "Outcome, AC (numbered" 1
-has "plan-ac carries no stage-2 block" "$b" "$EXPAND_BLOCK" 0
-has "plan-ac brief points at the unit section" "$b" "sed -En '/^### U-02 ·" 1
-has "plan-ac rules stop at 120k" "$b" "Stop at 120k context" 1
-b=$(brief --work "$TMP/work" --units Q-03 --kind plan-ac)
-if [ -f "$b" ] && ! grep -q "sed -En" "$b" && [ "$(count "$b" "$AC_BLOCK")" == 1 ]; then ok "plan-ac from a queue row needs no plan"; else bad "plan-ac --work: brief [$b]"; fi
+b=$(brief --plan "$PLAN" --units U-02 --kind plan-brief)
+expect_rules "plan-brief gets the four hygiene rules" "$b" 1 1 1 1
+has "plan-brief carries the brief block" "$b" "$BRIEF_BLOCK" 1
+has "plan-brief names the brief fields" "$b" "with Outcome (what the result looks like" 1
+has "plan-brief asks for usage and architecture" "$b" "architecture note of a few lines" 1
+has "plan-brief carries no expand block" "$b" "$EXPAND_BLOCK" 0
+has "plan-brief brief points at the unit section" "$b" "sed -En '/^### U-02 ·" 1
+has "plan-brief rules pause at the sub-agent line" "$b" "$PAUSE" 1
+b=$(brief --work "$TMP/work" --units Q-03 --kind plan-brief)
+if [ -f "$b" ] && ! grep -q "sed -En" "$b" && [ "$(count "$b" "$BRIEF_BLOCK")" == 1 ]; then ok "plan-brief from a queue row needs no plan"; else bad "plan-brief --work: brief [$b]"; fi
+if echo x | "$SCRIPT" --plan "$PLAN" --units U-01 --kind plan-ac --round 98 >/dev/null 2>&1; then bad "kind plan-ac is gone"; else ok "kind plan-ac is gone"; fi
 if echo x | "$SCRIPT" --plan "$PLAN" --units U-01 --kind plan --round 99 >/dev/null 2>&1; then bad "kind plan is gone"; else ok "kind plan is gone"; fi
 names() { # names <kind> <units>: the brief is brief-<units>-<kind>-r<N>.txt and its last Report line names report-<units>-<kind>-r<N>.md beside it
   local b n; b=$(brief --plan "$PLAN" --units "$2" --kind "$1"); n=$(basename "$b")
   if [[ "$n" =~ ^brief-${2//,/_}-$1-r[0-9]+\.txt$ ]] && grep -qF "Report: $(dirname "$b")/$(sed 's/^brief-/report-/; s/\.txt$/.md/' <<<"$n")" "$b"; then ok "$1 brief and report are named by unit, kind and round"; else bad "$1 names: [$n]"; fi
 }
-names plan-ac U-01
+names plan-brief U-01
 names plan-expand U-02,U-03
-for kind in plan-ac plan-expand impl; do
+for kind in plan-brief plan-expand impl; do
   if out=$(echo x | "$SCRIPT" --plan "$PLAN" --units U-09 --kind "$kind" --round 99 2>&1); then
     bad "$kind accepted a unit without a plan section: [$out]"
   elif [[ "$out" == *"no '### <ID> · ' section for U-09"* ]]; then

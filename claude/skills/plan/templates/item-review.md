@@ -1,1 +1,1 @@
-<keep the approved stage-1 fields and expanded stage-2 fields unchanged; stage 3 adds no item fields>
+<keep the approved brief and the expanded fields unchanged; the plan review stage adds no field>

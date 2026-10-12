@@ -3,9 +3,8 @@ import type { EngineInterface, ModelUsage, Register } from 'claude-code'
 
 import type { CodexLaunch, CodexSession } from '../types'
 
-const CONTINUE_LINE = 120_000
-const RETIRE_AT = 200_000
-const COLD_LIMIT = 100_000
+const CONTINUE_LINE = 100_000
+const RETIRE_AT = 250_000
 const CLAUDE_TTL_MS = 5 * 60_000
 const CODEX_TTL_MS = 30 * 60_000
 const SHOWN_FOR_MS = 60 * 60_000
@@ -26,15 +25,13 @@ const kilo = (n: number) => `${Math.round(n / 1000)}k`
 const isRetired = (tokens: number) => tokens >= RETIRE_AT
 const isCold = (r: Row, now: number) => !r.isRunning && now - r.at > r.ttlMs
 const isPastContinueLine = (tokens: number) => tokens >= CONTINUE_LINE
-const isBlocked = (r: Row, now: number) => isPastContinueLine(r.tokens) || (isCold(r, now) && r.tokens >= COLD_LIMIT)
+const isBlocked = (r: Row) => isPastContinueLine(r.tokens)
 
-const refusal = (r: Row, now: number) => {
+const refusal = (r: Row) => {
   if (isRetired(r.tokens))
     return `${r.label} is at ${kilo(r.tokens)} context, past the ${kilo(RETIRE_AT)} retire line: spawn a fresh bee and hand the resource over (bees reference/budgets.md). A retirement message may start with ${HANDOVER}.`
   if (isPastContinueLine(r.tokens))
     return `${r.label} is at ${kilo(r.tokens)} context, past the ${kilo(CONTINUE_LINE)} continue line: send the next round to a fresh bee (bees reference/budgets.md). A retirement message may start with ${HANDOVER}.`
-  if (isBlocked(r, now))
-    return `${r.label}'s cache is cold (idle ${Math.round((now - r.at) / 60_000)}m, clock ${r.ttlMs / 60_000}m) at ${kilo(r.tokens)} context, at or past ${kilo(COLD_LIMIT)}: spawn a fresh bee instead (bees reference/budgets.md).`
   return undefined
 }
 
@@ -148,7 +145,7 @@ const attach = async ($: EngineInterface, s: CodexSession) => {
 const cacheText = (r: Row, now: number) =>
   r.isRunning ? 'running' : `warm ${Math.ceil((r.ttlMs - (now - r.at)) / 60_000)}m`
 
-const statusColor = (r: Row, now: number) => (isBlocked(r, now) ? 'red' : r.isRunning ? 'green' : undefined)
+const statusColor = (r: Row) => (isBlocked(r) ? 'red' : r.isRunning ? 'green' : undefined)
 
 const tokenColor = (tokens: number) =>
   isRetired(tokens) ? 'red' : isPastContinueLine(tokens) ? 'yellow' : undefined
@@ -182,7 +179,7 @@ export const register: Register = on => {
     if (e.text.startsWith(HANDOVER)) return next(e)
     const to = e.to.replace(/ \[[^\]]*\]$/, '')
     const bee = (await beeRows($)).find(r => r.id === to || r.label === to)
-    const reason = bee && refusal(bee, await $.clock.now())
+    const reason = bee && refusal(bee)
     return reason ? { isDelivered: false, reason } : next(e)
   })
 
@@ -203,8 +200,8 @@ export const register: Register = on => {
             <Text dimColor>{r.vendor} {r.model}</Text>
             <Button key={r.codex.id} plain onPress={() => void attach($, r.codex)}>{r.label}</Button>
             <Text color={tokenColor(r.tokens)}>{kilo(r.tokens)}</Text>
-            <Text dimColor={!statusColor(r, now)} color={statusColor(r, now)}>
-              {cacheText(r, now)}{isBlocked(r, now) ? ' · spawn fresh' : ''}
+            <Text dimColor={!statusColor(r)} color={statusColor(r)}>
+              {cacheText(r, now)}{isBlocked(r) ? ' · spawn fresh' : ''}
             </Text>
           </Box>
         ))}

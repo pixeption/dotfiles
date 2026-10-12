@@ -4,16 +4,17 @@
   bees-brief --plan <plan.md> --units DR-02,DR-01 --kind impl [--round N]
   bees-brief --plan <plan.md> --units GATE-1 --kind gate < gate-lines
   bees-brief --plan <plan.md> --units STEP-07 --kind plan-expand < planner-lines
-  bees-brief --work <plan.work> --units Q-03 --kind plan-ac < planner-lines
+  bees-brief --work <plan.work> --units Q-03 --kind plan-brief < planner-lines
              [--include <file> --set 'lane=lane-1' --set 'task branch=…' …] < unit-lines
 
 Writes <plan>.work/brief-<units>-<kind>-r<N>.txt and prints its path and the hand-off line. The
 brief is: stdin, the units line (BEES order), a pointer to each unit's plan section, each --include
 with its <placeholders> filled by --set, the role's standing rules, and its return contract with
 the report path. --work <dir> replaces --plan in light mode, where there is no plan to point at.
---kind gate is the phase gate: implementor rules and return contract, no plan section to point at.
---kind plan-ac drafts stage-1 items (Outcome, AC, Approach, Out of scope) from a queue row or
-cluster; --kind plan-expand expands one phase under the P-03 budget. Both are the read-only
+--kind gate runs a GATE row's full suites: implementor rules and return contract, no plan section to point at.
+--kind advise asks an advisor a question meant for the owner: advisor rules, no return contract.
+--kind plan-brief drafts the plan's brief (usage, architecture, and Outcome, Right, Wrong per item)
+from a queue row or cluster; --kind plan-expand expands all of one plan's items under the P-03 budget. Both are the read-only
 planner: its standing rules plus the stage's block from templates/planner-<stage>.txt.
 Exit 1 on a missing template, an existing brief (rounds are never overwritten), an unfilled
 placeholder in an include, or a --set that fills nothing.
@@ -22,8 +23,8 @@ import argparse, pathlib, re, shlex, sys
 
 TEMPLATES = pathlib.Path(__file__).resolve().parent.parent / "templates"
 ROLE = {"impl": "implementor", "fix": "implementor", "review": "reviewer", "recheck": "reviewer",
-        "consult": "consultant", "gate": "implementor", "plan-ac": "planner", "plan-expand": "planner"}
-STAGE_BLOCK = {"plan-ac": "planner-ac.txt", "plan-expand": "planner-expand.txt"}
+        "advise": "advisor", "gate": "implementor", "plan-brief": "planner", "plan-expand": "planner"}
+STAGE_BLOCK = {"plan-brief": "planner-brief.txt", "plan-expand": "planner-expand.txt"}
 PLACEHOLDER = re.compile(r"<([a-z][a-z -]*)>")
 
 
@@ -42,9 +43,9 @@ SPEC = {
     "implementor": "Spec: read each unit's section in {plan} and follow it as written; its "
                    "acceptance holds unless this brief overrides it:",
     "reviewer": "Spec: each unit's section in {plan} is the acceptance the diff is reviewed against:",
-    "consultant": "Context: each unit's section in {plan}; diagnose, never implement:",
-    "plan-ac": "Draft: each unit's section in {plan} is the row or item you draft stage 1 for, read-only:",
-    "plan-expand": "Expand: each unit's section in {plan} is the item or phase you expand, read-only:",
+    "advisor": "Context: each unit's section in {plan}; decide the question above, never implement:",
+    "plan-brief": "Draft: each unit's section in {plan} is the row or item you draft the brief for, read-only:",
+    "plan-expand": "Expand: each unit's section in {plan} is an item you expand, read-only:",
 }
 
 
@@ -98,7 +99,7 @@ values = dict(s.split("=", 1) for s in a.set if "=" in s)
 if len(values) != len(a.set):
     fail("--set takes NAME=VALUE")
 used = set()
-bees = "" if role == "consultant" else " — your BEES line has one entry per unit, in this order"
+bees = "" if role == "advisor" else " — your BEES line has one entry per unit, in this order"
 parts = [body, f"Units: {', '.join(units)}{bees}."]
 if a.plan and a.kind != "gate":
     parts.append("\n".join(spec_lines(a.plan.resolve(), units, role, a.kind)))
@@ -112,8 +113,8 @@ if set(values) - used:
     fail(f"--set filled nothing: {', '.join(sorted(set(values) - used))}")
 if a.kind in STAGE_BLOCK:
     parts.append(read(TEMPLATES / STAGE_BLOCK[a.kind]).strip())
-parts.append(read(TEMPLATES / f"standing-rules-{role}.txt").strip())
-if role != "consultant":
+parts.append(read(TEMPLATES / f"standing-rules-{role}.txt").replace("<report>", shlex.quote(str(report))).strip())
+if role != "advisor":
     parts.append(read(TEMPLATES / f"return-{role}.txt").replace("<report>", shlex.quote(str(report))).strip())
 
 work.mkdir(parents=True, exist_ok=True)

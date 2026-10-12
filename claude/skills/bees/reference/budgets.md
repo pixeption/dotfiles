@@ -15,9 +15,10 @@
   session 30 minutes. A turn after its clock re-writes the whole context at 1.25× instead of
   reading it at 0.1×.
 - **Capability is bought per unit.** Most units are bounded and sol at medium handles them; higher
-  effort only where it changes the outcome, a stronger model only as a consultant on a blocker.
+  effort only where it changes the outcome, a stronger model only as an advisor on a question for
+  the owner ([`briefs.md`](briefs.md) "Blocker cap and consults").
 - **Neither a spawn nor a resume is free.** A fresh agent pays ~40–60k of onboarding; a resumed
-  one re-reads its session every step. Below ~120k the resume wins, past it the spawn does.
+  one re-reads its session every step. Below ~100k the resume wins, past it the spawn does.
 - **Rework is the second cost** (a review → fix → recheck round is 10–15M), **the orchestrator's
   own context the third** — compaction loses things nobody chose; a curated handoff does not.
 - **A blocked agent costs the owner's wall-clock**, so a background task is inspected, never
@@ -29,27 +30,36 @@
 
 One rule for both vendors (SKILL.md "Rules", the session budget), plus each vendor's cache clock:
 
-| | `bee-opus-*`, `bee-sonnet-medium`, `bee-haiku-runner` | `bee-reviewer*`, `bee-consultant` | `bee-scout` | codex session |
+| | `bee-opus-*`, `bee-sonnet-medium`, `bee-haiku-runner` | `bee-reviewer`, an advisor (`bee-opus-high`) | `bee-scout` | codex session |
 |---|---|---|---|---|
-| units per brief | one | one unit's diff / blocker | none (one question) | one |
+| units per brief | one | one unit's diff / question | none (one question) | one |
 | units per session | as many as fit under the context lines below | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
-| continue freely below | 120k | 120k | never continued | 120k (`.usage` `context_tokens`) |
-| finish the current round below | 200k | 200k | — | 200k |
-| **no new brief at or past** | **120k** | **120k** | any — spawn a new scout | **120k**, or any other directory |
+| continue freely below | 100k | 100k | never continued | 100k (`.usage` `context_tokens`) |
+| finish the current round below | 250k | 250k | — | 250k |
+| **no new brief at or past** | **100k** | **100k** | any — spawn a new scout | **100k**, or any other directory |
 | **cache warm for** | **5 min** idle | **5 min** idle | irrelevant | **30 min** idle |
 | resumable after the cache | one cold turn | one cold turn | — | OpenCode: any time, same `--dir`, one cold turn · CLI: never |
-| **agent self-pauses at** | **200k (hook)** | unhooked | unhooked; reports `Needs diagnosis` at ~120k | — |
+| warned at | 200k (hook) | 200k (the advisor's hook; the unhooked reviewer's own reading) | — | — |
+| **agent self-pauses at** | **250k (hook)**; `bee-haiku-runner` below its window | **250k**, returning the unfinished round (its standing rules) | reports `Needs diagnosis` at ~100k | — |
+
+**A smaller window or a coming compaction pauses earlier.** An agent pauses before its model window
+fills (`bee-haiku-runner`'s hook lines sit below its window) and before a compaction it can see
+coming. A compacted session — Claude, or OpenCode's summary at ~270k, flagged by a `compacted` key
+in `.usage` and the wrapper's stderr line — counts as freshly spawned for recall whatever its new
+size: record the smaller `context_tokens` as-is (codex-implementor's `extract-opencode-usage`).
 
 ## Why the lines sit where they do
 
-An implementor that needs more than 200k pauses when its context hook (`bee-context-nudge`) reaches
-200k (safe point, handover, `Outcome: Paused`), and its successor starts from the pause report. A
-brief sent to an agent at or past 120k is a bug in the orchestration, not a judgment call. Every turn of a 400k agent re-reads 400k of cache.
+A sub-agent that needs more than 250k pauses there (safe point, handover, `Outcome: Paused`), warned
+at 200k by its context hook (`bee-context-nudge`), and its successor starts from the pause report. A
+brief sent to an agent at or past 100k is a bug in the orchestration, not a judgment call. Every turn
+of a 400k agent re-reads 400k of cache.
 
-The arithmetic: a 20-step round on a 250k session reads ~5M of cache (~500k full-price-equivalent
+The arithmetic: a 20-step round on a 100k session reads ~2M of cache (~0.2M full-price-equivalent
 at 0.1×); the same round in a fresh session pays ~50k of onboarding at full price and then reads a
-prefix that starts small (~150–200k equivalent). Break-even sits near 120–150k for anything longer
-than a recheck. A turn after the cache clock has run out re-writes the whole context at 1.25× base
+prefix that starts small (~0.2M equivalent in all). Break-even sits near 100k for anything longer
+than a recheck, and on a 250k session the resumed round costs ~0.5M equivalent, over twice the
+fresh one. A turn after the cache clock has run out re-writes the whole context at 1.25× base
 price instead of reading it at 0.1×.
 
 ## Continue, spawn or hand over
@@ -60,30 +70,28 @@ price instead of reading it at 0.1×.
   session. The brief is the delta only, and the unit's acceptance items.
 - **Re-brief inside the clock or not at all.** A report starts the agent's cache clock: 5 minutes
   for Claude, 30 for codex. Inside it a continuation reads a warm cache; after it, the next turn
-  re-writes the whole context once — on a 200k agent that costs more than a fresh spawn's
-  onboarding. So when an agent reports, decide and answer in the same turn. Past the clock,
-  continue only an agent under ~100k; otherwise spawn.
-- **Spawn fresh** when: context at or past 120k; a different Claude agent, area, resource or repo;
-  a review of that agent's own work; or the cache is cold and the context is over ~100k.
+  re-writes the whole context once — near the 100k line that costs more than a fresh spawn's
+  onboarding. So when an agent reports, decide and answer in the same turn.
+- **Spawn fresh** when: context at or past 100k; a different Claude agent, area, resource or repo;
+  or a review of that agent's own work.
 - **Read context from every report.** Codex's lands in `.usage` by itself. A Claude bee's is the
   `<subagent_tokens>` on its **final** `completed` notification — the last turn's context, not a
   cumulative total; an interim notification reads low. It goes in the unit's log line. An agent
   that reports no numbers is asked once, in the next brief.
-- **Compaction (OpenCode only).** A `compacted` key in `.usage` (also in the wrapper's stderr line)
-  means the server summarized the session at ~270k: record the smaller `context_tokens` as-is, but
-  treat the agent as freshly spawned for recall (codex-implementor's `extract-opencode-usage`).
 - **Hand over instead of continuing** when a resource holder must be retired. Its last message is
   "[bees:handover] stop at a safe point; write the state a successor needs (suite command + last
   green count, uncommitted files, what is half-done, resources/Play-mode state) in your report" —
-  the prefix lets it past the 120k refusal (`bees-budget` mod, `opencode-budget`); you put its
+  the prefix lets it past the 100k refusal (`bees-budget` mod, `opencode-budget`); you put its
   facts in the plan's `## Resume` (`plan` skill "Rules, Resume and log"). The fresh agent's brief
   carries that text; it does not re-derive the area from the transcript.
+- **A paused agent** is succeeded by a fresh agent on the same item, briefed from its pause report —
+  never a replan or a split, since a full context is not new scope.
 - **Scouts** are never continued and never asked a second question. ≤ 2 scouts per unit; a third
   is a diagnosis unit. Log scout tokens on the unit (`[G1] scout ×2 · 90k`); they add no points.
 - **One unit per brief.** Two half-briefs to one agent beat one full brief, because each report is
   a checkpoint you can steer from. A continued agent keeps its name, so its effort is fixed: a
   1-point unit may continue on a `bee-opus-high` that already holds the area, but a 5-point unit
-  never continues on a `bee-opus-low` — spawn the row the difficulty names.
+  never continues on a `bee-opus-low` — spawn the row the score names.
 - A batch step that runs past the agent's cache clock costs it one cold turn afterwards, a full
   re-write of its context. Implementor verification follows `reference/routing.md` "Cost routing", so the test
   policy has one owner; a long run is accepted, never split to dodge the clock.

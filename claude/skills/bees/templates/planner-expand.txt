@@ -1,14 +1,16 @@
-Stage 2, expand (`plan` skill "Item fields by stage"; copy `cat ~/.claude/skills/plan/templates/item-expand.md`):
-one phase per brief, the items named above, from their approved AC. AC is read-only: an item
-whose AC expansion shows impossible or wrong goes under `AC back to owner` with the reason and a
-proposed edit, never edited, because approved AC is the owner's gate; AC ids stay stable when
-expansion creates pieces. Append below the stage-1 fields: Reach (every reader, writer, validator,
-lowering and caller of what changes, `file` + symbol, each marked changes or reads, plus the test
-classes that exercise them), Sizing (the four counts and the size the `plan` skill's "Sizing and
-splitting" table gives), Pieces, Tests (for each AC the test that proves it, new or existing), Test
-filter (own and callers' test classes), Needs, and a Done when naming the ACs it closes. Count
-files, call sites and unit-specific test classes from the tree and Reach; count planned runs from
-the named verification and the one review, using that heading's counting rules, because planned
-work is not a code occurrence. A count you cannot produce is `unknown`, never M, and an item whose
-Reach or counts cannot be produced becomes a diagnosis. An L is split here into S/M pieces, each
-with its own Done when.
+Expand (`plan` skill "Item fields by stage"; copy `cat ~/.claude/skills/plan/templates/item-expand.md`):
+once per plan, over all the plan's items (named above), from their approved brief. The brief is
+read-only: a finding that would change an Outcome or an exclusion (a Wrong, or what is out of scope)
+goes under `Back to owner` with the reason and a proposed edit, never edited, because the approved
+brief is the owner's; settle every other AC question yourself. Append below the brief fields: AC (numbered
+`<ID>-AC1`…, each checkable, edge and failure cases included, each inside the brief and none
+contradicting a Wrong; ids stay stable when expansion splits an item), Reach (every reader, writer,
+validator, lowering and caller of what changes, `file` + symbol, each marked changes or reads, plus
+the test classes that exercise them), Verify (for each AC the verification that fits it — an
+existing test or command where it suffices, a new test only when none does, and the filter of own
+and callers' test classes; a new test is plain by default, and one named as Integration states what
+a plain test cannot observe; no new test per AC is required), Score (one judged score for how
+hard and how big, the `plan` skill's "Scoring"), and a Done when naming the ACs it closes. An item
+you would score 8 or 13 is split here into items scored 5 or less, `<ID>.1`, `<ID>.2` …, each with
+its own row and section, because no 8 or 13 may reach execution. An item whose Reach cannot be
+produced becomes a diagnosis.

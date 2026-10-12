@@ -2,7 +2,7 @@
 
 Read when choosing a unit's channel (codex worktree or in place, Claude instead of codex), deciding
 who validates a codex diff or records a baseline, or running a check at a test level (a round's
-filter, the post-integrate check, the phase gate). SKILL.md "Routing" holds the scores and buckets.
+filter, the post-integrate check, a gate). SKILL.md "Routing" holds the scores and buckets.
 
 ## Contents
 
@@ -20,8 +20,8 @@ filter, the post-integrate check, the phase gate). SKILL.md "Routing" holds the 
   loads, and what it doesn't") — without it, codex cannot know the command surface exists.
 - **Lanes.** In a repo that runs lanes (nono4u), who runs where — codex in place in a lane or `bee-*`
   sub-agents holding one for units that edit or drive an editor, sub-agents for read-only work and the gate — is its
-  `workspaces` skill "Who works where"; follow the checkpoint and parent-review boundary in
-  `reference/review.md` "Once per unit" before reusing a lane, so pieces are not accepted separately.
+  `workspaces` skill "Who works where"; a lane is reused once its item is accepted and landed
+  (`reference/review.md` "Once per unit").
 - **Claude instead of codex** only when the unit needs judgment a batch run cannot settle (a
   screenshot read, a live Play-mode check), or its codex round failed on a usage limit (SKILL.md
   "Routing"). Before routing for browser judgment, verify the assigned bee can open the target
@@ -39,11 +39,13 @@ filter, the post-integrate check, the phase gate). SKILL.md "Routing" holds the 
 - **Three test levels, each run once at its boundary**, so verification is not repeated within a level:
   - *Round* — the bee, holding its lane: the item's test filter and any red run the fail-before rule requires, its own and
     its callers' test classes, once at the end of the round
-    (`templates/standing-rules-implementor.txt`); it never re-runs Game full or another unit's filter.
-  - *Post-integrate* — SKILL.md "Status and acceptance" owns the per-landing check.
-  - *Phase gate* — the sharded runner, holding `integration` and `test-shards`: the full suites,
-    once per phase, on a `bee-haiku-runner`, because it outlasts the 5-minute cache clock and a
-    cold turn is cheapest on Haiku and keeps the run out of your context.
+    (`templates/standing-rules-implementor.txt`); never a full suite or another item's filter.
+  - *Post-integrate* — SKILL.md "Status and acceptance" owns the per-landing check: the landed
+    item's filter only.
+  - *Gate* — each GATE row (`plan` skill "Review, landing and the gate"): the full suites on its
+    target SHA, holding `test-shards`, and `integration` only while it copies that SHA
+    (`workspaces` "Integrate a lane"), on a `bee-haiku-runner`, because it outlasts the 5-minute
+    cache clock and a cold turn is cheapest on Haiku and keeps the run out of your context.
   At any level a GameCore run selecting more than one Integration test borrows the test shards
   (`workspaces` "Borrow the test shards"); Game runs in one editor, since its `file:` packages
   cannot shard. Every run records the SHA or worktree it tested, the command, the filter and the

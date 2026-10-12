@@ -1,10 +1,10 @@
 Report: write your full report to <report> with a Bash heredoc (cat > <report> <<'EOF'), since the
 Write tool is refused for subagent report files, in this format:
 Outcome: Done | Partial | Blocked
-Expanded: each finished item's full section text (stage 1 or 2), ready to paste into the plan.
+Expanded: each finished item's full section text (brief or expansion), ready to paste into the plan.
 To expand: each unfinished item, with the reads not made.
-AC back to owner (stage 2): items whose approved AC is impossible or wrong — reason, proposed edit.
-Diagnosis first (stage 2): items whose Reach or a count could not be produced, and why.
+Back to owner (expansion): items whose approved Outcome or exclusion would have to change — reason, proposed edit.
+Diagnosis first (expansion): items whose Reach or a count could not be produced, and why.
 Cost: context now / turns / elapsed.
 Concerns: contradictions with the plan's sections or decisions.
 BEES: results=<unit>:<done|partial|blocked>:-
