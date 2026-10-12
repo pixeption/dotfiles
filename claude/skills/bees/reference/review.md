@@ -25,7 +25,7 @@ log line says so.
 
 Code reviews check the change against the item's ACs. An item's acceptance records its filter
 and the review verdict for the reviewed lane SHA. A recheck is a fresh session pointed at the review
-file whenever the first passed 100k (`budgets.md`).
+file whenever the first passed its review line (`codex-review` "One session for the whole loop").
 
 ## The review
 

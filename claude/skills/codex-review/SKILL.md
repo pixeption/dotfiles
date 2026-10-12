@@ -107,6 +107,11 @@ session too**: a resume with a different `-e`/`-m` invalidates the prompt cache 
 whole history cold. For a different effort, start fresh with a round-1 prompt and hand it the
 previous session's out-file to read.
 
+**A review session continues further than an implementor's**, since a resumed round rereads
+findings, not the repo: `-s` is refused at **120k** for a discovery-agent round and at **150k** with
+`--no-subagents` (`opencode-review` passes the line to `opencode-budget`; bees `reference/budgets.md`
+keeps 100k for everything else). Past it, start fresh and hand over the last out-file.
+
 Your follow-up need not restate old findings: reference them ("your round-2 F1–F4") and say what
 you did with each — **applied**, **applied differently (how)**, or **rejected (why)**. A rejection
 with a reason is a decision: the reviewer may push back once with new evidence, and you rule.

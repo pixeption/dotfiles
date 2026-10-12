@@ -56,7 +56,8 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
    claim the plan names (`perf-tests-<project>`) likewise. Others work read-only, in another slot
    or a blind worktree no editor loads — or wait; disjoint files in one slot are not enough. A blind
    codex worktree is outside every slot; validating its diff in a lane is not.
-4. **Session budget, both vendors: continue below 100k, finish the round below 250k** — the
+4. **Session budget, both vendors: continue below 100k, finish the round below 250k** (a codex
+   review session continues further: `codex-review` "One session for the whole loop") — the
    harness's count or `.usage` `context_tokens`, never the agent's estimate. At 100k no new brief,
    not even a fix or recheck (every resumed step re-reads the whole session): spawn fresh, hand the
    resource over. A bee is warned at 200k and pauses itself at 250k, or earlier

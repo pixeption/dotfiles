@@ -9,11 +9,11 @@
 # A session with no completed message yet passes. A prompt starting with [bees:handover] passes:
 # it is the retirement message the budget asks for.
 #
-# Usage: opencode-budget <session-id> <prompt-file>     exit 1 with the reason on stderr
+# Usage: opencode-budget <session-id> <prompt-file> [continue-line]     exit 1 with the reason on stderr
 set -euo pipefail
 sid="${1:?usage: opencode-budget <session-id> <prompt-file>}"
 promptfile="${2:?usage: opencode-budget <session-id> <prompt-file>}"
-continue_line=100000                # bees: leave room for the next round before the pause line
+continue_line="${3:-100000}"        # bees: leave room for the next round before the pause line
 
 [ "$(head -c 15 "$promptfile")" = "[bees:handover]" ] && exit 0
 [[ "$sid" =~ ^[A-Za-z0-9_]+$ ]] || { echo "opencode-budget: bad session id '$sid'" >&2; exit 2; }

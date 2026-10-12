@@ -34,9 +34,9 @@ One rule for both vendors (SKILL.md "Rules", the session budget), plus each vend
 |---|---|---|---|---|
 | units per brief | one | one unit's diff / question | none (one question) | one |
 | units per session | as many as fit under the context lines below | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
-| continue freely below | 100k | 100k | never continued | 100k (`.usage` `context_tokens`) |
+| continue freely below | 100k | 100k | never continued | 100k (`.usage` `context_tokens`); a review session 120k, 150k for a follow-up (`codex-review` "One session for the whole loop") |
 | finish the current round below | 250k | 250k | — | 250k |
-| **no new brief at or past** | **100k** | **100k** | any — spawn a new scout | **100k**, or any other directory |
+| **no new brief at or past** | **100k** | **100k** | any — spawn a new scout | **100k** (review: 120k / 150k), or any other directory |
 | **cache warm for** | **5 min** idle | **5 min** idle | irrelevant | **30 min** idle |
 | resumable after the cache | one cold turn | one cold turn | — | OpenCode: any time, same `--dir`, one cold turn · CLI: never |
 | warned at | 200k (hook) | 200k (the advisor's hook; the unhooked reviewer's own reading) | — | — |
