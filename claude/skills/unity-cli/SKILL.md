@@ -309,8 +309,8 @@ takes no `--mode`, `--assemblies` or `--failed-only`, and picks no N: one editor
 budget, so the caller sizes N. What each run does, and why:
 
 - **A missing shard is seeded once**: `cp -cR` of `<project>/Library` (refused while `<project>`'s
-  editor is open) plus `git init` in `shard-<k>`, so tests that need a checkout root have one,
-  outside any repo. A copy at a new path recompiles everything once; reused, only what changed.
+  editor is open) plus `git init` and one empty commit in `shard-<k>`, so tests that need a
+  checkout root or its `HEAD` have one, outside any repo. A copy at a new path recompiles everything once; reused, only what changed.
 - **Every run rsyncs `Assets/ Packages/ ProjectSettings/`** with `--delete` (under 1 s), never
   `Library/ Temp/ Logs/ UserSettings/`, so the shard stays warm and tests what is on disk. A shard
   held by a running editor stops the run.
@@ -333,6 +333,8 @@ budget, so the caller sizes N. What each run does, and why:
   so the timings split keeps each shard near 1/N of the suite. Each shard logs every test's start and
   end to `Logs/unity-suite-shard.xml.progress`; one killed before its report names the test it
   stopped in and the first of its unfinished tests, all of them listed in `….xml.unfinished`.
+- **The merge** checks names as a multiset: cases whose arguments print alike are listed as
+  `…(x GeneratedTestCase2)` but reported under one name, so each must run once per listing.
 - **The merge** writes one report to `--output`, so the count line, `report: … · finished` and
   `--failed-only` work as for one editor. It exits 2 on a shard without a report (its compile
   errors listed), a shard editor that crashed or timed out, a test two shards ran, a shard whose

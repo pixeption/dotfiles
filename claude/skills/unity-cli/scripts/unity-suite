@@ -201,7 +201,8 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
 # The shard copies are warm projects reused run to run: a copy at a new path recompiles everything,
 # a reused one only what changed. Each run rsyncs the sources but never Library/, Temp/, Logs/ or
 # UserSettings/, and keeps the runner installed (excluded from --delete) so neither
-# costs a recompile. The git init gives tests that need a checkout root one, outside any repo.
+# costs a recompile. The git init and its empty commit give tests that need a checkout root and a
+# HEAD (git rev-parse HEAD) both, outside any repo.
 RUNNER_DIR=Assets/Editor/ShardRunner
 
 # 0 when no Unity process (editor or import worker) has <project> open, whatever its argument order.
@@ -218,6 +219,12 @@ seed_shard() {                       # seed_shard <checkout> <shard project>
   project_idle "$PROJECT" || die "cannot seed $2: close the editor on $PROJECT first, so its Library clones whole"
   mkdir -p "$2" && { [[ ! -d "$PROJECT/Library" ]] || cp -cR "$PROJECT/Library" "$2/Library"; } \
     && git init -q "$1" || die "could not seed $2"
+}
+
+ensure_head() {                      # ensure_head <shard checkout>
+  git -C "$1" rev-parse -q --verify HEAD >/dev/null \
+    || git -C "$1" -c user.name=unity-suite -c user.email=unity-suite@localhost -c commit.gpgsign=false commit -q --no-verify --allow-empty -m "unity-suite shard" \
+    || die "could not give $1 a HEAD commit"
 }
 
 sync_shard() {                       # sync_shard <shard project>
@@ -312,6 +319,7 @@ run_shards() {
     project_idle "$shard" || die "$shard is held by a running editor"
     sync_shard "$shard"
     sync_mirrors "$root/shard-$k"
+    ensure_head "$root/shard-$k"
   done
   trap stop_shards EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
   for ((k = 1; k <= SHARDS; k++)); do
@@ -334,7 +342,12 @@ run_shards() {
 
   python3 - "$REPORT" "$root" "$(basename "$PROJECT")" "$SHARDS" <<'MERGE' || exit 2
 import json, os, re, sys, xml.etree.ElementTree as ET
+from collections import Counter
 report, root, name, shards = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+
+# Cases whose arguments print alike (e.g. two string[]) are listed as "(…, x GeneratedTestCase2)"
+# but reported under one shared name, so a run is checked as a multiset of reported names.
+reported = lambda names: Counter(re.sub(r" GeneratedTestCase\d+\)$", ")", n) for n in names)
 
 # A shard that planned but never reported (killed at its timeout, or crashed): the test it stopped
 # in and the planned tests that never ended, all listed in <report>.unfinished.
@@ -347,7 +360,7 @@ def unfinished(k, part):
     return (f"shard {k} did not finish {len(left)} of its planned tests; stopped in "
             f"{running[-1] if running else 'no test'}; all listed in {part}.unfinished"
             + "".join("\n    " + t for t in left[:10]))
-run, seen, problems, totals, inventory, explicit = ET.Element("test-run"), {}, [], set(), None, []
+run, seen, problems, totals, inventory, explicit = ET.Element("test-run"), Counter(), [], set(), None, []
 for k in range(1, shards + 1):
     part = f"{root}/shard-{k}/{name}/Logs/unity-suite-shard.xml"
     if os.path.isfile(part + ".plan.json") and not os.path.isfile(part):
@@ -366,28 +379,28 @@ for k in range(1, shards + 1):
     if inventory is None: inventory, explicit = plan["allTests"], plan["explicitTests"]
     elif (plan["allTests"], plan["explicitTests"]) != (inventory, explicit):
         problems.append(f"shard {k}: its test list differs from shard 1's")
-    ran = [tc.get("fullname") for tc in tree.iter("test-case")]
-    for test in ran:
-        if test in seen: problems.append(f"duplicate: {test} in shards {seen[test]} and {k}")
-        seen[test] = k
-    planned, actual = set(plan["tests"]), set(ran)
-    if planned != actual:
-        problems.append(f"shard {k}: planned tests did not run: {sorted(planned - actual)[:3]}, "
-                        f"unplanned tests ran: {sorted(actual - planned)[:3]}")
-    print(f"shard {k}: {len(ran)} tests, {float(tree.get('duration', 0)):.0f} s", file=sys.stderr)
+    ran = Counter(tc.get("fullname") for tc in tree.iter("test-case"))
+    seen += ran
+    planned = reported(plan["tests"])
+    if planned != ran:
+        problems.append(f"shard {k}: planned tests did not run: {sorted(planned - ran)[:3]}, "
+                        f"unplanned tests ran: {sorted(ran - planned)[:3]}")
+    print(f"shard {k}: {sum(ran.values())} tests, {float(tree.get('duration', 0)):.0f} s", file=sys.stderr)
     run.extend(tree if tree.tag == "test-run" else [tree])
 if len(totals) > 1: problems.append(f"the shards saw different test lists: {sorted(totals)} tests")
 for test in explicit:
-    if test in seen: problems.append(f"duplicate: explicit test {test} ran in shard {seen[test]}")
+    if test in seen: problems.append(f"explicit test {test} ran")
     ET.SubElement(run, "test-case", fullname=test, name=test, result="Skipped", label="Explicit")
-if totals and len(seen) + len(explicit) != max(totals):
-    problems.append(f"{len(seen)} ran + {len(explicit)} explicit != {max(totals)} tests listed")
-if inventory is not None and set(seen) | set(explicit) != set(inventory):
-    problems.append("the merged tests differ from the listed tests")
+if totals and sum(seen.values()) + len(explicit) != max(totals):
+    problems.append(f"{sum(seen.values())} ran + {len(explicit)} explicit != {max(totals)} tests listed")
+if inventory is not None:
+    expected = reported(t for t in inventory if t not in set(explicit))
+    problems += [f"duplicate: {t} ran {seen[t]} times, listed {expected[t]}" for t in sorted(seen - expected)]
+    if seen != expected: problems.append("the merged tests differ from the listed tests")
 for p in problems: print(p, file=sys.stderr)
 if problems: sys.exit(1)
 count = lambda result: str(sum(tc.get("result") == result for tc in run.iter("test-case")))
-run.attrib.update(total=str(len(seen) + len(explicit)), passed=count("Passed"), failed=count("Failed"),
+run.attrib.update(total=str(sum(seen.values()) + len(explicit)), passed=count("Passed"), failed=count("Failed"),
                   inconclusive=count("Inconclusive"), skipped=count("Skipped"))
 ET.ElementTree(run).write(report, encoding="utf-8", xml_declaration=True)
 MERGE

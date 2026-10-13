@@ -2,7 +2,7 @@
 # Offline test for `unity-suite --shards`: a stub editor binary stands in for the shard runner. A
 # missing shard is seeded as a git checkout with the runner installed, mirroring the project's
 # outside file: packages and --mirror paths beside it; the shard reports and the
-# explicit tests merge into one report, which also becomes the next run's -timings unless the run
+# explicit tests merge into one report, cases sharing one reported name included, which also becomes the next run's -timings unless the run
 # was filtered; --filter and --category reach every shard. A duplicate
 # test, a shard without a report, shards listing different tests, a crashed or hung shard editor, a
 # failed suite and an occupied shard fail the run; a shard killed at its timeout names the tests
@@ -24,7 +24,7 @@ EOF
 # The stub runner: shard 1 runs A.a, shard 2 runs B.b. STUB picks shard 2's misbehaviour: dup also
 # runs A.a, none writes nothing, drift lists and runs C.c in place of B.b, unplanned runs X.y in
 # place of B.b, crash and exit2 exit 3 and 2 after a passing report, hang never ends and ignores
-# SIGTERM; slow plans B.b and B.c, finishes B.b and hangs in B.c; suitefail fails shard 1's suite in its teardown; dupexplicit lists E.x twice.
+# SIGTERM; alike lists B.b as two cases that report under one name; slow plans B.b and B.c, finishes B.b and hangs in B.c; suitefail fails shard 1's suite in its teardown; dupexplicit lists E.x twice.
 cat >"$TMP/Unity.app/Contents/MacOS/Unity" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >>"${STUB_ARGS:?}"
@@ -42,10 +42,15 @@ if [[ $k == 2 && $STUB == slow ]]; then
   while :; do sleep 1; done
 fi
 [[ $k == 2 && $STUB == dup ]] && tests="B.b A.a"
+[[ $STUB == alike ]] && { all='"A.a","B.b(x GeneratedTestCase2)","B.b(x)","E.x"' total=4; }
+[[ $k == 2 && $STUB == alike ]] && tests='B.b(x) B.b(x_GeneratedTestCase2)'
 [[ $k == 2 && $STUB == drift ]] && { tests=C.c; all='"A.a","C.c","E.x"'; }
 [[ $STUB == dupexplicit ]] && { all='"A.a","B.b","E.x","E.x"' explicit='"E.x","E.x"' total=4; }
-echo "{\"total\":$total,\"allTests\":[$all],\"explicitTests\":[$explicit],\"tests\":[\"${tests// /\",\"}\"]}" >"$out.plan.json"
+planned=${tests// /\",\"}
+echo "{\"total\":$total,\"allTests\":[$all],\"explicitTests\":[$explicit],\"tests\":[\"${planned//_/ }\"]}" >"$out.plan.json"
+tests=${tests//_GeneratedTestCase2/}
 [[ $k == 2 && $STUB == unplanned ]] && tests=X.y
+
 suite=Passed; [[ $k == 1 && $STUB == suitefail ]] && suite='Failed" site="TearDown'
 { echo "<test-run duration=\"1\"><test-suite fullname=\"S$k\" result=\"$suite\"><failure><message>teardown threw</message></failure>"
   for t in $tests; do echo "<test-case fullname=\"$t\" result=\"Passed\" duration=\"0.5\"/>"; done
@@ -65,9 +70,9 @@ out=$(suite ok); code=$?
 [[ $code == 0 && $out == *"2/3 passed, 0 failed, 1 skipped"* ]] || fail "merged run (exit $code)"
 grep -q 'fullname="E.x" name="E.x" result="Skipped" label="Explicit"' "$TMP/report.xml" || fail "explicit test in the report"
 echo "ok   two shards and an explicit test merge into one report"
-[[ -d "$ROOT/shard-2/.git" && -f "$ROOT/shard-2/GameCore/Library/warm" && -f "$ROOT/shard-2/GameCore/Assets/Editor/Tool.cs" \
+git -C "$ROOT/shard-2" rev-parse -q --verify HEAD >/dev/null && [[ -f "$ROOT/shard-2/GameCore/Library/warm" && -f "$ROOT/shard-2/GameCore/Assets/Editor/Tool.cs" \
    && -f "$ROOT/shard-2/GameCore/Assets/Editor/ShardRunner/ShardRunner.cs" ]] || fail "seeded shard layout"
-echo "ok   a missing shard is seeded: git checkout, cloned Library, synced sources, runner installed"
+echo "ok   a missing shard is seeded: git checkout with a HEAD, cloned Library, synced sources, runner installed"
 [[ -f "$ROOT/shard-2/Shared/pkg/package.json" && -f "$ROOT/shard-2/docs/ui/spec.yaml" ]] || fail "mirrored outside paths"
 echo "ok   an outside file: package and a --mirror path sit beside each shard's copy, as beside the project"
 grep -q -- '-timings' "$TMP/args" && fail "first run passed -timings"
@@ -90,8 +95,11 @@ out=$(suite ok --mirror docs/missing); code=$?
 [[ $code == 2 && $out == *"docs/missing does not exist"* ]] || fail "missing mirror (exit $code)"
 echo "ok   a mirror path outside the project's parent, or missing, fails the run before any editor starts"
 
+out=$(suite alike); code=$?
+[[ $code == 0 && $out == *"3/4 passed, 0 failed, 1 skipped"* ]] || fail "cases sharing a reported name (exit $code)"
+echo "ok   parameterized cases listed apart but reported under one name merge as each ran once"
 out=$(suite dup); code=$?
-[[ $code == 2 && $out == *"duplicate: A.a in shards 1 and 2"* ]] || fail "duplicate (exit $code)"
+[[ $code == 2 && $out == *"duplicate: A.a ran 2 times, listed 1"* ]] || fail "duplicate (exit $code)"
 echo "ok   a test run by two shards fails the run"
 out=$(suite none); code=$?
 [[ $code == 2 && $out == *"shard 2 wrote no report"* ]] || fail "missing report (exit $code)"
