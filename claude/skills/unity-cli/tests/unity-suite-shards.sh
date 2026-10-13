@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Offline test for `unity-suite --shards`: a stub editor binary stands in for the shard runner. A
 # missing shard is seeded as a git checkout with the runner installed, mirroring the project's
-# outside file: packages and --mirror paths beside it; the shard reports and the
+# outside file: packages and --mirror paths beside it, and its .claude/ mirrored; the shard reports and the
 # explicit tests merge into one report, cases sharing one reported name included, which also becomes the next run's -timings unless the run
 # was filtered; --filter and --category reach every shard. A duplicate
 # test, a shard without a report, shards listing different tests, a crashed or hung shard editor, a
@@ -14,6 +14,7 @@ SRC="$TMP/src/GameCore"; ROOT="$TMP/shards (1)+"
 mkdir -p "$SRC/ProjectSettings" "$SRC/Assets/Editor" "$SRC/Packages" "$SRC/Library" "$TMP/home/.unity/bin" "$TMP/Unity.app/Contents/MacOS"
 echo "m_EditorVersion: 1.0f1" >"$SRC/ProjectSettings/ProjectVersion.txt"
 touch "$SRC/Assets/Editor/Tool.cs" "$SRC/Library/warm"
+mkdir -p "$SRC/.claude/skills/x" && touch "$SRC/.claude/skills/x/new.md"
 mkdir -p "$TMP/src/Shared/pkg" "$TMP/src/docs/ui" && touch "$TMP/src/Shared/pkg/package.json" "$TMP/src/docs/ui/spec.yaml"
 echo '{"dependencies":{"shared":"file:../../Shared/pkg","abs":"file:/opt/pkg","reg":"1.0.0"}}' >"$SRC/Packages/manifest.json"
 
@@ -77,10 +78,13 @@ echo "ok   a missing shard is seeded: git checkout with a HEAD, cloned Library, 
 echo "ok   an outside file: package and a --mirror path sit beside each shard's copy, as beside the project"
 grep -q -- '-timings' "$TMP/args" && fail "first run passed -timings"
 rm "$TMP/args" "$SRC/Assets/Editor/Tool.cs" "$TMP/src/docs/ui/spec.yaml"
+mkdir -p "$ROOT/shard-1/GameCore/.claude/skills/x" && touch "$ROOT/shard-1/GameCore/.claude/skills/x/old.md"
 out=$(suite ok) || fail "second run"
 grep -q -- "-timings $ROOT/timings.xml" "$TMP/args" || fail "second run did not time from the last report"
 [[ ! -e "$ROOT/shard-1/GameCore/Assets/Editor/Tool.cs" && ! -e "$ROOT/shard-1/docs/ui/spec.yaml" && -f "$ROOT/shard-1/GameCore/Assets/Editor/ShardRunner/ShardRunner.cs" ]] \
   || fail "resync deletes removed sources and keeps the runner"
+[[ -f "$ROOT/shard-1/GameCore/.claude/skills/x/new.md" && ! -e "$ROOT/shard-1/GameCore/.claude/skills/x/old.md" ]] \
+  || fail "resync mirrors the project's .claude/"
 echo "ok   the next run times its split from the last report, resync deletes removed sources and mirrors, and keeps the runner"
 cp "$ROOT/timings.xml" "$TMP/timings.before"; rm "$TMP/args"
 out=$(suite ok --filter 'A|B' --category Integration) || fail "filtered run"
