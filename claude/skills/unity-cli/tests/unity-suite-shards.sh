@@ -86,6 +86,18 @@ grep -q -- "-timings $ROOT/timings.xml" "$TMP/args" || fail "second run did not 
 [[ -f "$ROOT/shard-1/GameCore/.claude/skills/x/new.md" && ! -e "$ROOT/shard-1/GameCore/.claude/skills/x/old.md" ]] \
   || fail "resync mirrors the project's .claude/"
 echo "ok   the next run times its split from the last report, resync deletes removed sources and mirrors, and keeps the runner"
+rm -rf "$SRC/.claude"
+out=$(suite ok) || fail "run after removing the project's .claude/"
+for k in 1 2; do
+  [[ ! -e "$ROOT/shard-$k/GameCore/.claude" \
+    && -f "$ROOT/shard-$k/GameCore/Library/warm" \
+    && -f "$ROOT/shard-$k/GameCore/Assets/Editor/ShardRunner/ShardRunner.cs" ]] \
+    && git -C "$ROOT/shard-$k" rev-parse -q --verify HEAD >/dev/null \
+    || fail "removing .claude/ clears stale skills and preserves the warm shard"
+done
+out=$(suite ok) || fail "repeat run without the project's .claude/"
+echo "ok   a missing .claude/ clears stale skills and supports subsequent runs"
+
 cp "$ROOT/timings.xml" "$TMP/timings.before"; rm "$TMP/args"
 out=$(suite ok --filter 'A|B' --category Integration) || fail "filtered run"
 [[ $(grep -c -- "-shardFilter A|B -shardCategory Integration" "$TMP/args") == 2 ]] || fail "filter and category reach both shards"

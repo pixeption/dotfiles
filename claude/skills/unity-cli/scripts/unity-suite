@@ -200,9 +200,9 @@ print(next((s["path"] for s in json.load(sys.stdin)["scenes"] if s["isActive"] a
 
 # The shard copies are warm projects reused run to run: a copy at a new path recompiles everything,
 # a reused one only what changed. Each run rsyncs the sources and the project's .claude/ (its synced
-# skills, which tests read) but never Library/, Temp/, Logs/ or UserSettings/, and keeps the runner installed (excluded from --delete) so neither
-# costs a recompile. The git init and its empty commit give tests that need a checkout root and a
-# HEAD (git rev-parse HEAD) both, outside any repo.
+# skills, which tests read) but never Library/, Temp/, Logs/ or UserSettings/, and keeps the runner
+# installed (excluded from --delete) so neither costs a recompile. The git init and its empty commit
+# give tests that need a checkout root and a HEAD (git rev-parse HEAD) both, outside any repo.
 RUNNER_DIR=Assets/Editor/ShardRunner
 
 # 0 when no Unity process (editor or import worker) has <project> open, whatever its argument order.
@@ -230,7 +230,11 @@ ensure_head() {                      # ensure_head <shard checkout>
 sync_shard() {                       # sync_shard <shard project>
   rsync -a --delete --exclude "/$RUNNER_DIR/" --exclude "/$RUNNER_DIR.meta" \
       "$PROJECT"/Assets "$PROJECT"/Packages "$PROJECT"/ProjectSettings "$1"/ \
-    && { [[ ! -d "$PROJECT/.claude" ]] || rsync -a --delete "$PROJECT/.claude" "$1"/; } \
+    && { if [[ -d "$PROJECT/.claude" ]]; then
+           rsync -a --delete "$PROJECT/.claude" "$1"/
+         else
+           rm -rf -- "$1/.claude"
+         fi; } \
     && mkdir -p "$1/$RUNNER_DIR" \
     && rsync -a --delete --exclude '*.meta' "$HERE/shard-runner/" "$1/$RUNNER_DIR/" \
     || die "could not sync $1"
