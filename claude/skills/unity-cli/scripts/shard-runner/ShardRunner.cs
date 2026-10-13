@@ -15,7 +15,8 @@ namespace UnitySuite
     //   [-shardFilter <A|B>] [-shardCategory <Name|!Name>]
     // It runs bin k of N over the selected Edit-Mode tests by exact name, writes the NUnit report
     // and a <xml>.plan.json the merge checks it against, then exits 0 (all passed), 2 (a failure) or
-    // 3 (the runner itself failed).
+    // 3 (the runner itself failed). <xml>.progress logs each test's start and end as it happens, so
+    // a shard killed at its timeout still shows which tests it did not finish.
     [InitializeOnLoad]
     public sealed class ShardRunner : ScriptableObject, ICallbacks
     {
@@ -92,8 +93,13 @@ namespace UnitySuite
         });
 
         public void RunStarted(ITestAdaptor testsToRun) { }
-        public void TestStarted(ITestAdaptor test) { }
-        public void TestFinished(ITestResultAdaptor result) { }
+        public void TestStarted(ITestAdaptor test) => LogProgress("start", test);
+        public void TestFinished(ITestResultAdaptor result) => LogProgress("end", result.Test);
+
+        private static void LogProgress(string what, ITestAdaptor test)
+        {
+            if (!test.IsSuite) File.AppendAllText(SessionState.GetString(OutputKey, "") + ".progress", $"{what} {test.FullName}\n");
+        }
 
         private static string[] SortedNames(IEnumerable<ITestAdaptor> tests) =>
             tests.Select(t => t.FullName).OrderBy(x => x, StringComparer.Ordinal).ToArray();

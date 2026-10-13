@@ -301,8 +301,8 @@ rather than guessing from the exit code. Under the count line it prints
 `error CS` lines and does **not** reopen the editor (it would only fail on the same errors): fix, then
 `unity-editor up`.
 
-**Sharded.** `unity-suite <project> --shards N --shard-root <dir> [--filter <A|B>] [--category <Name|!Name>]
-[--output <report.xml>]` runs the Edit-Mode suite, or the part `--filter` (a regex per term) and one
+**Sharded.** `unity-suite <project> --shards N --shard-root <dir> [--mirror <path>]... [--filter <A|B>]
+[--category <Name|!Name>] [--output <report.xml>]` runs the Edit-Mode suite, or the part `--filter` (a regex per term) and one
 `--category` select, in N batch editors at once, one per warm copy `<dir>/shard-<k>/<project name>`,
 and never touches `<project>` or its editor. A filtered run keeps the last full run's timings. It
 takes no `--mode`, `--assemblies` or `--failed-only`, and picks no N: one editor per shard counts against the host
@@ -314,6 +314,11 @@ budget, so the caller sizes N. What each run does, and why:
 - **Every run rsyncs `Assets/ Packages/ ProjectSettings/`** with `--delete` (under 1 s), never
   `Library/ Temp/ Logs/ UserSettings/`, so the shard stays warm and tests what is on disk. A shard
   held by a running editor stops the run.
+- **`shard-<k>` mirrors `<project>`'s parent.** Each relative `file:` package in the manifest that
+  sits outside `<project>`, and each `--mirror <path>` (relative to the parent, for files its tests
+  read beside the project, e.g. `docs/ui`), is rsynced to the same relative place in `shard-<k>`, so
+  the manifest and lock file stay byte-identical and resolve unchanged. A path outside the parent, or
+  missing, stops the run before any editor starts. Absolute `file:` paths resolve as they are.
 - **The runner ships in `scripts/shard-runner/`** and is installed to each shard's
   `Assets/Editor/ShardRunner/`, excluded from the sync so it never recompiles. Each editor runs
   `-executeMethod UnitySuite.ShardRunner.Run -shard k/N`: it reads the current test list, packs it
@@ -324,7 +329,10 @@ budget, so the caller sizes N. What each run does, and why:
 - **`[Explicit]` tests are not run** (a name filter would run them) but are merged in as
   skipped, as a full run reports them.
 - The editors are launched directly, not through `unity run`, which adds `-quit`; each is killed
-  (SIGKILL) after `--timeout`, and stopping `unity-suite` kills them all.
+  (SIGKILL) after `--timeout`, and stopping `unity-suite` kills them all. `--timeout` is per shard,
+  so the timings split keeps each shard near 1/N of the suite. Each shard logs every test's start and
+  end to `Logs/unity-suite-shard.xml.progress`; one killed before its report names the test it
+  stopped in and the first of its unfinished tests, all of them listed in `….xml.unfinished`.
 - **The merge** writes one report to `--output`, so the count line, `report: … · finished` and
   `--failed-only` work as for one editor. It exits 2 on a shard without a report (its compile
   errors listed), a shard editor that crashed or timed out, a test two shards ran, a shard whose

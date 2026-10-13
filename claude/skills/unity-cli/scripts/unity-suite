@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <seconds>]
 #             [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
-# unity-suite <project> --shards <N> --shard-root <dir> [--timeout <s>] [--filter <A|B>] [--category <expr>] [--output <report.xml>]
+# unity-suite <project> --shards <N> --shard-root <dir> [--mirror <path>]... [--timeout <s>] [--filter <A|B>] [--category <expr>] [--output <report.xml>]
 #
 # --shards runs the Edit-Mode suite, or the part --filter/--category select, across N warm copies <dir>/shard-<k>/<project name>, one
-# batch editor each, and leaves <project> and its editor alone (run_shards).
+# batch editor each, and leaves <project> and its editor alone (run_shards). Each shard-<k> mirrors
+# <project>'s parent: its file: packages outside it, and each --mirror path, sit beside the copy.
 # A filtered Edit-Mode run goes to the open editor through unity-test, leaving it open, when that
 # editor never entered Play this session and its run selects what a batch run would (live_blocker,
 # excluded_tests). Everything else follows Game/CLAUDE.md's clean-suite rule: a Play-mode session
@@ -23,14 +24,15 @@ DIE_CODE=2
 # TIMEOUT: 30 min is many times a full suite (Pipeline.UI runs ~2 min) yet still ends a hung batch
 # editor, which `unity test` alone would wait on forever.
 USAGE="usage: unity-suite <project> [--failed-only <report.xml>] [--mode EditMode|PlayMode] [--timeout <s>] [--filter <A|B>] [--assemblies <A;B>] [--category <expr>] [--output <report.xml>]
-       unity-suite <project> --shards <N> --shard-root <dir> [--timeout <s>] [--filter <A|B>] [--category <expr>] [--output <report.xml>]"
+       unity-suite <project> --shards <N> --shard-root <dir> [--mirror <path>]... [--timeout <s>] [--filter <A|B>] [--category <expr>] [--output <report.xml>]"
 # A bare call would close the editor and run the full suite, so it must name what to run.
 [[ $# -eq 0 ]] && die "$USAGE"
 ARG="."; MODE=EditMode; FAILED=""; OUTPUT=""; TIMEOUT=1800; FILTER=""; ASSEMBLIES=""; CATEGORY=""
-SHARDS=""; SHARD_ROOT=""
+SHARDS=""; SHARD_ROOT=""; MIRRORS=()
 while [[ $# -gt 0 ]]; do case "$1" in
   --shards) SHARDS=$2; shift 2;;
   --shard-root) SHARD_ROOT=$2; shift 2;;
+  --mirror) MIRRORS+=("$2"); shift 2;;
   --failed-only) FAILED=$2; shift 2;;
   --output) OUTPUT=$2; shift 2;;
   --mode) MODE=$2; shift 2;;
@@ -43,6 +45,7 @@ while [[ $# -gt 0 ]]; do case "$1" in
 esac; done
 PROJECT=$(resolve_project "$ARG") || exit 2
 
+[[ -z "$SHARDS" && ${#MIRRORS[@]} -gt 0 ]] && die "--mirror goes with --shards"
 if [[ -n "$SHARDS$SHARD_ROOT" ]]; then
   [[ "$SHARDS" =~ ^[1-9][0-9]*$ && -n "$SHARD_ROOT" ]] || die "--shards <N ≥ 1> and --shard-root <dir> go together"
   [[ -z "$FAILED$ASSEMBLIES" && "$MODE" == EditMode ]] \
@@ -225,6 +228,37 @@ sync_shard() {                       # sync_shard <shard project>
     || die "could not sync $1"
 }
 
+# Prints each path, relative to <project>'s parent, that a shard mirrors beside its project copy:
+# every file: package outside <project>, so the manifest's relative paths resolve unchanged in the
+# copy, then each --mirror path, for what its tests read beside the project. Fails on a path that
+# leaves the parent or does not exist. An absolute file: path is left alone: it resolves anywhere.
+mirror_paths() {
+  python3 - "$PROJECT" "${MIRRORS[@]}" <<'PY'
+import json, os, sys
+project, mirrors = sys.argv[1], sys.argv[2:]
+parent = os.path.dirname(project)
+manifest = f"{project}/Packages/manifest.json"
+try: deps = json.load(open(manifest)).get("dependencies", {})
+except (OSError, ValueError) as e: sys.exit(f"cannot read {manifest}: {e}")
+refs = [ref[5:] for ref in deps.values() if ref.startswith("file:") and not os.path.isabs(ref[5:])]
+inside = lambda path, root: path.startswith(root + os.sep)
+for path in [os.path.normpath(f"{project}/Packages/{r}") for r in refs] + [os.path.normpath(f"{parent}/{m}") for m in mirrors]:
+    if path == project or inside(path, project): continue
+    if not inside(path, parent): sys.exit(f"{path} is outside {parent}, the most a shard mirrors")
+    if not os.path.exists(path): sys.exit(f"{path} does not exist")
+    print(os.path.relpath(path, parent))
+PY
+}
+
+sync_mirrors() {                     # sync_mirrors <shard checkout>
+  local rel src dst
+  for rel in "${MIRROR_PATHS[@]}"; do
+    src="$(dirname "$PROJECT")/$rel" dst="$1/$rel"
+    [[ -d "$src" ]] && src+=/ dst+=/
+    mkdir -p "$(dirname "$1/$rel")" && rsync -a --delete "$src" "$dst" || die "could not mirror $rel into $1"
+  done
+}
+
 # The project's installed editor binary, from `unity editors`.
 editor_binary() {
   local version
@@ -243,7 +277,7 @@ run_shard() {
   local out="$2/Logs/unity-suite-shard.xml" deadline=$((SECONDS + TIMEOUT)) pid="" rc
   trap '[[ -z "$pid" ]] || { kill -KILL "$pid"; wait "$pid"; } 2>/dev/null' EXIT
   trap 'exit 143' TERM
-  mkdir -p "$2/Logs" && rm -f "$out" "$out.plan.json" || die "could not prepare shard $1's reports"
+  mkdir -p "$2/Logs" && rm -f "$out" "$out.plan.json" "$out.progress" || die "could not prepare shard $1's reports"
   "$UNITY" -batchmode -projectPath "$2" -logFile "$2/Logs/Editor.log" -executeMethod UnitySuite.ShardRunner.Run \
     -shard "$1/$SHARDS" -shardOut "$out" ${TIMINGS[@]:+"${TIMINGS[@]}"} \
     ${FILTER:+-shardFilter "$FILTER"} ${CATEGORY:+-shardCategory "$CATEGORY"} >/dev/null 2>&1 &
@@ -269,12 +303,15 @@ run_shards() {
   timings="$root/timings.xml"
   TIMINGS=(); [[ -f "$timings" ]] && TIMINGS=(-timings "$timings")
   UNITY=$(editor_binary); [[ -x "$UNITY" ]] || die "no installed editor for $PROJECT's ProjectVersion.txt (unity editors --installed)"
+  local paths; paths=$(mirror_paths) || die "cannot mirror $PROJECT's outside paths into its shards"
+  MIRROR_PATHS=(); [[ -z "$paths" ]] || readarray -t MIRROR_PATHS <<<"$paths"
   echo "running in $SHARDS shard editors under $root" >&2
   for ((k = 1; k <= SHARDS; k++)); do
     shard="$root/shard-$k/$(basename "$PROJECT")"
     [[ -d "$shard" ]] || seed_shard "$root/shard-$k" "$shard"
     project_idle "$shard" || die "$shard is held by a running editor"
     sync_shard "$shard"
+    sync_mirrors "$root/shard-$k"
   done
   trap stop_shards EXIT; trap 'exit 130' INT; trap 'exit 143' TERM
   for ((k = 1; k <= SHARDS; k++)); do
@@ -298,9 +335,24 @@ run_shards() {
   python3 - "$REPORT" "$root" "$(basename "$PROJECT")" "$SHARDS" <<'MERGE' || exit 2
 import json, os, re, sys, xml.etree.ElementTree as ET
 report, root, name, shards = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+
+# A shard that planned but never reported (killed at its timeout, or crashed): the test it stopped
+# in and the planned tests that never ended, all listed in <report>.unfinished.
+def unfinished(k, part):
+    lines = open(part + ".progress").read().splitlines() if os.path.isfile(part + ".progress") else []
+    ended = {l[4:] for l in lines if l.startswith("end ")}
+    running = [l[6:] for l in lines if l.startswith("start ") and l[6:] not in ended]
+    left = [t for t in json.load(open(part + ".plan.json"))["tests"] if t not in ended]
+    open(part + ".unfinished", "w").write("".join(t + "\n" for t in left))
+    return (f"shard {k} did not finish {len(left)} of its planned tests; stopped in "
+            f"{running[-1] if running else 'no test'}; all listed in {part}.unfinished"
+            + "".join("\n    " + t for t in left[:10]))
 run, seen, problems, totals, inventory, explicit = ET.Element("test-run"), {}, [], set(), None, []
 for k in range(1, shards + 1):
     part = f"{root}/shard-{k}/{name}/Logs/unity-suite-shard.xml"
+    if os.path.isfile(part + ".plan.json") and not os.path.isfile(part):
+        problems.append(unfinished(k, part))
+        continue
     if not (os.path.isfile(part) and os.path.isfile(part + ".plan.json")):
         log = f"{root}/shard-{k}/{name}/Logs/Editor.log"
         errors = sorted({l.strip() for l in open(log, errors="replace") if re.search(r"error CS\d+", l)}) if os.path.isfile(log) else []
