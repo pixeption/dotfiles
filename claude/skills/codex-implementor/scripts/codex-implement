@@ -41,9 +41,8 @@
 #   -m  model (default gpt-6.1-sol). Raise -e rather than switch model when capability
 #       changes the outcome.
 #   -e  reasoning effort (default medium).
-#   -t  service tier: fast (codex "priority" tier, 1.5x speed, more usage) or standard. Default:
-#       fast for luna, standard for every other model — luna is cheap enough that the speed-up is
-#       worth it; sol runs at its normal rate.
+#   -t  service tier: fast (codex "priority" tier, 1.5x+ speed, more usage) or standard.
+#       Default: fast, matching ~/.codex/config.toml's service_tier.
 #   -r  resumes a session id (sandbox/model carried over). REFUSED when the session's last activity
 #       is older than 30 minutes: codex's prompt cache TTL is 30m, so resuming after that re-pays
 #       the whole context at full price — start a new session instead (omit -r).
@@ -59,7 +58,7 @@ set -euo pipefail
 
 model="gpt-6.1-sol"
 effort="medium"
-tier=""
+tier="fast"
 sandbox="workspace-write"
 workdir=""
 promptfile=""
@@ -89,10 +88,9 @@ done
 codex="$("$(dirname "$0")/resolve-codex")" || exit 127
 command -v jq >/dev/null 2>&1 || { echo "codex-implement: 'jq' not on PATH" >&2; exit 127; }
 
-[ -n "$tier" ] || { [ "$model" = "gpt-6-luna" ] && tier="fast" || tier="standard"; }
 case "$tier" in
   fast)     tier_args=(-c service_tier=priority) ;;
-  standard) tier_args=() ;;
+  standard) tier_args=(-c service_tier=default) ;;
   *) echo "codex-implement: -t must be fast|standard" >&2; exit 2 ;;
 esac
 

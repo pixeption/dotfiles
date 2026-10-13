@@ -3,6 +3,16 @@
     // Snapshots embed full file patches in every message.updated event, and Unity YAML assets
     // (TMP font SDFs) make each one megabytes; it bloated opencode.db to 4 GB. Runs use git anyway.
     "snapshot": false,
+    // Fast mode by default on the models the codex wrappers run: the priority tier that the
+    // `openai/<model>-fast` variants use.
+    "provider": {
+        "openai": {
+            "models": {
+                "gpt-6.1-sol": { "options": { "serviceTier": "priority" } },
+                "gpt-6-luna": { "options": { "serviceTier": "priority" } }
+            }
+        }
+    },
     // Follow-up rounds of codex-review (`opencode-review --no-subagents`): denies the edit and
     // task tools so a resumed round performs the delta review directly. Bash remains available;
     // the review prompt, not an OS sandbox, constrains it to read-only commands.
