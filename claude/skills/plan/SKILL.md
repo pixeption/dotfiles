@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >-
-  Formats structured Markdown plans, audits and reviews with summary tables, stable item IDs, scoring, staged items, linked replans, source links and the companion Rules, Resume and log a fresh session resumes from. Use when writing, restructuring or deleting a structured Markdown deliverable with enumerated items, or when bees runs a plan.
+  Formats structured Markdown plans, audits and reviews with summary tables, stable item IDs, scoring, staged items, linked replans, source links and the companion status file and log a fresh session resumes from. Use when writing, restructuring or deleting a structured Markdown deliverable with enumerated items, or when bees runs a plan.
 ---
 
 # Plan and audit format
@@ -42,16 +42,16 @@ Checklist columns for a plan:
 | `Pts` | score (below) |
 | `Route` | who implements it (a bees "Routing" bucket or a named agent/model); `-` outside bees |
 | `Depends` | hard dependencies only — IDs, or `-` — so scheduling does not serialize independent work |
-| `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ✅ `<sha> <count>` done — the acceptance evidence: the reviewed SHA and the count its review ran on |
+| `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ✅ `<count>` done — its filter's green count; the landed SHA is in the status file |
 
 An audit or review may use `ID | Severity | Item | Status` instead; the ID/anchor rules still hold.
 
-A plan holds at most ~20 checklist rows, so a fresh session reads its checklist, Rules and Resume
-whole. Larger work is several plans, which the owner may queue together as one group row.
+A plan holds at most ~20 checklist rows, so a fresh session reads its checklist and status file
+whole. Larger work is several plans.
 
 **Replanning an item mid-run** is the orchestrator's, on an advisor's decision: the new items go to
 `docs/plans/<plan>.<ID>.md` in this format, linked from the item's row, and share the parent's
-Rules, Resume and log. The parent item is ✅ only when every row of the linked file is.
+status file and log. The parent item is ✅ only when every row of the linked file is.
 
 ## IDs and headings
 
@@ -87,8 +87,9 @@ is a read-only diagnosis item (3) that returns the split.
 
 ## Item fields by stage
 
-A plan goes through `brief draft` (planner), `brief review` (owner), `expand` (planner), `plan
-review` (codex) and `ready`; the queue then shows it as `run`. Each stage adds fields to its items
+A plan goes through `brief draft` (planner), `brief review` (codex, then the owner approves),
+`expand` (planner), `plan review` (codex, skipped at three items or fewer) and `ready`; bees "Lifecycle"
+holds the round caps. Each stage adds fields to its items
 and none rewrites an earlier stage's. Fields are bold labels after the item's shared context, so an
 implementor reads its scope and its filter from the item alone. Each stage has a template to copy:
 `cat ~/.claude/skills/plan/templates/item-brief.md`,
@@ -109,12 +110,12 @@ carries its Outcome, Right and Wrong.
 | | **Approach** | the decided mechanism and where it goes, the invariants and traps it must not break, and the guidance sections that apply, by heading. A planner that cannot settle it from the code makes the item a diagnosis first |
 | | **Tests** | one bullet per behaviour that proves the brief, edge and failure cases included, each naming its test class (new or existing) or, where no test fits, its command; then the `--filter` of those classes and their callers' (`--filter` matches classes, never a file name) |
 | | **Score** | the item's points ("Scoring") |
-| | **Done when** | the item's last line: its Tests pass, any check that is not a test, and the review is APPROVE |
+| | **Done when** | the item's last line: its Tests pass and every named non-test acceptance check holds; an ordinary item's landed review is tracked separately in the status file and final gate, while a fix unit requires its clean recheck before landing (bees "Fixes") |
 | plan review | — | adds no field: codex, skipped for three items or fewer (bees "Planning a plan"), over all its items (scores, where any 8 or 13 is a High finding, then Tests against the brief, then Today and Approach against the source) |
 
 - **The brief is the owner's one gate per plan**, frozen once approved. Expansion never edits it: a
   finding that would change an Outcome or an exclusion (a Wrong, or what is out of scope) goes to
-  the queue's Owner list with the reason and a proposed edit; every other question is settled by
+  the plan's status file as an `owner:` line with the reason and a proposed edit; every other question is settled by
   planner, codex and orchestrator without the owner.
 - **Expansion runs once per plan**, over all its items, once the work it builds on has landed, so
   Today and Approach are read from the tree the items will actually change. An incomplete expansion
@@ -132,20 +133,15 @@ Tests read output the other changes.
 
 ## Review, landing and the gate
 
-Review is an item's last implementation step: once per item, after its build, on the lane before
-it lands. Put this in shared context, never a `REV-nn` row, which doubles the checklist without adding work to track. Closing its editors
-and integrating its lane are the unit's final shipping steps, never their own rows or part of a
-gate, so each landing remains attributable to its item. An item lands as **one commit** whose subject names its id, so the landed commit is
-found with `git log --grep '<ID>'`; the Status cell and the `accept:` log line hold the reviewed
-lane SHA and the counts the review ran on. Plan and log edits written before landing ride in that item's commit, so its change and evidence
-stay together. Post-integrate evidence and bookkeeping that cannot be folded wait for the next
-landing or a plan-stage, plan-close or handoff commit; log lines are never committed alone.
+An item lands on green as **one commit** whose subject names its id, found with `git log --grep
+'<ID>'`; its landed commit is then reviewed (bees "Status and acceptance", why in nono4u's ADR-020).
+Review and landing are never their own rows. Plan, status and log edits ride in an item's landing
+or a docs-only stage, close or handoff commit; log lines are never committed alone.
 
 Every plan ends with a final `GATE-<n>` row (1 pt, `Depends` listing every item ID). In a plan of
 large items the planner may place more `GATE-<n>` rows between items, each depending on the items
-before it, so a break is caught while it is a few commits old. A gate's section is only a checklist
-whose first line is "Full suites green on the named target SHA, counts logged"; the final gate's
-closes the plan, so it cannot close on a green suite alone:
+before it, so a break is caught while it is a few commits old. A gate's section is only a checklist;
+the final gate's closes the plan, so it cannot close on a green suite alone:
 
 ```text
 - [ ] Full suites green on the named target SHA, counts logged
@@ -155,10 +151,8 @@ closes the plan, so it cannot close on a green suite alone:
 Done when: the close report is sent.
 ```
 
-A red gate is the orchestrator's: a Fixes line run as a fix unit (bees "Fixes"), then a rerun on
-the repaired SHA. The plan closes once, on a green final gate, in whichever session
-holds it then; a context handoff resumes an unfinished close and never re-runs a step already
-logged.
+A red gate becomes a Fixes line (bees "Fixes"), then a rerun on the repaired SHA. The plan closes
+once, on a green final gate.
 
 ## Sources and snippets
 
@@ -166,41 +160,31 @@ logged.
   ranges `#L84-L112`. Paths outside the repo (e.g. `~/.claude/skills/...`) stay inline code.
 - Code in a plan uses a language-tagged fence (` ```csharp `, ` ```sh `), never a bare one.
 
-## Rules, Resume and log (plans that span sessions)
+## Status file and log (plans that span sessions)
 
-A fresh session resumes from the checklist, `## Rules`, `## Resume` and the queue; it reads those
-whole and `tools/workspace.sh list`, nothing else. Rules and Resume are sections of `<plan>.md`
-after the items; the log is `<plan>.log.md` beside it, committed with it.
+A fresh session resumes from the checklist, `<plan>.status.md` and `tools/workspace.sh list`, and
+reads nothing else. The status file (bees "Status and acceptance") holds the stage, unfinished work
+and `## Rules`; the log is `<plan>.log.md`; both sit beside the plan, committed with it.
 
-### Rules
+**Rules** are owner rules for this plan only, edited in place; a new rule names the one it replaces,
+so a reader never reconciles two. Never environment lines — machine checks are re-run per session
+and live nowhere — and never rules that hold for every plan, which live once in the `bees` skill.
 
-Owner rules for this plan only, edited in place; a new rule names the one it replaces, so a reader
-never reconciles two. Never environment lines — machine checks are re-run per session and live
-nowhere — and never rules that hold for every plan, which live once in the `bees` skill.
-
-### Resume
-
-Unfinished work only, **≤ 10 lines**, overwritten at a pause, before a handoff and when a resource
-changes holder: lane and holder; branch and HEAD; accepted-but-unintegrated ranges; named
-uncommitted work; blockers; open review ids; each kept codex session (id, pinned directory, last
-out-file, context); the last verification command and result. Never per-item progress (that is the
-checklist's Status cell), never owner rules (Rules). An unknown fact is written `unknown`, never reconstructed;
-a codex session is resumable only on the same server, so say so when the plan may move machines.
+An unknown fact in the status file is written `unknown`, never reconstructed.
 
 ### Log
 
 `<plan>.log.md`, append-only, one terse line per event — `- <YYYY-MM-DD HH:MM> [<ID>] <kind>:
 <text>` — carrying ids, SHA, counts and verdict only; reasoning lives in the review or report file
-the line points to. Kind one of `round`, `review`, `accept`, `decision`, `gap`, `concern`,
-`escape` (a bug caught one test level later than it should have been), `replan` (an item replanned
-into its linked file), `handoff`, or none for a plain line:
+the line points to. Kind one of `accept`, `review`, `gate`, `decision` or `escape` (a bug caught
+one test level later than it should have been):
 
 ```markdown
-- 2026-09-24 14:12 [STEP-05] review: codex sol r3 APPROVE (review-STEP-05-r3.txt)
-- 2026-09-24 14:20 [STEP-05] accept: 412 green; reviewed at 3b73b3a
-- 2026-09-24 14:25 decision: D7 1-pt items run without a reviewer
-- 2026-09-24 15:02 [STEP-07] replan: D8 → STEP-07.1–07.3 in <plan>.STEP-07.md (review-STEP-07-advice-r1.txt)
-- 2026-09-24 16:40 [STEP-05] escape: UIStylePatchTests caught at post-integrate, fixed 9c1e2d0
+- 2026-09-24 14:20 [STEP-05] accept: 412 green, UIStylePatchTests|UIApplyTests
+- 2026-09-24 14:40 [STEP-05] review: 3b73b3a clean (review-STEP-05-r1.txt)
+- 2026-09-24 15:02 decision: D8 STEP-07 replanned into STEP-07.1–07.3 in <plan>.STEP-07.md
+- 2026-09-24 16:40 [STEP-05] escape: UIStylePatchTests caught at GATE-1, fixed 9c1e2d0
+- 2026-09-24 17:10 [GATE-1] gate: 9c1e2d0 unity-suite GameCore 1204 · Game 2281 green
 ```
 
 Take times from `date '+%F %H:%M'`, never from memory. `[<ID>] accept:` is the shape `bees-watch`

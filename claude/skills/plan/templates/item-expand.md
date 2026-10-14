@@ -8,4 +8,4 @@
 - loading still reads z in order — `BarTests` (existing)
 - `--filter "FooTests|BarTests"`
 **Score:** 3
-Done when: the Tests pass and the review is APPROVE.
+Done when: the Tests pass and every named non-test check holds.

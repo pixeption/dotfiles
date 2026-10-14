@@ -44,18 +44,18 @@ up in a consumer, find the root cause and **fix it in the owning package, with a
 
 - **game-core** lives in `nono4u/GameCore/` (a git subtree; `~/code/game-core` is a frozen export
   mirror — never implement there). Fix it under `GameCore/Packages/<pkg>/`, in the same lane and
-  commit series as the game change that needs it; a change under `GameCore/` still gets its own
-  review (e.g. codex). Syncing the old repo is owner-triggered, per nono4u's ADR-016.
+  commit series as the game change that needs it. Syncing the old repo is owner-triggered, per nono4u's ADR-016.
 - **game-build** is a git package pinned to a full commit SHA in `Game/Packages/manifest.json`. Fix
-  it in a game-build clone, verify it there, give it its own review, publish the accepted commit,
-  then bump the manifest's full SHA on purpose.
+  it in a game-build clone, verify it there, publish it, then bump the manifest's full SHA on
+  purpose; the published commit is reviewed like any landed item.
 
 - Read the package's CLAUDE.md/README/spec before deciding where the fix belongs.
 - Never patch a generated or scratch artifact (e.g. a converter's workspace file) to get past a
   blocker — it regenerates and hides the real gap. Fix the source so the result is reproducible
   from committed files alone.
 - If it can't be fixed cleanly at the root, **stop and surface it** — don't shim the consumer.
-- A package change gets its own review (e.g. codex).
+- A package change gets its own review; in nono4u that is the review of its landed commit
+  (nono4u's ADR-020).
 - For a feature that hasn't shipped or been adopted yet, prefer an **aggressive rewrite** (delete
   the old types, redesign cleanly) over a migration that preserves legacy shapes.
 
