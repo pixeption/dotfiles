@@ -146,14 +146,15 @@ closes the plan, so it cannot close on a green suite alone:
 
 ```text
 - [ ] Full suites green on the named target SHA, counts logged
-- [ ] Every post-integrate check of the plan recorded in the log
+- [ ] Every covered item's review verdict, or `review: skipped, codex unavailable`, in the log
+- [ ] No open Critical or Major Fixes line; each open Minor line is a backlog row with priority `review`
 - [ ] Plan close: triage, pick-up and retro (bees `reference/plan-lifecycle.md` "Plan close")
 - [ ] Final report to the owner: retro numbers, proposed rule changes, picked fix clusters
 Done when: the final report is sent.
 ```
 
-A red gate is the orchestrator's: a reviewed repair is added as the next item and the gate reruns
-on the repaired target SHA. The plan closes once, on a green final gate, in whichever session
+A red gate is the orchestrator's: a Fixes line run as a fix unit (bees "Fixes"), then a rerun on
+the repaired SHA. The plan closes once, on a green final gate, in whichever session
 holds it then; a context handoff resumes an unfinished close and never re-runs a step already
 logged.
 

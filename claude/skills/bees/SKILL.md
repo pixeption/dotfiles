@@ -134,9 +134,19 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
          in a status file wait on the owner, and during execution they gain only questions the
          advisors could not decide; nothing `ready` → report starvation and stop, never adding a
          row, drafting a plan the owner did not start or bypassing the brief review.
-- [ ] 7. A GATE row whose items have landed: full suites on its target SHA. Red → yours: add a
-         reviewed repair as the next item, rerun the gate on the repaired SHA. Final gate green →
-         triage, pick-up, retro, final report (plan-lifecycle "Plan close") → close commit.
+- [ ] 7. A GATE row whose items have landed: copy its target SHA and run full suites, even with
+         reviews out; log `[GATE-<n>] gate: <sha> <commands> <counts> <green|red>` per run. Check
+         it off only when (1) suites are green on a SHA after which no fix for a covered item
+         landed (a later landing means a rerun on the new tip); (2) every covered item (its
+         `Depends`) and every fix unit landed against them has a `review:` line or `review:
+         skipped, codex unavailable`; (3) no open Critical or Major Fixes line names a covered
+         item; (4) each open Minor line against one is a backlog row, priority `review` (search
+         the backlog first), its Fixes line struck `→ <backlog id>`. Red → a Fixes line
+         `- [ ] GATE-<n> · red at <sha> · <failing tests> · <repair | diagnosis first>`, run as
+         fix unit `GATE-<n>-fix<m>` ("Fixes"; unknown cause: a diagnosis first) with no checklist
+         row, rechecked against the gate evidence; rerun on the repaired tip, never the red SHA.
+         Final gate checked off → triage, pick-up, retro, final report (plan-lifecycle "Plan
+         close") → close commit.
 - [ ] 8. Context hook fired at any pause, decision or acceptance? → reference/handoff.md
 ```
 
