@@ -19,7 +19,9 @@ Checks, against the live server:
 A server that is down is started. A failed check restarts it only when no `opencode run`/`attach`
 process names its port and no session in any directory is busy, then checks again; a busy server,
 or one whose sessions cannot be listed, is never restarted. Success prints one line naming the
-server state, the model and the repos checked against the fence. Exit 0 ok · 1 not fixed · 2 usage.
+server state, the model and the repos checked against the fence. Exit 0 ok · 1 not fixed · 2 usage ·
+3 no server and it cannot be started (`opencode` missing, or `serve` exits or times out), which
+codex-round reads as "use the CLI channel"; a failed check stays 1 and is never bypassed.
 
 The fence is evaluated as OpenCode 1.18.32 does (bundled Permission.evaluate / Wildcard.match /
 fromConfig): a leading `~/` or `$HOME` becomes the home dir, `*` matches any run of characters
@@ -27,7 +29,7 @@ fromConfig): a leading `~/` or `$HOME` becomes the home dir, `*` matches any run
 A file's ask is `<its directory>/*`, from the given path on some tool paths and the canonical one on
 others, so a repo passes only when both spellings are allowed.
 """
-import argparse, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
+import argparse, json, os, re, shutil, subprocess, sys, time, urllib.parse, urllib.request
 
 
 def say(msg):
@@ -130,12 +132,24 @@ def wait(url, up, seconds):
     return (get(url, "/config") is not None) == up
 
 
+def unavailable(msg):
+    say(msg)
+    sys.exit(3)
+
+
 def start(url, port, serverlog):
     say(f"starting opencode serve on {url}")
+    shutil.which("opencode") or unavailable("'opencode' not on PATH (install opencode) — no server")
     log = open(serverlog, "a") if serverlog else subprocess.DEVNULL
-    subprocess.Popen(["opencode", "serve", "--port", port, "--hostname", "127.0.0.1"], stdin=subprocess.DEVNULL,
-                     stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
-    wait(url, True, 30) or fail(f"server did not come up on {url}")
+    server = subprocess.Popen(["opencode", "serve", "--port", port, "--hostname", "127.0.0.1"], stdin=subprocess.DEVNULL,
+                              stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    for _ in range(30):
+        if get(url, "/config") is not None:
+            return
+        if server.poll() is not None:
+            unavailable(f"opencode serve exited {server.returncode} before {url} came up")
+        time.sleep(1)
+    get(url, "/config") is not None or unavailable(f"server did not come up on {url}")
 
 
 def main():

@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# One codex round — implement, run, review or advise — on whichever channel is up: the OpenCode
+# server when it runs or can be started, else the codex CLI. Both channels finish a round the same
+# way (round-lib.sh) and leave the same files.
+#
+#   codex-round <implement|run|review|advise> -C <dir> -p <prompt-file> -o <out-file> [-u <unit>]...
+#               [--repo <dir>]... [-m openai/gpt-6.1-sol-fast] [-e medium] [-s <session>]
+#               [--no-subagents] [--title <t>] [--port 4096|--url <url>]
+#
+# Jobs: implement and run edit in place (OpenCode's default agent with --auto; CLI
+# danger-full-access, since they run in a claimed lane and drive Unity). review must end in
+# APPROVE/CHANGES_REQUIRED (agent review-discovery, review-followup with --no-subagents); advise is
+# the same read-only round without the verdict (agent review-followup); both CLI read-only.
+# -o is taken verbatim and refused when it already holds a round. -u labels the failed-round
+# `BEES: results=<unit>:blocked:-` line. --repo is a sibling the round touches outside -C, checked
+# against the server's fence. -e is OpenCode's --variant and the CLI's model_reasoning_effort.
+#
+# Channel: a new round runs opencode-preflight first, before any round file; its exit 3 (no server
+# and none can start) picks the CLI, its exit 1 (fence, path or model) fails the round, so a refusal
+# is never bypassed by switching channel. A resume stays on its channel: `-s ses_*` is an OpenCode
+# session (pinned to its directory, refused past the bees budget by opencode-budget), any other id a
+# CLI session (refused past codex's 30-minute prompt-cache TTL); a resume whose channel is down
+# exits 3. A usage limit on OpenCode does not try the CLI: it is the same account.
+#
+# Files: <out> (the final message, or `Blocked: <reason>` + the partial answer + a blocked BEES line),
+# .log (the raw event stream: never read it into context), .session, .pid (this script, written
+# before the run), .cwd, .url (OpenCode: the server it ran on) and .usage, written last because
+# bees-watch reads it as "finished".
+#
+# Exit 0 finished · 1 the round failed or was refused · 2 usage · 3 codex unavailable.
+set -uo pipefail
+
+here="$(cd "$(dirname "$0")" && pwd)"
+. "$here/round-lib.sh"
+say() { echo "codex-round: $*" >&2; }
+die() { say "$2"; exit "$1"; }
+
+job="${1:-}"; [ $# = 0 ] || shift
+case "$job" in
+  implement|run|review|advise) ;;
+  -h|--help) grep '^#' "$0" | sed '1d; s/^# \{0,1\}//'; exit 0 ;;
+  *) die 2 "usage: codex-round <implement|run|review|advise> -C <dir> -p <prompt-file> -o <out-file> … (see --help)" ;;
+esac
+
+model="openai/gpt-6.1-sol-fast"   # the owner's default: the priority tier
+effort="medium"
+workdir=""; promptfile=""; outfile=""; session=""; port="4096"; url=""; title=""; subagents=1
+units=(); repos=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -m|--model)       model="$2"; shift 2 ;;
+    -e|--effort)      effort="$2"; shift 2 ;;
+    -C|--cd)          workdir="$2"; shift 2 ;;
+    -p|--prompt-file) promptfile="$2"; shift 2 ;;
+    -o|--out)         outfile="$2"; shift 2 ;;
+    -u|--unit)        units+=("$2"); shift 2 ;;
+    --repo)           repos+=(--repo "$2"); shift 2 ;;
+    -s|--session)     session="$2"; shift 2 ;;
+    --port)           port="$2"; shift 2 ;;
+    --url)            url="$2"; shift 2 ;;
+    --title)          title="$2"; shift 2 ;;
+    --no-subagents)   subagents=""; shift ;;
+    *) die 2 "unknown arg '$1'" ;;
+  esac
+done
+[ -n "$workdir" ] && [ -d "$workdir" ] || die 2 "need -C <existing directory>"
+[ -n "$promptfile" ] && [ -f "$promptfile" ] || die 2 "need -p <prompt-file>"
+[ -n "$outfile" ] || die 2 "need -o <out-file>"
+command -v jq >/dev/null 2>&1 || die 1 "'jq' not on PATH (brew install jq)"
+if [ -n "$url" ]; then port="${url##*:}"; port="${port%%/*}"; else url="http://127.0.0.1:${port}"; fi
+
+case "$job" in
+  implement|run)
+    [ -n "$subagents" ] || die 2 "--no-subagents is for review and advise"
+    role=impl; agent=""; sandbox=danger-full-access
+    continue_line=100000 ;;   # an implementor resume needs room for one more round of edits and tests
+  review|advise)
+    role="$job"; sandbox=read-only
+    agent=review-followup; [ "$job" = advise ] || [ -z "$subagents" ] || agent=review-discovery
+    continue_line=120000      # a review resume rereads findings, not the repo: past the implementor's 100k
+    [ -n "$subagents" ] || continue_line=150000 ;;   # no sub-agents to brief, so the session may grow further
+esac
+
+outfile="$(mkdir -p "$(dirname "$outfile")" && cd "$(dirname "$outfile")" && pwd -P)/$(basename "$outfile")"
+[ ! -e "$outfile" ] && [ ! -e "$outfile.log" ] || die 2 "$outfile already holds a round; pick a new -o"
+workdir="$(cd "$workdir" && pwd -P)"
+[ -n "$title" ] || { title="$(basename "$outfile")"; [ "$role" = impl ] || title="$job $title"; }
+logfile="${outfile}.log"; usagefile="${outfile}.usage"
+
+preflight() {
+  "$here/opencode-preflight" --url "$url" --port "$port" -m "$model" -C "$workdir" ${repos[@]+"${repos[@]}"} \
+    --serverlog "${outfile%/*}/opencode-serve-${port}.log"
+}
+opencode_resume_checks() {
+  curl -sf -m 10 "${url}/config" >/dev/null 2>&1 || die 3 "codex unavailable: session ${session} cannot be resumed: no server at ${url}"
+  local pinned; pinned="$(curl -sf -m 10 "${url}/session/${session}" | jq -r '.directory // empty')"
+  [ -n "$pinned" ] || die 1 "session ${session} not found on ${url} — start a new session without -s"
+  [ "$(cd "$pinned" 2>/dev/null && pwd -P)" = "$workdir" ] ||
+    die 1 "session ${session} is pinned to ${pinned}, not ${workdir} — start a new session for this directory"
+  "$here/opencode-budget" "$session" "$promptfile" "$continue_line" || exit 1
+}
+cli_resume_checks() {
+  local cache_ttl_secs=1800 rollout age   # codex's prompt cache lives 30 min; a later resume re-pays the whole context
+  rollout="$(find "${CODEX_HOME:-$HOME/.codex}/sessions" -type f -name "rollout-*${session}.jsonl" 2>/dev/null | head -1)"
+  [ -n "$rollout" ] || die 1 "no codex rollout file for session ${session}"
+  age=$(( $(date +%s) - $(stat -f %m "$rollout") ))
+  [ "$age" -le "$cache_ttl_secs" ] || die 1 "session ${session} last active $((age / 60))m ago (> 30m prompt-cache TTL) — start a new session without -s"
+}
+
+case "$session" in
+  "") preflight; rc=$?
+      case "$rc" in 0) channel=opencode ;; 3) channel=cli; say "no OpenCode server — using the codex CLI" ;; *) exit 1 ;; esac ;;
+  ses_*) channel=opencode; opencode_resume_checks
+         preflight; rc=$?; [ "$rc" = 0 ] || exit $(( rc == 3 ? 3 : 1 )) ;;
+  *) channel=cli; cli_resume_checks ;;
+esac
+if [ "$channel" = cli ]; then
+  codex="$("$here/resolve-codex")" || die 3 "codex unavailable: no OpenCode server and no codex CLI"
+  case "$model" in
+    openai/*-fast) cli_model="${model#openai/}"; cli_model="${cli_model%-fast}"; tier=priority ;;
+    openai/*)      cli_model="${model#openai/}"; tier=default ;;
+    *) die 1 "the codex CLI runs openai/ models only, not ${model}" ;;
+  esac
+fi
+
+if [ "$role" = impl ]; then
+  preamble="Before acting, read ~/.claude/CLAUDE.md and $workdir/CLAUDE.md. A nearer CLAUDE.md applies to its subtree: read the ones on the path to each directory you edit, and no others. Follow them as user and repository guidance. Read a skill file only when the brief names it, and only the part it names."
+else
+  preamble="You are a READ-ONLY reviewer: raise findings, never edit files. Before reviewing, read ~/.claude/CLAUDE.md and $workdir/CLAUDE.md. A nearer CLAUDE.md applies to its subtree: read the ones on the path to each file under review, and no others. Follow them as user and repository guidance. Read a skill file only when the brief names it, and only the part it names."
+fi
+prompt="$(cat "$promptfile")"
+[ -n "$session" ] || prompt="${preamble}
+
+---
+
+${prompt}"
+
+if [ "$channel" = opencode ]; then
+  # The edit tool must be denied by the live server's agent (task too for review-followup): a server
+  # started before the config change would otherwise let a reviewer edit.
+  [ -z "$agent" ] || curl -sf -m 10 "${url}/config" | jq -e --arg a "$agent" '
+      .agent[$a].permission.edit == "deny" and ($a != "review-followup" or .agent[$a].permission.task == "deny")' >/dev/null ||
+    die 1 "server at ${url} lacks the required ${agent} permissions (started before the config change?); restart opencode serve and rerun"
+  echo $$ > "${outfile}.pid"; printf '%s\n' "$workdir" > "${outfile}.cwd"; printf '%s\n' "$url" > "${outfile}.url"
+  say "WATCH LIVE -> opencode attach ${url} --dir ${workdir}"
+  run_args=(--auto); [ -z "$agent" ] || run_args=(--agent "$agent" --auto)
+  [ -z "$session" ] || run_args+=(--session "$session")
+  unit_args=(); for u in ${units[@]+"${units[@]}"}; do unit_args+=(-u "$u"); done
+  "$here/opencode-round" --url "$url" -C "$workdir" --role "$role" -o "$outfile" ${unit_args[@]+"${unit_args[@]}"} -- \
+    opencode run --attach "$url" --dir "$workdir" "${run_args[@]}" \
+    -m "$model" --variant "$effort" --title "$title" --format json "$prompt"
+  rc=$?
+  say "$job via OpenCode $( [ "$rc" = 0 ] && echo done || echo FAILED ) -> $outfile; session $(cat "${outfile}.session" 2>/dev/null || echo unknown); usage $usagefile"
+  exit $(( rc == 0 || rc == 3 ? rc : 1 ))
+fi
+
+echo $$ > "${outfile}.pid"; printf '%s\n' "$workdir" > "${outfile}.cwd"
+cli_args=(-m "$cli_model" -c model_reasoning_effort="$effort" -c service_tier="$tier"
+  --skip-git-repo-check --json --output-last-message "$outfile")
+# < /dev/null always: codex exec appends stdin as a block and hangs on an fd that never closes.
+if [ -n "$session" ]; then
+  (cd "$workdir" && "$codex" exec resume "$session" "${cli_args[@]}" "$prompt" < /dev/null > "$logfile" 2>&1)
+else
+  "$codex" exec -C "$workdir" --sandbox "$sandbox" -c 'project_doc_fallback_filenames=["CLAUDE.md"]' \
+    "${cli_args[@]}" "$prompt" < /dev/null > "$logfile" 2>&1
+fi
+status=$?
+
+thread="$(jq -rR 'fromjson? | .thread_id // empty' "$logfile" 2>/dev/null | head -1)"
+sid="${thread:-$session}"
+[ -z "$sid" ] || printf '%s\n' "$sid" > "${outfile}.session"
+clierr="$(jq -rR 'fromjson? | select(.type == "error" or .type == "turn.failed") |
+  .message // .error.message // (.error | tostring)' "$logfile" 2>/dev/null | head -1)"
+blocked=""; unavailable=""
+if [ "$status" != 0 ] || [ ! -s "$outfile" ]; then
+  if [ -n "$clierr" ] && is_usage_limit "$clierr"; then unavailable=1; blocked="Blocked: codex unavailable: codex ${clierr}"
+  elif [ "$status" != 0 ]; then blocked="Blocked: codex exec exited ${status}${clierr:+: ${clierr}}"
+  else blocked="Blocked: the round ended without a final message"; fi
+fi
+[ -z "$blocked" ] && [ "$role" = review ] && ! ends_in_verdict "$outfile" &&
+  blocked="Blocked: the answer does not end in APPROVE or CHANGES_REQUIRED (truncated?)"
+if [ -n "$blocked" ]; then
+  write_blocked "$outfile" "$blocked (log: ${logfile})" ${units[@]+"${units[@]}"}
+  say "$blocked (log: ${logfile})"
+fi
+: > "$usagefile.tmp"   # a stale .usage would read as this round finished
+[ -z "$sid" ] || "$here/extract-codex-cli-usage" "$sid" > "$usagefile.tmp" 2>/dev/null
+mv "$usagefile.tmp" "$usagefile"
+say "$job via the codex CLI $( [ -z "$blocked" ] && echo done || echo FAILED ) -> $outfile; session ${sid:-unknown}; usage $usagefile"
+[ -z "$unavailable" ] || exit 3
+[ -z "$blocked" ]

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Refuses to resume an OpenCode session past the bees session budget (bees reference/budgets.md):
+# Refuses to resume an OpenCode session past the bees session budget (bees "Rules"):
 # context at or past the continue line, whether warm or cold. The Claude side is
-# the `bees-budget` mod's; this is the codex side, run by opencode-implement and opencode-review
+# the `bees-budget` mod's; this is the codex side, run by codex-round, opencode-implement and opencode-review
 # (codex-review) on every -s, since only the wrapper sees the resolved session id.
 #
 # Reads the session's last completed assistant message from OpenCode's db: `tokens.total` is the
@@ -35,6 +35,6 @@ row="$(sqlite3 -separator ' ' "$db" "
 ctx="$row"
 
 if (( ctx >= continue_line )); then
-  echo "opencode-budget: session $sid is at $((ctx / 1000))k context, past the $((continue_line / 1000))k continue line — start a fresh session and hand over (bees reference/budgets.md); a retirement brief may start with [bees:handover]" >&2
+  echo "opencode-budget: session $sid is at $((ctx / 1000))k context, past the $((continue_line / 1000))k continue line — start a fresh session and hand over (bees \"Rules\"); a retirement brief may start with [bees:handover]" >&2
   exit 1
 fi

@@ -10,6 +10,7 @@
 #   tool-calls-last     - after the text the step ended in tool-calls and another step began: exit 1.
 #   newer-step-open     - a newer message's step began and never finished, server says stop for the
 #                         text message: exit 1.
+#   verdict-*, advise-* - a review must end in a verdict (markdown normalised); advise keeps prose.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$here/../scripts/opencode-round"
@@ -62,13 +63,15 @@ check tool-calls-last 1 '^BEES: results=STEP-05:blocked:-$'
 { cat "$FIXTURE"; step_finish "$msg" tool-calls; jq -c '{type: "step_start", sessionID, part: {type: "step-start", messageID: "msg_next", sessionID}}' <<<"$(head -1 "$FIXTURE")"; } > "$TMP/newer-step-open.log"; server_parts stop
 check newer-step-open 1 '^BEES: results=STEP-05:blocked:-$'
 # review: the answer's last line, bare or markdown-decorated, must be a verdict.
-review() { # review <name> <want-exit> <last-line> <want-out-last-line-regex>
+# advise: the same finish checks without the verdict.
+review() { # review <name> <want-exit> <last-line> <want-out-last-line-regex> [role]
   { jq -c --arg t "Findings.
 
 $3" 'if .type == "text" then .part.text = $t else . end' "$FIXTURE"; step_finish "$msg" stop; } > "$TMP/$1.log"
-  check "$1" "$2" "$4" review
+  check "$1" "$2" "$4" "${5:-review}"
 }
 review verdict-heading 0 '## Verdict: APPROVE' '^APPROVE$'
 review verdict-bold 0 '**Verdict: REQUEST_CHANGES**' '^CHANGES_REQUIRED$'
 review verdict-prose 1 'I would approve this.' 'blocked'
+review advise-prose 0 'I would approve this.' '^I would approve this\.$' advise
 exit $fail
