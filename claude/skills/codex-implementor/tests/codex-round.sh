@@ -92,8 +92,10 @@ for job in implement run review advise; do
   answer="Did it."; [ "$job" = review ] && answer=$'Findings.\n\nAPPROVE'
   export ANSWER="$answer" CODEX_MODE=ok OC_LOG="$TMP/oc-$job.log"; oc_log "$answer" > "$OC_LOG"
   agent=""; case $job in review) agent="--agent review-discovery " ;; advise) agent="--agent review-followup " ;; esac
+  title="r$((n + 1)).txt"; case $job in review|advise) title="review $title" ;; esac
   if round 0 "$job" --url "$live" && [ "$(cat "$out")" = "$answer" ] && artifacts .url && [ "$(cat "$out.url")" = "$live" ] &&
-     ! called codex && grep -q -- "run --attach $live --dir $(cd "$TMP/work" && pwd -P) ${agent}--auto" "$STUB_CALLS/opencode"
+     ! called codex && grep -q -- "run --attach $live --dir $(cd "$TMP/work" && pwd -P) ${agent}--auto" "$STUB_CALLS/opencode" &&
+     grep -q -- "--title $title --format" "$STUB_CALLS/opencode"
   then ok "$job on OpenCode"; else bad "$job on OpenCode" "$(head -1 "$out" 2>/dev/null)"; fi
   sandbox=danger-full-access; case $job in review|advise) sandbox=read-only ;; esac
   if round 0 "$job" --url "$dead" && [ "$(cat "$out")" = "$answer" ] && artifacts && [ ! -e "$out.url" ] &&

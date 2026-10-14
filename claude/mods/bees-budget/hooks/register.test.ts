@@ -183,15 +183,17 @@ test('the band shows only codex sessions this session launched or resumed', asyn
   await clock.advance(10 * MINUTE)
   await codex.launch($, IMPLEMENT)
   await codex.launch($, "codex-round review -C /repo -p /tmp/prompt.txt -o '/tmp/review-X-r1.txt'", 'session ses_resumed pinned to /repo')
+  await codex.launch($, "codex-round advise -C /repo -p /tmp/prompt.txt -o '/tmp/review-X-advice-r1.txt'")
   await codex.show($, [
     { id: 's1', label: 'GAP-05a', tokens: 10_000, at: clock.now(), createdAt: clock.now(), isRunning: 1 },
     { id: 's2', label: 'review review-X-r1.txt', tokens: 10_000, at: clock.now(), createdAt: clock.now(), isRunning: 1 },
+    { id: 's5', label: 'review review-X-advice-r1.txt', tokens: 10_000, at: clock.now(), createdAt: clock.now(), isRunning: 1 },
     { id: 'ses_resumed', label: 'GAP-01', tokens: 10_000, at: clock.now(), isRunning: 1 },
     { id: 's3', label: 'GAP-10a', tokens: 10_000, at: clock.now(), createdAt: clock.now(), isRunning: 1 },
     { id: 's4', label: 'GAP-05a', tokens: 10_000, at: clock.now(), createdAt: 0, isRunning: 1 },
   ])
   const rows = await (await mountBand($)).findAll({ type: 'Button' })
-  expect(rows.map(r => r.text)).toEqual(['GAP-05a', 'review review-X-r1.txt', 'GAP-01'])
+  expect(rows.map(r => r.text)).toEqual(['GAP-05a', 'review review-X-r1.txt', 'review review-X-advice-r1.txt', 'GAP-01'])
 })
 
 test('the band drops codex sessions from before a /clear', async ($, on) => {

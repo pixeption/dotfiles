@@ -139,7 +139,7 @@ esac
 outfile="$(mkdir -p "$(dirname "$outfile")" && cd "$(dirname "$outfile")" && pwd -P)/$(basename "$outfile")"
 [ ! -e "$outfile" ] && [ ! -e "$outfile.log" ] || die 2 "$outfile already holds a round; pick a new -o"
 workdir="$(cd "$workdir" && pwd -P)"
-[ -n "$title" ] || { title="$(basename "$outfile")"; [ "$role" = impl ] || title="$job $title"; }
+[ -n "$title" ] || { title="$(basename "$outfile")"; [ "$role" = impl ] || title="review $title"; }
 logfile="${outfile}.log"; usagefile="${outfile}.usage"
 
 preflight() {
