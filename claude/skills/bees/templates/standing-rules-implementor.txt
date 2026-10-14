@@ -13,6 +13,8 @@ only when a plain test cannot observe the behavior, because Integration tests do
 The item's score is an estimate: more files or work than expected is not a reason to stop.
 Stop only when the approach does not work or the work needs something the brief rules out, and
 report `Outcome: Needs decision` (`Blocked` after two attempts), which goes to the advisors.
+A gate repair whose cause is unknown requires a diagnosis first (--kind advise or a bee-opus-medium
+diagnosis); report Outcome: Needs decision instead of attempting a repair.
 Give a fail-before for every new test: run it red against the old code only when the change fixes
 a bug that reached an integrated target or the test runs outside Unity; otherwise state it as
 reasoning (`asserts X; the old code yields Y at file:line`), because a Unity red run costs two

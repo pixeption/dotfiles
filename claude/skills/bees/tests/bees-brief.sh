@@ -92,6 +92,7 @@ while IFS= read -r line; do
   has "gate repair carries [${line%% *}]" "$g" "$line" 1; has "its recheck carries [${line%% *}]" "$r" "$line" 1
 done <<<"$GATE_FIX"
 has "gate repair carries its return contract once" "$g" "$RETURN" 1
+has "gate repair is diagnosed first when its cause is unknown" "$g" "A gate repair whose cause is unknown requires a diagnosis first" 1
 
 ESTIMATE="The item's score is an estimate: more files or work than expected is not a reason to stop."
 b=$(brief --plan "$PLAN" --units U-03 --kind impl)
