@@ -30,7 +30,7 @@ plan the owner shaped in conversation says so in its header instead of a brief r
 
 ## Tables at the top
 
-A triage/summary table, then the checklist table, both right after the header — **never at the
+A summary table, then the checklist table, both right after the header — **never at the
 end**, even if a project's own `CLAUDE.md` says to end with a checklist.
 
 Checklist columns for a plan:
@@ -148,9 +148,8 @@ closes the plan, so it cannot close on a green suite alone:
 - [ ] Full suites green on the named target SHA, counts logged
 - [ ] Every covered item's review verdict, or `review: skipped, codex unavailable`, in the log
 - [ ] No open Critical or Major Fixes line; each open Minor line is a backlog row with priority `review`
-- [ ] Plan close: triage, pick-up and retro (bees `reference/plan-lifecycle.md` "Plan close")
-- [ ] Final report to the owner: retro numbers, proposed rule changes, picked fix clusters
-Done when: the final report is sent.
+- [ ] Plan close (bees "Plan close"): report sent, plan files deleted, OpenCode server stopped or the reason it remains running reported
+Done when: the close report is sent.
 ```
 
 A red gate is the orchestrator's: a Fixes line run as a fix unit (bees "Fixes"), then a rerun on
@@ -206,7 +205,7 @@ greps to hide superseded rounds.
 
 ## Deleting a plan
 
-A plan is deleted after its retro, whose numbers are counted from its log — never before.
+A plan is deleted at its close (bees "Plan close").
 "Delete a plan" means the plan **and every file that travels with it**: `<plan>.md`,
-`<plan>.log.md`, any other `<plan>.*` beside it, and the gitignored `.work/` — without asking about
+`<plan>.log.md`, `<plan>.status.md`, any other `<plan>.*` beside it, and the gitignored `.work/` — without asking about
 each one. List what you deleted and say that `.work/` is not recoverable, since it is gitignored.

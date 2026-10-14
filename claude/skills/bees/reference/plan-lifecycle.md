@@ -13,9 +13,6 @@ handoff needs only the preflight.
 - Path maps
 - Preflight
 - Plan close
-  - Triage
-  - Pick-up
-  - Retro
 
 ## Planning a plan
 
@@ -93,52 +90,24 @@ until then.
 
 ## Plan close
 
-Once, when the plan's final gate is green (`plan` skill), by the orchestrator holding the plan,
-before anything else is dispatched for it: triage, pick-up, retro, then the final report. A context
-handoff resumes whichever of them is unfinished and never re-runs one already logged
-(`reference/handoff.md`).
+Once, at a green final gate, by the orchestrator holding the plan, after the gate runner has
+handed back and exited:
 
-### Triage
+1. Compose the report and keep it in the status file until it is sent.
+2. Stop the OpenCode server only when no session is busy and no client is attached (the
+   preflight's busy check, then its `pkill` line; `codex-round stop-server` once it exists);
+   otherwise record why it remains running.
+3. Delete the gitignored `<plan>.work/` and record that it is not recoverable.
+4. Send the report.
+5. Make the one close commit by path, deleting `<plan>.md`, `.log.md`, `.status.md` and every
+   other tracked `<plan>.*`, with the report in the body. Subject:
+   `docs(plans): close <plan> — <one clause>`.
 
-1. Collect the plan's `gap:` lines (a codex run counts the log — never read it yourself,
-   SKILL.md rule 9). Any gap that came up twice becomes a row.
-2. Every `?` row gets one outcome: **close** (small, or a workaround — which alone never closes a
-   gap whose summed cost is high; one Status line, row removed next triage), **fix** (kept for
-   pick-up), or **owner** (needs a design or product decision: Status `owner: <question>` with
-   options and a recommendation, named in the final report — never as an `owner:` line, since only
-   the owner starts a plan). No `?` row survives two plan closes.
+Before step 5, Now names the next unfinished close step; after it no close action remains, and
+the close commit is the durable completion record.
 
-### Pick-up
-
-One batch: cluster the `fix` rows by area (one scout answers "which files does each touch?" when it
-isn't obvious); take at most **3 clusters**, highest summed minutes lost first — `unknown` stays
-unknown, never zero; among unknowns more `Hits`, then the lower id, or one costing scout where the
-pick would be arbitrary. Mark each picked row's Status `picked: <cluster title>` in
-`tooling-gaps.md` and name the clusters in the final report, never as an `owner:` line: only the
-owner starts a plan. The rest wait for the next plan close. Backlog items are owner-ordered and
-started only by the owner.
-
-### Retro
-
-A codex run counts the plan's log and you append one row per plan to
-`docs/plans/retro-numbers.md`: rounds per item by outcome, review passes per item, `docs(plans)`
-commits and item ids per item commit (`git log --first-parent --format=%s <from>..<to>`), fix rounds by a fresh bee vs the implementor, orchestrator `replan` log events, incomplete
-expansions and mid-run splits,
-out-of-scope review findings, brief changes sent back after approval, escapes per level, handoffs per plan,
-hours a plan waited on an `owner:` line, active vs waiting
-wall-clock per item and accepted items per orchestrator-hour, with their scores beside it. A missing timing is `unknown`, a
-number the plan cannot produce `not applicable`, never 0. At most 3 rule changes per retro, each
-a skill edit whose commit message carries its before/after numbers and the `retro-numbers.md` row;
-a forecast is labelled a forecast. The final report carries the numbers, the proposed changes and
-the picked clusters; the owner reads it and can veto.
-
-Before a batch activates, write its success thresholds and comparison scope (units, sizes,
-scores, concurrency and sharding) to `retro-numbers.md`, so its result can be judged.
-Freeze correctness guardrails beside them: required verification recorded and no blocking
-review finding open for every acceptance; a red target fixed before the next integrate;
-an escape bound naming count per plan, worst severity and recovery minutes. A guardrail
-breach blocks keeping the batch regardless of throughput.
-Judge a batch as one, with no per-rule causal claim. Revert a batch or rule on an attributable
-regression or a missed predeclared threshold over two comparable retros, never on an unchanged
-aggregate alone. Too little comparable evidence is inconclusive; report it without a per-rule
-conclusion.
+The report (about 10 lines) comes from the checklist, the status file and the log: the items
+landed with their SHAs (`git log --grep '<ID>'`); the findings and their fix units (the log's
+`review:` lines, the struck Fixes lines); the backlog rows added with priority `review`; the
+rework count — findings whose fix changed an item that already depended on the faulty one and had
+landed; and whether the server was stopped or why it remains running.

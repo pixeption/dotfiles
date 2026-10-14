@@ -145,8 +145,7 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
          `- [ ] GATE-<n> · red at <sha> · <failing tests> · <repair | diagnosis first>`, run as
          fix unit `GATE-<n>-fix<m>` ("Fixes"; unknown cause: a diagnosis first) with no checklist
          row, rechecked against the gate evidence; rerun on the repaired tip, never the red SHA.
-         Final gate checked off → triage, pick-up, retro, final report (plan-lifecycle "Plan
-         close") → close commit.
+         Final gate green → plan close (plan-lifecycle "Plan close").
 - [ ] 8. Context hook fired at any pause, decision or acceptance? → reference/handoff.md
 ```
 
@@ -284,9 +283,9 @@ Every agent reports a gap — source, evidence, minutes lost, workaround; **only
 one table conflict. **Only the owner starts a plan or adds one**: you keep each status file
 current, never add a plan — except an item's replan file (`plan` skill "Replanning an item
 mid-run"). Route each gap by [`reference/intake.md`](reference/intake.md).
-Triage (`reference/plan-lifecycle.md` "Triage") writes findings only to `tooling-gaps.md` or
-`docs/backlog.md` and stops: it drafts no plan and writes no `owner:` line, since those hold
-only questions the owner must answer and brief reviews.
+Routing a finding writes only to `tooling-gaps.md` or `docs/backlog.md` and stops: it drafts no
+plan and writes no `owner:` line, since those hold only questions the owner must answer and brief
+reviews.
 
 ## What you say to the user
 
