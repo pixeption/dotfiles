@@ -48,9 +48,6 @@ dispatch because the bee only claims it.
 - The orchestrator does not read an item's section to brief it; stdin carries only the piece,
   decisions and conflicts (SKILL.md "Briefing an agent"). An item without Today and Approach is read
   by its implementor like any other.
-- A fix round goes back to the implementor (SKILL.md "Briefing an agent"; `reference/budgets.md`
-  "Continue, spawn or hand over") because a fresh bee re-reads what the implementor still holds;
-  spawn fresh only past either line.
 - `--kind plan-brief` and `--kind plan-expand` are the read-only planner at the `brief draft` and
   `expand` stages of the `plan` skill's "Item fields by stage": each adds its stage block
   (`templates/planner-brief.txt`, `templates/planner-expand.txt`) before the planner's standing

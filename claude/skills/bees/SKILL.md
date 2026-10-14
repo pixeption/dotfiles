@@ -165,10 +165,8 @@ Conflicts: RenderGoldenTests belongs to the unit re-taking render goldens: leave
 EOF
 ```
 
-`--kind` is `impl`, `fix`, `review`, `recheck`, `advise`, `gate`, `plan-brief` or `plan-expand`. A
-fix goes back to the implementor by SendMessage while the `bees-budget` mod allows it and
-inside its cache clock.
-**Read `reference/briefs.md`** for any other kind, light mode, a codex
+`--kind` is `impl`, `fix`, `review`, `recheck`, `advise`, `gate`, `plan-brief` or `plan-expand`;
+a fix unit is briefed as "Fixes" says. **Read `reference/briefs.md`** for any other kind, light mode, a codex
 or scout brief, a blocker or a question for the owner.
 
 - Carry the load-bearing constants agents reported, citing the contract file, never memory; a
@@ -232,6 +230,42 @@ More than one line is a checklist row or plan section instead.
 `integration`, land folded into it; lines `land` cannot fold wait for the next landing. The only docs-only
 commits are a plan stage, a plan close and a handoff, each by path
 (`git commit -m … -- <paths>`). A landed commit is found by its unit id (`git log --grep '<ID>'`).
+
+## Fixes
+
+Each Critical or Major finding becomes one line in the status file's Fixes list; the reviewer has
+already written the fix, so a finding is never a checklist row, a planner brief or a `plan-expand`:
+
+```text
+- [ ] <finding id> · <item> · <Critical|Major|Minor> · <reviewer's exact fix> (<review file>)
+- [x] ~~<finding id> · <item> · <severity> · <fix> (<review file>)~~ <fix-unit commit sha>
+```
+
+- **By severity.** Critical: next free lane before any new item, and every not-started item whose
+  `Depends` names the faulty item goes to Blocked as `<ID> waits on <item>-fix<n>` until the fix
+  lands. Major: next free lane before any new item, never held until plan close. Minor: a
+  non-blocking line, run only in a lane with nothing else ready; one still open at the gate becomes
+  a `docs/backlog.md` row with priority `review`. Nit: no line; it rides with a fix unit for the
+  same item, else stays in the review file only. Unknown cause (no exact fix): first a diagnosis
+  (`bee-opus-medium`) that returns the exact fix, then a line.
+- **Unit.** All lines from one review are one fix unit `<item>-fix<n>`, a Minor line from that
+  review included. It goes to any free lane, never back to the original lane for its context.
+- **Run.** Branch from the target's tip, not the reviewed commit, so the fix is tested against the
+  code it lands on: `reuse <lane> --unit <item>-fix<n> --base <target tip> --target <target>`, then
+  `bees-brief --kind fix --plan <plan> --units <item>` (the item's section supplies the filter),
+  stdin naming the Fixes lines, the review file and the finding ids. The implementor applies the
+  fixes and runs the item's filter and each finding's fail-before.
+- **Recheck.** Once the implementor has handed back (the lane is idle, so the tree is quiescent),
+  codex `--kind recheck` on the lane's `git diff <base>..HEAD`, out-file
+  `review-<item>-fix<n>-r<N>.txt`; fix → recheck repeats until every id is Fixed, each verdict a
+  `[<item>-fix<n>] review: …` log line. Codex unavailable: log `review: skipped, codex
+  unavailable` and land on its tests.
+- **Land.** `land <lane> --plan <plan> --log <log> --with <plan>.status.md --message 'fix(<scope>):
+  <item> <ids> — <summary>'`, without `--mark`; it rebases onto the tip again. A refused rebase
+  (conflict) goes back to the lane's implementor to resolve and rerun the filter, then one recheck
+  of the resolution diff, then land again. Strike the lines with the landed sha and log
+  `[<item>-fix<n>] accept: <count> green, <filter>`. A fix is reviewed before it lands, so it gets
+  no review after landing and never needs a fix of its own.
 
 ## Intake
 

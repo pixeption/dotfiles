@@ -19,9 +19,8 @@ When codex is unavailable (both channels down or a usage limit), the review is s
 | What | Review |
 |---|---|
 | Every expanded plan | one discovery round in plan-review mode, over all its items |
-| Every item | one review of its landed commit after landing, in the background (SKILL.md "Status and acceptance"), then fix → recheck under `codex-review`'s contract |
-| A fix that applies the reviewer's exact fixes | orchestrator inspection ("Rechecks and the end of the loop") |
-| A production diff ≤ ~5 lines | orchestrator inspection (same) |
+| Every item, a production diff of five lines or fewer included | one codex review of its landed commit, in the background (SKILL.md "Status and acceptance"); its findings become Fixes lines |
+| Every fix unit | fix → recheck before it lands (SKILL.md "Fixes"), skipped and logged only when codex is unavailable |
 
 Code reviews check the change against the item's brief and Tests. The reviewed SHA is the landed
 SHA, and its verdict is the item's `review:` log line. A recheck is a fresh session pointed at the review
@@ -52,16 +51,6 @@ findings from that diff and its stored rationale, reviews the delta and its depe
 the fix introduced or exposed, and re-reads nothing else. It returns `Fixed / Partial / Open /
 Regressed` id lists plus new findings continuing the id sequence. No sub-agents in a recheck; a
 codex recheck runs `opencode-review --no-subagents`.
-
-Two cases need no reviewer, because checking a small diff against a written expectation costs
-less than a spawn:
-
-- a fix round that applies a reviewer's exact fixes — inspect the fix diff yourself and tick every
-  finding id against its fix text;
-- a unit whose production diff is about five lines or fewer.
-
-Log either as `review: orchestrator inspection`; a clean inspection closes the loop. Anything
-else, including a fix that departs from the reviewer's fix text, goes to the reviewer.
 
 There is no round cap. For codex, a clean recheck advances to the holistic final pass
 `codex-review` requires, whose `APPROVE` closes the loop. The **churn check** ends either loop early: a finding regressed twice, or new findings
