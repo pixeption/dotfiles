@@ -54,8 +54,7 @@ returns the split and real scores, or a scout if you can write its report's head
    `bee-opus-medium` for 3–5. **Review and recheck**: `codex-review`, `-e high` for a 5 else medium.
 2. **Every run you order** (a baseline, a gate's suites, a codex diff's validation) goes to a codex
    runner via `codex-implementor`, because a waiting Claude sub-agent's cache expires.
-3. **A fact**: `bee-scout`. **A cause**: a `bee-opus-medium` diagnosis. **A decision**:
-   `bee-opus-high`, then codex `-e high`.
+3. **A fact**: `bee-scout`. **A cause**: `bee-opus-medium`. **A decision**: `bee-opus-high`, then codex.
 4. **Codex unavailable**: log `review: skipped, codex unavailable`; a run goes to `bee-opus-low`.
    **A Claude usage limit**: codex implements in place, a separate codex session reviews, logged as
    a same-vendor exception.
@@ -130,11 +129,12 @@ Each Critical or Major finding is one status-file line, `- [ ] <id> · <item> ·
 row. Critical and Major take the next free lane before any new item, and a Critical blocks every
 not-started item depending on the faulty one; a Minor runs only in an idle lane, else is a backlog
 row at the gate; a Nit rides with a fix unit. No exact fix: a diagnosis first.
-
 One review's lines are one fix unit `<item>-fix<n>`: `reuse <lane> --unit <item>-fix<n> --base
 <target tip> --target <target>`, `bees-brief --kind fix` (briefs "Composing a brief"); once it
 hands back, codex `--kind recheck` on `git diff <base>..HEAD` until every id is Fixed; then `land
-… --message 'fix(<scope>): <item> <ids> — <summary>'`, no `--mark` and no review after.
+… --message 'fix(<scope>): <item> <ids> — <summary>'`, no `--mark`; a rebase conflict returns to
+the implementor to resolve, rerun the item's filter and recheck the resolution diff before
+retrying land; no review after landing.
 
 ## Intake
 

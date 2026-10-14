@@ -123,6 +123,9 @@ carries its Outcome, Right and Wrong.
   makes every implementor reread what the planner already read.
 - **Named files are a starting point, not a limit**: the implementor changes what the work needs and
   names any file outside Today and Approach in its report.
+- For convergence tasks, freeze the metric, threshold, reference set and known floor in Tests
+  before the loop, so acceptance cannot move; collect open owner questions in one decision packet
+  with costs.
 
 Two items may run in parallel when the files their Today and Approach name are disjoint and neither's
 Tests read output the other changes.

@@ -354,9 +354,9 @@ unity test --mode EditMode <project> --filter <filter> --output /abs/path/report
 
 - **Use an absolute `--output`.** The default `test-results.xml` resolves against the shell's cwd,
   not the project, so a run from elsewhere looks exactly like a run that never happened.
-- **Read the XML, not just the exit code.** Failing tests and usage errors both surface as 2; a
-  run with no fresh report (filter matched nothing, compile error, editor died) exits non-zero
-  with a message naming which.
+- **Judge the fresh XML, not stdout or the exit code.** Batch `unity test` can print nothing and
+  exit 1 on a green run; require a fresh report with nonzero `total` and use its results. Failing
+  tests and usage errors can both surface as 2; a missing fresh report is not a pass.
 - **Raw NUnit args go after `--`, CLI flags before it.** `… -- -testCategory '!Integration'` is
   honoured but nothing echoes it; `… -- --output x.xml` is swallowed by NUnit. Category-only
   filtering (no `--filter`) hits an exit-2 CLI bug that still writes a real report; always
