@@ -1,6 +1,6 @@
 # Plan lifecycle: planning, mode, adoption, path maps, preflight, close
 
-Read the passage you need when SKILL.md "Setup" sends you here: planning a queue row, choosing the
+Read the passage you need when SKILL.md "Setup" sends you here: planning a row, choosing the
 mode or adopting a plan, before the session's first codex unit, scheduling a unit that takes a
 pipeline where no committed consumer has gone, or closing a plan at its green final gate. A context
 handoff needs only the preflight.
@@ -43,9 +43,9 @@ many sessions they need:
 
 | plan | mode |
 |---|---|
-| one or two units, one sitting | **No bees.** Do it yourself, or one agent, one brief, no plan checklist, no reviewer unless the change is risky. A one-line task row (Plan `-`) runs here or in light mode, without a plan file. |
+| one or two units, one sitting | **No bees.** Do it yourself, or one agent, one brief, no plan checklist, no reviewer unless the change is risky. A one-line task needs no plan file and runs here or in light mode. |
 | a handful of units, one session | **Light.** One implementor, continued across units until its budget is spent; review per `reference/review.md` "Once per unit", so the smaller bookkeeping mode preserves the review boundary; status in your final message, no checklist. |
-| multi-session, or two exclusive resources | **Full.** A queue row (added by the owner) and a plan in the `plan` skill's format with its Rules, Resume and log, rounds in its `.work/`, review per `reference/review.md`. |
+| multi-session, or two exclusive resources | **Full.** A plan in the `plan` skill's format with its status file and log, rounds in its `.work/`, review per `reference/review.md`. |
 
 Choosing "full" for a small plan is the error, not the safe default.
 
@@ -99,8 +99,8 @@ handoff resumes whichever of them is unfinished and never re-runs one already lo
 2. Every `?` row gets one outcome: **close** (small, or a workaround — which alone never closes a
    gap whose summed cost is high; one Status line, row removed next triage), **fix** (kept for
    pick-up), or **owner** (needs a design or product decision: Status `owner: <question>` with
-   options and a recommendation, named in the final report — never in the Owner list, since only
-   the owner adds a row). No `?` row survives two plan closes.
+   options and a recommendation, named in the final report — never as an `owner:` line, since only
+   the owner starts a plan). No `?` row survives two plan closes.
 
 ### Pick-up
 
@@ -108,9 +108,9 @@ One batch: cluster the `fix` rows by area (one scout answers "which files does e
 isn't obvious); take at most **3 clusters**, highest summed minutes lost first — `unknown` stays
 unknown, never zero; among unknowns more `Hits`, then the lower id, or one costing scout where the
 pick would be arbitrary. Mark each picked row's Status `picked: <cluster title>` in
-`tooling-gaps.md` and name the clusters in the final report, never in the Owner list: only the
-owner adds a queue row. The rest wait for the next plan close. Backlog items are owner-ordered and
-queued only by the owner.
+`tooling-gaps.md` and name the clusters in the final report, never as an `owner:` line: only the
+owner starts a plan. The rest wait for the next plan close. Backlog items are owner-ordered and
+started only by the owner.
 
 ### Retro
 
@@ -119,7 +119,7 @@ The `bee-haiku-runner` counts the plan's log and you append one row per plan to
 commits and item ids per item commit (`git log --first-parent --format=%s <from>..<to>`), fix rounds by a fresh bee vs the implementor, orchestrator `replan` log events, incomplete
 expansions and mid-run splits,
 out-of-scope review findings, brief changes sent back after approval, escapes per level, handoffs per plan,
-hours a row waited in Owner, queued-but-never-started and started-without-a-row, active vs waiting
+hours a plan waited on an `owner:` line, active vs waiting
 wall-clock per item and accepted items per orchestrator-hour, with their scores beside it. A missing timing is `unknown`, a
 number the plan cannot produce `not applicable`, never 0. At most 3 rule changes per retro, each
 a skill edit whose commit message carries its before/after numbers and the `retro-numbers.md` row;

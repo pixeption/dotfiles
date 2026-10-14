@@ -19,18 +19,17 @@ Context × turns is the cost the rules protect (`reference/budgets.md` "What the
 
 ## Setup (every new bees session)
 
-Read, in order, nothing else: `docs/queue.md`, the plan's checklist, `## Rules` and `## Resume`,
-each whole since a plan is short (`plan` skill "Tables at the top"), then `tools/workspace.sh list`
-— the whole committed state, so any machine resumes from it. Schedule from score, route,
-dependencies and status; open a unit's section (`sed -En '/^### <unit> ·/,/^#{1,3} /p'`) only
-when a decision, blocker or finding turns on it — it is its implementor's to read. A group row
-(several linked plans) has one orchestrator: read each open plan's checklist, Rules and Resume,
-and schedule its plans by each plan's own stage, `Depends` and status.
+The owner names the plan(s) to run. Read, in order, nothing else: each named plan's checklist and
+its `<plan>.status.md`, each whole since both are short (`plan` skill "Tables at the top"), then
+`tools/workspace.sh list` — the whole committed state, so any machine resumes from it. Schedule
+from score, route, dependencies and status; open a unit's section
+(`sed -En '/^### <unit> ·/,/^#{1,3} /p'`) only when a decision, blocker or finding turns on it — it
+is its implementor's to read.
 
-Nothing is asked per plan; its `## Rules` overrides the defaults (buckets by score, codex preferred,
-in place in a lane when it drives an editor; review cross-vendor, once per item before it
-lands) and these **standing owner rules**: a decision with a recommendation takes it — except a
-change to an approved brief, which goes to the queue's Owner list; a question for the owner during
+Nothing is asked per plan; the owner rules in its status file override the defaults (buckets by
+score, codex preferred, in place in a lane when it drives an editor; review cross-vendor, once per
+item before it lands) and these **standing owner rules**: a decision with a recommendation takes
+it — except a change to an approved brief, which goes to a `Blocked` `owner:` line; a question for the owner during
 execution goes to the advisors first ([`reference/briefs.md`](reference/briefs.md) "Blocker cap and
 consults"); an expansion needs no owner approval; parallelise items eligible under the `plan`
 skill's "Item fields by stage"; sharding is `reference/routing.md` "Cost routing"'s.
@@ -45,7 +44,7 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
    results, blockers, acceptance.
 2. **Six concurrent agents and four lanes, hard caps, both vendors** — every agent (codex,
    reviewer, scout, runner, advisor) counts, being one more event stream you absorb; at most
-   four hold a lane; a seventh or a fifth lane unit is queued; only the user changes the caps.
+   four hold a lane; a seventh or a fifth lane unit waits; only the user changes the caps.
    Briefs say "do not spawn sub-agents". Start with up to four lane implementors plus two review or
    scout slots (lanes share the Unity host cap, `workspaces` skill); a scout runs in a free slot
    **before** the implementors start.
@@ -76,8 +75,8 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
 7. **Review once per item, after its build, on the lane before it lands**, in proportion to risk,
    until the recheck is clean; the churn check, not a round count, stops a loop that is not
    converging (`reference/review.md`, read when choosing or briefing a reviewer).
-8. **State is the queue and two committed files per plan** (full mode): `<plan>.md` — checklist,
-   `## Rules`, `## Resume` — and `<plan>.log.md`, nothing derived ("Status and acceptance").
+8. **State is two committed files per plan beside `<plan>.md`: `<plan>.status.md` and
+   `<plan>.log.md`, nothing derived** (full mode; "Status and acceptance").
 9. **Hand off at the first safe point past 170k, by 200k**
    (`reference/handoff.md`). Compaction is the fallback, never the plan.
 10. **Delegate execution, including reading.** Inspect directly only when cheaper than a spawn: one
@@ -137,10 +136,10 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
          holders → slots → order; delegate, continue or spawn (reference/budgets.md).
 - [ ] 6. Each hand-back: evaluate; review the item on its lane (reference/review.md), fix,
          recheck; accept and land it ("Status and acceptance"); route every gap ("Intake"); one
-         scheduling pass (a `ready` row or item with a free lane?); report. Only the Owner list
-         waits on the owner, and during execution it gains only questions the advisors could not
-         decide; nothing `ready` → report starvation and stop, never adding a row, drafting
-         an unqueued plan or bypassing the brief review.
+         scheduling pass (a `ready` row or item with a free lane?); report. Only `owner:` lines
+         in a status file wait on the owner, and during execution they gain only questions the
+         advisors could not decide; nothing `ready` → report starvation and stop, never adding a
+         row, drafting a plan the owner did not start or bypassing the brief review.
 - [ ] 7. A GATE row whose items have landed: full suites on its target SHA. Red → yours: add a
          reviewed repair as the next item, rerun the gate on the repaired SHA. Final gate green →
          triage, pick-up, retro, final report (plan-lifecycle "Plan close") → close commit.
@@ -205,40 +204,42 @@ session.
 ## Status and acceptance
 
 Full mode only. State is hand-written markdown committed with the plan, never only in `.work/`
-(gitignored, disposable); formats are the `plan` skill's "Rules, Resume and log". Rules: this plan's
-owner rules, edited in place. Resume: unfinished work, ≤ 10 lines, overwritten at a pause, a
-handoff or a change of holder (with a kept codex session's id, pinned directory, last out-file and
-context). The queue: what's next and what waits on the owner.
+(gitignored, disposable). The **status file** `<plan>.status.md` starts as a copy of
+[`templates/status.md`](templates/status.md) (`cat` it): Now, Next, Blocked and Resources are
+overwritten when they change, holding `unknown` for an unknown fact; Rules, this plan's owner
+rules, are edited in place. An unresolved owner question is a `Blocked` `owner:` line.
 
 **Accepting** an item: Status ✅ `<reviewed lane SHA> <count>`, and the
 log line `- <date '+%F %H:%M'> [<unit>] accept: <suite count, review verdict, reviewed lane SHA>`;
-then land it with `tools/workspace.sh land` — editors closed, claim released, plan and log folded
-into the item's squash (flags: `workspaces` skill "Integrate a lane").
+then land it with `tools/workspace.sh land` — editors closed, claim released, plan, status file
+and log folded into the item's squash (flags: `workspaces` skill "Integrate a lane").
 **Post-integrate**, after every landing: hold `integration` and run the landed item's filter
 only, as background Bash; the full suites wait for the plan's gates. Finish before the next
-landing moves the target; a red target is the next lane unit, ahead of the queue. Record tested
+landing moves the target; a red target is the next lane unit, ahead of every other. Record tested
 SHA, command, filter and count. A GameCore filter selecting more than one Integration test borrows the test shards (`workspaces`
 "Borrow the test shards"); Game runs in one editor. It is target evidence, not acceptance.
 
-Also log each round (`[<unit>] round: impl r2 codex sol high, done, ctx 96k, impl-<unit>-r2.txt`),
-review verdict, owner decision (`decision: …`; one still applying next session is a Rules line),
-`gap: …`, `replan` and escape. More than one line is a checklist row or plan section instead.
+The log keeps five kinds of line, nothing else: `accept`; `review` —
+`[<ID>] review: <reviewed sha> <verdict> (<report>)` or `[<ID>] review: skipped, codex unavailable`;
+`gate` — `[GATE-<n>] gate: <target sha> <commands> <counts> <green|red>`; `decision` — a change
+of plan or an owner answer (one still applying next session is also a Rules line); and `escape`.
+More than one line is a checklist row or plan section instead.
 
-**Commit cadence**: one commit per item — the plan and log, written uncommitted in `integration`,
-land folded into it; lines `land` cannot fold wait for the next landing. The only docs-only
+**Commit cadence**: one commit per item — the plan, status file and log, written uncommitted in
+`integration`, land folded into it; lines `land` cannot fold wait for the next landing. The only docs-only
 commits are a plan stage, a plan close and a handoff, each by path
 (`git commit -m … -- <paths>`). A landed commit is found by its unit id (`git log --grep '<ID>'`).
 
 ## Intake
 
 Every agent reports a gap — source, evidence, minutes lost, workaround; **only you write**
-`docs/plans/tooling-gaps.md`, `docs/backlog.md` and the queue, since two lanes appending to one
-table conflict. **Only the owner adds a queue row**: you keep a row's Stage, Lanes and Since and
-the Owner list current, never add a row or plan — except an item's replan file (`plan` skill
-"Replanning an item mid-run"). Route each gap by [`reference/intake.md`](reference/intake.md).
+`docs/plans/tooling-gaps.md`, the status files and `docs/backlog.md`, since two lanes appending to
+one table conflict. **Only the owner starts a plan or adds one**: you keep each status file
+current, never add a plan — except an item's replan file (`plan` skill "Replanning an item
+mid-run"). Route each gap by [`reference/intake.md`](reference/intake.md).
 Triage (`reference/plan-lifecycle.md` "Triage") writes findings only to `tooling-gaps.md` or
-`docs/backlog.md` and stops: it drafts no plan, adds no row and proposes none in the Owner list,
-which holds only questions the owner must answer and brief reviews.
+`docs/backlog.md` and stops: it drafts no plan and writes no `owner:` line, since those hold
+only questions the owner must answer and brief reviews.
 
 ## What you say to the user
 
@@ -250,7 +251,7 @@ for dependencies; numbers on the unit's line.
 | waiting | `Waiting on codex (G1 round 3, log growing) and slot 2 (B4).` | 1 line |
 | agent reported | unit (pts · bucket · who) · outcome · commit/suite · one clause · continued or retired, why | 2–3 lines |
 | quiet round | what `bees-watch` found, what you did | 1–2 lines |
-| decision or blocker | only one the advisors could not decide, now on the Owner list: question, options with cost (scope: units and plans), recommendation | ≤ 6 lines |
+| decision or blocker | only one the advisors could not decide, now a `Blocked` `owner:` line: question, options with cost (scope: units and plans), recommendation | ≤ 6 lines |
 | pause or end | changed rows, `Next`, uncommitted state | ≤ 10 lines |
 | handoff | tab name, the new session's first unit, "this session stays open" | 3 lines |
 | completion | changes, decisions by id, verification, review, risks, owner decisions | as needed |
