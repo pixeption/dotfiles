@@ -95,7 +95,7 @@ handoff resumes whichever of them is unfinished and never re-runs one already lo
 ### Triage
 
 1. Collect the plan's `gap:` lines (a codex run counts the log — never read it yourself,
-   SKILL.md rule 10). Any gap that came up twice becomes a row.
+   SKILL.md rule 9). Any gap that came up twice becomes a row.
 2. Every `?` row gets one outcome: **close** (small, or a workaround — which alone never closes a
    gap whose summed cost is high; one Status line, row removed next triage), **fix** (kept for
    pick-up), or **owner** (needs a design or product decision: Status `owner: <question>` with

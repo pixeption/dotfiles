@@ -58,7 +58,8 @@ before handing the project on, and say so in the next brief:
   remove the worktree after merge or discard so the next session does not find it.
 - Pausing: "stop at the next safe point (tree compiling, editor not in Play, isolation restored),
   report in five lines, then wait." A paused agent is warm for its cache clock (5 min Claude,
-  30 min codex) and worth continuing under ~100k after it; past that, spawn from its handover.
+  30 min codex) and worth continuing while the budget mod allows it; past that, spawn from its
+  handover.
 - A codex reviewer's recheck resumes the same OpenCode session at any time;
   only the CLI fallback has the 30-minute cliff, after which a fresh session with the findings list
   and the fix diff in the brief is cheaper than the cold re-read.

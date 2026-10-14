@@ -13,7 +13,6 @@ below is evidence, not a conclusion — reopen the code it cites. Write to <repo
 the root cause with file:line or a command's output and one way through as concrete steps), Reason,
 Risks — or `Cannot decide` and the one question the owner must answer. Then the Cost line, and
 `CHANGES_REQUIRED` as the last line.
-Pause at 250k context, warned at 200k, or earlier for a smaller window or a coming compaction
-(~/.claude/skills/bees/reference/budgets.md "Per-agent budget table" and "Continue, spawn or hand
-over"): write `Decision: Paused`, what you established with its evidence and what is left to check,
-then the Cost line and `CHANGES_REQUIRED`, because a fresh advisor continues from your report.
+When the context hook tells you to pause, or earlier before a compaction you can see coming:
+write `Decision: Paused`, what you established with its evidence and what is left to check, then
+the Cost line and `CHANGES_REQUIRED`, because a fresh advisor continues from your report.

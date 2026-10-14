@@ -1,6 +1,6 @@
 {
   "name": "bees-budget",
   "version": "0.1.0",
-  "description": "Refuses SendMessage to a bee past its context budget or with a cold cache (bees reference/budgets.md)",
+  "description": "Refuses SendMessage to a bee past its context line, telling the orchestrator to spawn a fresh bee and brief it from the old one's report",
   "types": "./types/index.d.ts"
 }

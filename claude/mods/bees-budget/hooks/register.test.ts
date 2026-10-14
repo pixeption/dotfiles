@@ -39,6 +39,8 @@ test('a warm bee at the continue line is refused', async ($, on) => {
   const sent = await send($)
   expect(sent.isDelivered).toBe(false)
   expect(sent.reason).toMatch(/continue line/)
+  expect(sent.reason).toMatch(/spawn a fresh bee/)
+  expect(sent.reason).not.toMatch(/budgets/)
 })
 
 test('a bee at the retire line is refused', async ($, on) => {
@@ -47,6 +49,8 @@ test('a bee at the retire line is refused', async ($, on) => {
   const sent = await send($)
   expect(sent.isDelivered).toBe(false)
   expect(sent.reason).toMatch(/retire/)
+  expect(sent.reason).toMatch(/spawn a fresh bee/)
+  expect(sent.reason).not.toMatch(/budgets/)
 })
 
 test('a bee just under the retire line gets the continue-line refusal', async ($, on) => {

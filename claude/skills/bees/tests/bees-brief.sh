@@ -15,8 +15,8 @@ SECTION="Start from the unit-section pointer in the brief"
 SAVED="Inspect a truncated output's saved file by search or bounded ranges"
 FILTER="Filter long command output to the actionable lines"
 
-PAUSE="Pause at 250k context, warned at 200k, or earlier for a smaller window or a coming compaction"
-BUDGET="reference/budgets.md \"Per-agent budget table\" and \"Continue, spawn or hand over\""
+PAUSE="When the context hook tells you to pause"
+BUDGET="budgets.md"
 PLAN="$TMP/plan.md"
 printf '# Plan\n\n### U-01 · first\n\nx\n\n### U-02 · second\n\ny\n\n### U-03 · unrelated\n\nz\n' > "$PLAN"
 round=0
@@ -30,6 +30,11 @@ expect_rules() { # expect_rules <name> <brief> <want-skill> <want-section> <want
   local got="$(count "$2" "$SKILL") $(count "$2" "$SECTION") $(count "$2" "$SAVED") $(count "$2" "$FILTER")"
   if [ "$got" == "$3 $4 $5 $6" ]; then ok "$1"; else bad "$1: hygiene rule counts want [$3 $4 $5 $6] got [$got]"; fi
 }
+expect_pause() { # expect_pause <kind> <brief>: pauses when the hook says, once, citing no threshold or budgets.md
+  has "$1 rules pause when the hook says" "$2" "$PAUSE" 1
+  has "$1 rules cite no budgets.md" "$2" "$BUDGET" 0
+  has "$1 rules name no 250k" "$2" "250k" 0
+}
 
 for kind in impl fix; do
   expect_rules "$kind gets the four hygiene rules" "$(brief --plan "$PLAN" --units U-01 --kind $kind)" 1 1 1 1
@@ -38,8 +43,7 @@ b=$(brief --plan "$PLAN" --units GATE-1 --kind gate); expect_rules "gate gets th
 for kind in review recheck; do
   b=$(brief --plan "$PLAN" --units U-01 --kind $kind)
   expect_rules "$kind gets the first three" "$b" 1 1 1 0
-  has "$kind rules pause at the sub-agent line" "$b" "$PAUSE" 1
-  has "$kind rules cite the budget sections" "$b" "$BUDGET" 1
+  expect_pause "$kind" "$b"
   has "$kind pause returns the unreviewed rest" "$b" "\`Paused: <files and Tests not yet reviewed>\`, verdict \`CHANGES_REQUIRED\`" 1
 done
 
@@ -53,6 +57,7 @@ if [ -f "$b" ] && ! grep -q "sed -En" "$b"; then ok "light-mode gate has no sect
 ESTIMATE="The item's score is an estimate: more files or work than expected is not a reason to stop."
 b=$(brief --plan "$PLAN" --units U-03 --kind impl)
 has "impl rules treat the score as an estimate" "$b" "$ESTIMATE" 1
+expect_pause impl "$b"
 has "impl rules stop only to the advisors" "$b" "report \`Outcome: Needs decision\` (\`Blocked\` after two attempts)" 1
 has "impl return vocabulary has no replan" "$b" "<done|blocked|paused|needs-decision>" 2
 has "impl brief has no Sizing field" "$b" "Sizing" 0
@@ -65,8 +70,7 @@ b=$(brief --plan "$PLAN" --units U-01 --kind advise)
 expect_rules "advise gets the first three" "$b" 1 1 1 0
 has "advise is limited to the approved brief and the owner's rules" "$b" "Decide only within the approved brief and the owner's rules" 1
 has "advise has no BEES line" "$b" "BEES: results" 0
-has "advise rules pause at the sub-agent line" "$b" "$PAUSE" 1
-has "advise rules cite the budget sections" "$b" "$BUDGET" 1
+expect_pause advise "$b"
 has "advise pause returns what is established" "$b" "write \`Decision: Paused\`, what you established" 1
 
 BRIEF_BLOCK="Brief draft (\`plan\` skill"
@@ -75,7 +79,7 @@ b=$(brief --plan "$PLAN" --units U-01 --kind plan-expand)
 expect_rules "plan-expand gets the four hygiene rules" "$b" 1 1 1 1
 has "plan-expand carries the expand block" "$b" "$EXPAND_BLOCK" 1
 has "plan-expand keeps the brief read-only" "$b" "The brief is read-only" 1
-has "plan-expand rules pause at the sub-agent line" "$b" "$PAUSE" 1
+expect_pause plan-expand "$b"
 has "plan-expand pause returns the rest as to expand" "$b" "then return the items done and the rest under \`To expand\`" 1
 has "plan-expand asks for Today, Approach and Tests" "$b" "Append below the brief fields: Today" 1
 has "plan-expand bans report pointers" "$b" "never \"detail in report-…\"" 1
@@ -94,7 +98,7 @@ has "plan-brief names the brief fields" "$b" "with Outcome (what the result look
 has "plan-brief asks for usage and architecture" "$b" "architecture note of a few lines" 1
 has "plan-brief carries no expand block" "$b" "$EXPAND_BLOCK" 0
 has "plan-brief brief points at the unit section" "$b" "sed -En '/^### U-02 ·" 1
-has "plan-brief rules pause at the sub-agent line" "$b" "$PAUSE" 1
+expect_pause plan-brief "$b"
 b=$(brief --work "$TMP/work" --units Q-03 --kind plan-brief)
 if [ -f "$b" ] && ! grep -q "sed -En" "$b" && [ "$(count "$b" "$BRIEF_BLOCK")" == 1 ]; then ok "plan-brief from a queue row needs no plan"; else bad "plan-brief --work: brief [$b]"; fi
 if echo x | "$SCRIPT" --plan "$PLAN" --units U-01 --kind plan-ac --round 98 >/dev/null 2>&1; then bad "kind plan-ac is gone"; else ok "kind plan-ac is gone"; fi

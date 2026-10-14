@@ -17,5 +17,5 @@ ctx="$(tail -n 400 "$transcript" | jq -Rr 'fromjson? | select(.type == "assistan
   | (.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0)' 2>/dev/null | tail -1)"
 [ -n "$ctx" ] && [ "$ctx" -ge "$at" ] || exit 0
 jq -nc --arg k "$((at / 1000))k" '{hookSpecificOutput: {hookEventName: "PostToolUse",
-  additionalContext: "Context at \($k): start nothing new, finish the running unit, then read bees reference/handoff.md and hand off per its checklist; the successor resumes unfinished work without re-running triage, pick-up or retro, reading reference/plan-lifecycle.md \"Preflight\" before its first codex unit."}}'
+  additionalContext: "Context at \($k): start nothing new, finish the running unit, then hand off per bees reference/handoff.md."}}'
 touch "$marker"

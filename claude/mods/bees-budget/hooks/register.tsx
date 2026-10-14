@@ -3,7 +3,9 @@ import type { EngineInterface, ModelUsage, Register } from 'claude-code'
 
 import type { CodexLaunch, CodexSession } from '../types'
 
+// Break-even: a 20-step round resumed here reads ~0.2M cache-equivalent, as much as a fresh spawn.
 const CONTINUE_LINE = 100_000
+// A round resumed here costs ~0.5M equivalent, over twice a fresh spawn; bee-context-nudge pauses here.
 const RETIRE_AT = 250_000
 const CLAUDE_TTL_MS = 5 * 60_000
 const CODEX_TTL_MS = 30 * 60_000
@@ -29,9 +31,9 @@ const isBlocked = (r: Row) => isPastContinueLine(r.tokens)
 
 const refusal = (r: Row) => {
   if (isRetired(r.tokens))
-    return `${r.label} is at ${kilo(r.tokens)} context, past the ${kilo(RETIRE_AT)} retire line: spawn a fresh bee and hand the resource over (bees reference/budgets.md). A retirement message may start with ${HANDOVER}.`
+    return `${r.label} is at ${kilo(r.tokens)} context, past the ${kilo(RETIRE_AT)} retire line: spawn a fresh bee and brief it from this one's report; a retirement message may start with ${HANDOVER}.`
   if (isPastContinueLine(r.tokens))
-    return `${r.label} is at ${kilo(r.tokens)} context, past the ${kilo(CONTINUE_LINE)} continue line: send the next round to a fresh bee (bees reference/budgets.md). A retirement message may start with ${HANDOVER}.`
+    return `${r.label} is at ${kilo(r.tokens)} context, past the ${kilo(CONTINUE_LINE)} continue line: spawn a fresh bee and brief it from this one's report; a retirement message may start with ${HANDOVER}.`
   return undefined
 }
 

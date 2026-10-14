@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""PostToolUse hook (implementor bee frontmatter): give a sub-agent its own context reading.
+"""PostToolUse hook (bee agent frontmatter): give a sub-agent its own context reading.
 
 Reads the input context of the agent's last API response from
 <transcript dir>/<session_id>/subagents/agent-<agent_id>.jsonl and emits each stage once per agent:
@@ -10,7 +10,7 @@ run their hooks in parallel, so each step runs under a nonblocking per-agent flo
 cannot take it exits silently. State and lock live in $TMPDIR, which the OS cleans; they survive a
 hand-back because the same agent may be resumed.
   BEE_NUDGE_WARN   default 200000: leaves room to finish a step and plan the pause before 250k
-  BEE_NUDGE_PAUSE  default 250000: the implementor pause line (bees reference/budgets.md)
+  BEE_NUDGE_PAUSE  default 250000: a resumed round here costs >2x a fresh spawn's (~0.5M vs ~0.2M)
 """
 import fcntl, json, os, pathlib, sys
 
@@ -33,7 +33,7 @@ def reading(path):
 
 def text(stage, n, pause):
     if stage == "pause":
-        return f"Context at {n // 1000}k: stop at the next safe point and pause per your standing rules (Outcome: Paused)."
+        return f"Context at {n // 1000}k: stop at the next safe point and pause as your standing rules say."
     return (f"Context at {n // 1000}k: finish the current step; if more than a few steps of this unit "
             f"remain, plan to pause at {pause // 1000}k.")
 

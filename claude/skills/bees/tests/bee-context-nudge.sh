@@ -35,7 +35,7 @@ call() { # call <agent|""> [VAR=value …]: runs the hook; sets $out and $code
 }
 warn() { jq -nc --arg t "Context at $1k: finish the current step; if more than a few steps of this unit remain, plan to pause at $2k." \
   '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $t}}'; }
-pause() { jq -nc --arg t "Context at $1k: stop at the next safe point and pause per your standing rules (Outcome: Paused)." \
+pause() { jq -nc --arg t "Context at $1k: stop at the next safe point and pause as your standing rules say." \
   '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $t}}'; }
 expect() { # expect <label> <want-json|"">: compares the last call's output and exit 0
   local got; got=$(jq -c . <<<"$out" 2>/dev/null || echo "$out")
@@ -119,15 +119,16 @@ new_case no-warn-after-pause
 respond A 260000; call A; expect "no-warn-after-pause pause" "$(pause 260)"
 respond A 210000; call A; expect "no-warn-after-pause 210k" ""
 
-# SA-02 contract: the hook's pause text defers to the standing rules, so every implementor brief must
-# define a hook-triggered pause with Outcome: Paused and a paused BEES entry, and no context figure.
+# SA-02 contract: the hook's pause text defers to the standing rules and names no role's outcome, so
+# every implementor brief must define a hook-triggered pause with Outcome: Paused and a paused BEES
+# entry, and no context figure.
 printf '# P\n\n### X-01 · unit\n\nBody.\n' > "$TMP/plan.md"
 pause_text=$(pause 250 | jq -r .hookSpecificOutput.additionalContext)
 for kind in impl fix gate; do
   echo "Objective: contract." | "$here/../scripts/bees-brief" --plan "$TMP/plan.md" --units X-01 --kind $kind >/dev/null
   brief="$TMP/plan.work/brief-X-01-$kind-r1.txt"
   missing=""
-  [[ $pause_text == *"your standing rules"*"Outcome: Paused"* ]] || missing+=" hook-text"
+  [[ $pause_text == *"your standing rules"* && $pause_text != *"Outcome"* ]] || missing+=" hook-text"
   grep -q "^Standing rules:" "$brief" || missing+=" standing-rules"
   tr '\n' ' ' < "$brief" | grep -q 'When the context hook tells you to pause, .*report `Outcome: Paused`, end with `BEES: results=<unit>:paused:-' || missing+=" hook-pause"
   if grep -Eo '[0-9]+k\b' "$brief"; then missing+=" context-figure"; fi

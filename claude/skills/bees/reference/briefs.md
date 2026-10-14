@@ -1,6 +1,6 @@
 # Returns, the last-line contract, blockers and advice
 
-Read when a brief or report needs more than SKILL.md "Briefing an agent" and rule 10 give: a brief
+Read when a brief or report needs more than SKILL.md "Briefing an agent" and rule 9 give: a brief
 kind other than `impl`, an item without Today and Approach, light mode, a codex or scout brief, the BEES line's
 exact form, or a blocker or a question for the owner.
 
@@ -27,7 +27,7 @@ earlier run.
 
 ## Reports
 
-Every report is read once, compact, through `bees-report` (SKILL.md rule 10), because a hand-back
+Every report is read once, compact, through `bees-report` (SKILL.md rule 9), because a hand-back
 or a `cat` stays in your context every later turn. It prints outcome, suite lines, what it
 needs from you, blocker and options, each finding's first line, the `.usage` context, BEES and
 verdict; `--finding MAJ-02,F3` adds each named finding's whole block with its fix (an id the file

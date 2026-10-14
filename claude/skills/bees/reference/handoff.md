@@ -6,10 +6,9 @@ Read when the context hook fires.
 
 The orchestrator pays its context every turn like any agent, and compaction's summary is lossy in
 ways nobody chose. It hands off to a fresh orchestrator — one role, chained — only when its
-context runs out: the `PostToolUse` hook (`scripts/context-nudge`) injects "Context at 170k: … hand
-off" once per session, since a handoff there costs least for the measured startup cost and growth.
-Finish the running unit, then hand off by ~200k. The hook reads the transcript, which can lag: if
-your context is clearly past 170k and it has not fired, act as if it had.
+context runs out, when the context hook fires: the `PostToolUse` hook (`scripts/context-nudge`)
+injects "Context at <n>k: … hand off" once per session. Finish the running unit, then hand off. The
+hook reads the transcript, which can lag a turn: if it lags, act on the next.
 
 The successor resumes the unfinished work and never re-runs triage, pick-up or retro: they run
 once, at the plan's close (`reference/plan-lifecycle.md` "Plan close"), and a close step already
@@ -22,7 +21,8 @@ At the next safe point:
 ```text
 - [ ] Start nothing new. Every running unit reports; a reviewer mid-recheck finishes.
 - [ ] Retire every Claude bee (the successor cannot receive their notifications). A codex session
-      under 100k may stay for the successor to resume by id, in its pinned directory, same server.
+      `opencode-budget` still resumes may stay for the successor to resume by id, in its pinned
+      directory, same server.
 - [ ] Every lane a retired bee held: close its editors and release its claim (nono4u's `workspaces`
       skill "End a lane session" steps 2–3) — a retired holder never comes back to do it.
 - [ ] Every gap a report listed since the last handoff has been routed through bees "Intake".

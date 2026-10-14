@@ -55,16 +55,15 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
    claim the plan names (`perf-tests-<project>`) likewise. Others work read-only, in another slot
    or a blind worktree no editor loads — or wait; disjoint files in one slot are not enough. A blind
    codex worktree is outside every slot; validating its diff in a lane is not.
-4. **Session budget, both vendors: continue below 100k, finish the round below 250k** (a codex
-   review session continues further: `codex-review` "One session for the whole loop") — the
-   harness's count or `.usage` `context_tokens`, never the agent's estimate. At 100k no new brief,
-   not even a fix or recheck (every resumed step re-reads the whole session): spawn fresh, hand the
-   resource over. A bee is warned at 200k and pauses itself at 250k, or earlier
-   (`reference/budgets.md` "Per-agent budget table"). **Another repo or area gets a fresh session**
-   (a codex session is pinned to its directory); **the same area is the point of a split** — a
-   sub-item finished below 100k earns the next ready sibling. Check before every SendMessage or
-   `-s` (the `bees-budget` and `opencode-budget` mods enforce it); read `reference/budgets.md`
-   before any continue-or-spawn decision.
+4. **Past its context threshold a session hands off and a sub-agent is not continued; the hook or
+   mod tells you when — the numbers live only in the scripts.** The count is the harness's or
+   `.usage` `context_tokens`, never the agent's estimate. A refused agent gets no new brief, not
+   even a fix or recheck (every resumed step re-reads the whole session): spawn fresh and hand the
+   resource over; read `reference/budgets.md` before any continue-or-spawn decision. The
+   orchestrator hands off at the first safe point after its hook fires (`reference/handoff.md`);
+   compaction is the fallback, never the plan. **Another repo or area gets a fresh session** (a
+   codex session is pinned to its directory); **the same area is the point of a split** — a
+   sub-item finished while the mod still allows a continuation earns the next ready sibling.
 5. **Evidence, not claims**: a suite count, a real run, a byte-identity check. A blind-worktree
    codex diff is unverified until a codex run in the resource compiles and tests it; codex in
    place with the editor card verifies itself. **No report, no commit**: a Unity test run with no
@@ -76,16 +75,14 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
    converging (`reference/review.md`, read when choosing or briefing a reviewer).
 8. **State is two committed files per plan beside `<plan>.md`: `<plan>.status.md` and
    `<plan>.log.md`, nothing derived** (full mode; "Status and acceptance").
-9. **Hand off at the first safe point past 170k, by 200k**
-   (`reference/handoff.md`). Compaction is the fallback, never the plan.
-10. **Delegate execution, including reading.** Inspect directly only when cheaper than a spawn: one
-    diff, a few definitions, reconciling two reports. More than two file reads or a grep fan-out is
-    a **scout**, whose 1–3k of evidence lands once, while files you read stay every later turn.
-    Never Read a `.log` or `cat` a report: read a report or codex out-file with
-    `~/.claude/skills/bees/scripts/bees-report <file>...`, adding in the same call `--finding <IDs>`
-    for whole finding blocks and `--lane <path> --since <base sha>` for the lane's commits and dirty
-    files, instead of follow-up reads.
-11. **Exclusive resources are released by their holder.** A command failing because another editor
+9. **Delegate execution, including reading.** Inspect directly only when cheaper than a spawn: one
+   diff, a few definitions, reconciling two reports. More than two file reads or a grep fan-out is
+   a **scout**, whose 1–3k of evidence lands once, while files you read stay every later turn.
+   Never Read a `.log` or `cat` a report: read a report or codex out-file with
+   `~/.claude/skills/bees/scripts/bees-report <file>...`, adding in the same call `--finding <IDs>`
+   for whole finding blocks and `--lane <path> --since <base sha>` for the lane's commits and dirty
+   files, instead of follow-up reads.
+10. **Exclusive resources are released by their holder.** A command failing because another editor
     holds the project means stop and report; "check the lock and retry" is a forbidden brief, and
     so are background retry or polling loops.
 
@@ -169,7 +166,8 @@ EOF
 ```
 
 `--kind` is `impl`, `fix`, `review`, `recheck`, `advise`, `gate`, `plan-brief` or `plan-expand`. A
-fix goes back to the implementor by SendMessage while it is under 100k and inside its cache clock.
+fix goes back to the implementor by SendMessage while the `bees-budget` mod allows it and
+inside its cache clock.
 **Read `reference/briefs.md`** for any other kind, light mode, a codex
 or scout brief, a blocker or a question for the owner.
 
