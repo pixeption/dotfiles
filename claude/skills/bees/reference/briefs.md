@@ -1,12 +1,12 @@
 # Briefs, continuations and advice
 
-Read when a brief or report needs more than SKILL.md "Briefing an agent" and rule 9 give: a brief
+Read when a brief or report needs more than SKILL.md "Briefing an agent" and "Rules" give: a brief
 kind other than `impl`, light mode, a scout brief, a continue-or-spawn decision, or a blocker or a
 question for the owner.
 
 ## Reports
 
-`bees-report` (SKILL.md rule 9) prints outcome, suite lines, needs, blocker and options, each
+`bees-report` (SKILL.md "Rules") prints outcome, suite lines, needs, blocker and options, each
 finding's first line, the `.usage` context, BEES and verdict; `--finding MAJ-02,F3` adds those
 whole blocks (an id the file lacks prints `MISSING:`). A Claude bee's report path is absolute,
 since a lane bee runs in another worktree:

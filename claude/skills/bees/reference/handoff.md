@@ -32,7 +32,7 @@ At the next safe point:
       than those edits mean a truncated write — restore the plan before committing.
 - [ ] Log `handoff: <tab name>`; the handoff commit, by path:
       `git commit -m 'docs(plans): handoff …' -- <plan>.md <plan>.status.md <plan>.log.md`
-      (one of the docs-only commits bees "Commit cadence" permits).
+      (one of the docs-only commits bees "Status and acceptance" permits).
 - [ ] Spawn the successor (below).
 - [ ] Confirm the new tab is up (ListAgents shows its name), report the handoff, dispatch nothing
       further. This session stays open as a fallback and starts nothing.

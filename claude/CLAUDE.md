@@ -86,6 +86,8 @@ Rules for writing or editing a skill, after Anthropic's
   or pinned model id — git history keeps those. State each rule once, in the skill that owns it;
   others link there. Maintainer notes go to the package's contributor docs, not the agent's skill.
   Fragile sequences stay exact, however long.
+- A new workflow rule replaces or deletes an existing one, named in the same change, so rules do
+  not accumulate per incident.
 - **Verbatim text** (briefs, standing rules, prompts) lives in `templates/` and is `cat`-ed, not
   retyped.
 - **Scripts**: entry points are run by absolute path and the skill says "run"; sourced helpers and
