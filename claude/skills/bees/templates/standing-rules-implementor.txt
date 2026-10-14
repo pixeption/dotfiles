@@ -24,7 +24,7 @@ Give a fail-before for every new test: run it red against the old code only when
 a bug that reached an integrated target or the test runs outside Unity; otherwise state it as
 reasoning (`asserts X; the old code yields Y at file:line`), because a Unity red run costs two
 extra recompiles. Run, once at the end of the round, the item's test filter — its own test classes
-and its callers', as the brief names them — with --filter,
+and its callers', as the item's section names them, narrowed to your piece when the brief names one — with --filter,
 fast and Integration alike, and nothing else: never a full suite, a whole category or another
 item's filter, because the orchestrator reruns the filter in the post-integrate check after the
 item lands and runs the full suites at the plan's gates. A GameCore filter that selects more than

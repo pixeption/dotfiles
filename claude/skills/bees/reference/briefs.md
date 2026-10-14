@@ -45,10 +45,9 @@ dispatch because the bee only claims it.
 - `--kind` picks the role's standing rules and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor,
   reviewer or planner also gets its return contract; an advisor writes its answer to its report file, no
   BEES line, ending `CHANGES_REQUIRED`, since the decision log points to the answer.
-- "Start at" and the filter are SKILL.md "Briefing an agent"'s. An item without Today and Approach
-  (a plan expanded before them) gets its starting points from a `bee-scout` first: the scout lists
-  the files and symbols that hold what changes and the test classes that exercise them, and its
-  `Answer` lines become the brief's "Start at" and filter.
+- The orchestrator does not read an item's section to brief it; stdin carries only the piece,
+  decisions and conflicts (SKILL.md "Briefing an agent"). An item without Today and Approach is read
+  by its implementor like any other.
 - A fix round goes back to the implementor (SKILL.md "Briefing an agent"; `reference/budgets.md`
   "Continue, spawn or hand over") because a fresh bee re-reads what the implementor still holds;
   spawn fresh only past either line.

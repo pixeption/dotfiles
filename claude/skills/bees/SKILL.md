@@ -148,28 +148,29 @@ open owner questions in one decision packet with costs.
 
 ## Briefing an agent
 
-`bees-brief` builds a Claude bee's brief from the unit's own lines (objective, decisions and
-overrides since the plan, may-change, extra verification), adding units, BEES order, plan-section
-pointers, slot block, standing rules and return contract. Feed a quoted heredoc (an unquoted one
-runs backticks); in a lane repo `reuse` the lane first; hand over `Read <brief> and do what it says.`
-Copy "Start at" from the files and symbols the item's Today and Approach name, and "Test filter"
-from its Tests, never re-derived, keeping the planned verification boundary.
+`bees-brief` builds a Claude bee's brief, adding units, BEES order, plan-section pointers, slot
+block, standing rules and return contract. The orchestrator does not read an item's section to brief
+it, only when a decision of its own turns on it: the implementor derives where to start and its
+filter from the section. Stdin carries only what the plan does not: `Piece: <id> — this piece only`
+when the unit is part of an item, `Decision:` lines (decisions and overrides since the plan), and
+`Conflicts:` lines (files, goldens, test classes or resources another running unit owns). Feed a
+quoted heredoc (an unquoted one runs backticks); in a lane repo `reuse` the lane first; hand over
+`Read <brief> and do what it says.`
 
 ```sh
 ~/.claude/skills/bees/scripts/bees-brief --plan docs/plans/<plan>.md --units DR-02,DR-01 \
   --kind impl --round 1 --include .claude/skills/workspaces/templates/lane-brief.txt \
   --set lane=lane-1 --set 'task branch=task/lane-1-x' --set "full base sha=$B" \
   --set 'target branch=feat/x' <<'EOF'
-Objective: <one sentence>
+Piece: DEL-03b — this piece only
 Decision: <each owner decision or override since the plan was written>
-Start at: <the files and symbols the item's Today and Approach name> — a reference, not a limit.
-Test filter: <the item's Tests filter>
+Conflicts: RenderGoldenTests belongs to the unit re-taking render goldens: leave it out of your filter
 EOF
 ```
 
 `--kind` is `impl`, `fix`, `review`, `recheck`, `advise`, `gate`, `plan-brief` or `plan-expand`. A
 fix goes back to the implementor by SendMessage while it is under 100k and inside its cache clock.
-**Read `reference/briefs.md`** for any other kind, an item without Today and Approach, light mode, a codex
+**Read `reference/briefs.md`** for any other kind, light mode, a codex
 or scout brief, a blocker or a question for the owner.
 
 - Carry the load-bearing constants agents reported, citing the contract file, never memory; a

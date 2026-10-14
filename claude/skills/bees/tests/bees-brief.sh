@@ -56,6 +56,11 @@ has "impl rules treat the score as an estimate" "$b" "$ESTIMATE" 1
 has "impl rules stop only to the advisors" "$b" "report \`Outcome: Needs decision\` (\`Blocked\` after two attempts)" 1
 has "impl return vocabulary has no replan" "$b" "<done|blocked|paused|needs-decision>" 2
 has "impl brief has no Sizing field" "$b" "Sizing" 0
+has "impl brief derives start and filter from the section" "$b" "start from the files and symbols its Today and Approach name" 1
+has "impl brief carries no Start at" "$b" "Start at" 0
+has "impl brief carries no Test filter" "$b" "Test filter" 0
+if printf 'Piece: U-01 — this piece only\nConflicts: X belongs to another unit\n' | "$SCRIPT" --plan "$PLAN" --units U-01 --kind impl --round 96 >/dev/null; then ok "piece and conflicts alone build a brief"; else bad "piece and conflicts brief failed"; fi
+if out=$(printf '' | "$SCRIPT" --plan "$PLAN" --units U-01 --kind impl --round 97 2>&1); then bad "empty stdin accepted"; elif [[ "$out" == *"piece, decisions, conflicts"* ]]; then ok "empty stdin fails naming piece, decisions, conflicts"; else bad "empty stdin: [$out]"; fi
 b=$(brief --plan "$PLAN" --units U-01 --kind advise)
 expect_rules "advise gets the first three" "$b" 1 1 1 0
 has "advise is limited to the approved brief and the owner's rules" "$b" "Decide only within the approved brief and the owner's rules" 1

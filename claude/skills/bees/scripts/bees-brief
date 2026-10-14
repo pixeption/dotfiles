@@ -40,8 +40,10 @@ def read(path):
 
 
 SPEC = {
-    "implementor": "Spec: read each unit's section in {plan} and follow it as written; its "
-                   "acceptance holds unless this brief overrides it:",
+    "implementor": "Spec: read each unit's section in {plan} and follow it as written: start "
+                   "from the files and symbols its Today and Approach name, and run the `--filter` its "
+                   "Tests field names, narrowed to your piece's classes when this brief names a piece; "
+                   "its acceptance holds unless this brief overrides it:",
     "reviewer": "Spec: each unit's section in {plan} is the acceptance the diff is reviewed against:",
     "advisor": "Context: each unit's section in {plan}; decide the question above, never implement:",
     "plan-brief": "Draft: each unit's section in {plan} is the row or item you draft the brief for, read-only:",
@@ -93,7 +95,7 @@ if brief.exists():
 
 body = sys.stdin.read().strip()
 if not body:
-    fail("no unit lines on stdin (objective, decisions, overrides, may change)")
+    fail("no unit lines on stdin (piece, decisions, conflicts)")
 
 values = dict(s.split("=", 1) for s in a.set if "=" in s)
 if len(values) != len(a.set):
