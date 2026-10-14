@@ -52,7 +52,7 @@ the fix introduced or exposed, and re-reads nothing else. It returns `Fixed / Pa
 Regressed` id lists plus new findings continuing the id sequence. No sub-agents in a recheck; a
 codex recheck runs `codex-round review --no-subagents`.
 
-There is no round cap. For codex, a clean recheck advances to the holistic final pass
-`codex-review` requires, whose `APPROVE` closes the loop. The **churn check** ends either loop early: a finding regressed twice, or new findings
-outnumbering closed ones two rounds running, is a structural problem — stop, report, and re-plan
-the unit rather than queue another fix round.
+Under bees, an ordinary item gets one landed-commit discovery review; its findings become Fixes. A
+fix unit gets targeted rechecks until clean, with no holistic final pass. Keep the churn check: a
+finding regressed twice, or new findings outnumbering closed ones two rounds running, stops the loop
+for a structural decision.

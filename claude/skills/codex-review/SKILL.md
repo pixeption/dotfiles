@@ -1,7 +1,7 @@
 ---
 name: codex-review
 description: >-
-  Runs a grounded, multi-round second-opinion review of a plan, design, PR or diff by a codex-family model, ending on an APPROVE verdict (one dispositioned round for a plan under bees). Use when the user asks to "run codex", for a "codex review" or "codex sol review", to have codex review a plan/design/PR/diff, or for a second AI opinion before building. For implementation use codex-implementor.
+  Runs a grounded second-opinion review of a plan, design, PR or diff by a codex-family model: one review then rechecks under bees, a multi-round loop ending on APPROVE for ad-hoc reviews. Use when the user asks to "run codex", for a "codex review" or "codex sol review", to have codex review a plan/design/PR/diff, or for a second AI opinion before building. For implementation use codex-implementor.
 ---
 
 # Codex review
@@ -21,13 +21,11 @@ read-only shell use is instruction-enforced — the reviewer can run a suite or 
 between rounds routinely outlasts the CLI's 30-minute cache. **Read
 [`reference/opencode-channel.md`](reference/opencode-channel.md)
 before the session's first round** — preflight, the fence, flags and files, failed rounds,
-compaction, watching; this skill runs codex-implementor's scripts.
+watching; this skill runs codex-implementor's scripts.
 
 The **codex CLI** (`codex-round review` on `codex exec --sandbox read-only`) is the automatic
-fallback when the server won't start.
-
-A round that fails on a usage limit (429, limit reached) → the review is skipped and logged
-`review: skipped, codex unavailable`, per bees `reference/review.md`.
+fallback when the server won't start. Exit 3 means codex is unavailable (no channel, or a usage
+limit): bees logs `review: skipped, codex unavailable`, per bees `reference/review.md`.
 
 ## Run it
 
@@ -35,7 +33,7 @@ A round that fails on a usage limit (429, limit reached) → the review is skipp
 # round 1 — write the prompt to a file first ("Prompt shape")
 ~/.claude/skills/codex-implementor/scripts/codex-round review \
   -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o "$W/review-<unit>-r1.txt"   # default openai/gpt-6.1-sol-fast / medium
-# follow-up and final pass — same session, --no-subagents
+# follow-up or recheck — same session, --no-subagents
 ~/.claude/skills/codex-implementor/scripts/codex-round review \
   -C <repo> -p "$T/r2-prompt.txt" -u <unit> -o "$W/review-<unit>-r2.txt" \
   -s "$(cat "$W/review-<unit>-r1.txt.session")" --no-subagents
@@ -46,55 +44,44 @@ A round that fails on a usage limit (429, limit reached) → the review is skipp
 sibling repo the review reads as `--repo <abs path>` and name it in the prompt. The out-file holds
 only the final answer — findings, suggestions, verdict.
 
-## Shape of the loop
+## Under bees: one review, then rechecks
 
-Three kinds of round, one session, no round cap — the loop ends on `APPROVE` from the final pass
-(a plan under bees runs the shorter "Plan review under bees" instead):
+A code review is **one discovery round** (round 1 of the "Outside bees" loop) over the landed
+commit, whatever its verdict. Its blocking findings go to the status file's Fixes list (bees
+`reference/review.md`); the round is never followed by another round on the landed commit.
 
-1. **Round 1 — discovery, broad.** The reviewer reads the whole artifact and the source it
-   composes over. Sub-agents are allowed (breadth is wanted, and they keep the parent under the
-   ~270k compaction point). On a large artifact, give it explicit lenses — source compatibility,
-   sequencing/dependencies, testability, completeness — and let its sub-agents divide them.
-   Independent parallel reviews are separate loops; never merge their histories or id sequences.
-2. **Follow-up rounds — targeted, delta-only, no sub-agents.** One after any `CHANGES_REQUIRED`,
-   once you have dispositioned every Open or Partial finding.
-3. **Final pass — holistic.** Always the last word; work proceeds or is accepted on its `APPROVE`.
+A **recheck** is a `--no-subagents` round on the fix branch's diff, built like a follow-up round
+("Follow-up rounds"): it verifies the listed ids (Fixed / Partial / Open / Regressed) and reviews
+the delta, and repeats on the next fix until clean. There is no holistic last round and no
+`APPROVE` loop. The churn check still applies (bees `reference/review.md` "Rechecks and the end of
+the loop").
 
-A healthy loop is round 1, one follow-up, final pass. Two things keep it short:
+`-u`, the out-file and the report are named by the reviewed item or the fix unit, never a parent
+item: `review-<item|fix>-r<N>.txt`. `bees-brief` refuses a report path that already exists, so two
+concurrent reviews never share a file.
 
-- **Ask for the fix text, not a description.** The reviewer can emit the exact replacement
-  paragraph or a unified diff. Paste it: "applied differently" is the main source of `Partial`
-  verdicts and extra rounds.
-- **Fix everything Open in one batch**, run cheap gates (anchors resolve, cited files and symbols
-  exist, every step names a real test — a script or a Haiku scout, not a sol round), then
-  resubmit. Never resubmit after a subset.
+## Planning reviews under bees
 
-**Churn check, instead of a cap.** After each follow-up: a finding that regressed twice, or new
-findings outnumbering closed ones two rounds running, means a structural problem patches will not
-fix. Stop and rewrite the section before resubmitting.
+Two stages, each **one discovery round at `-e high`** and **at most one targeted recheck**
+(`--no-subagents`, scoped to the ids) — never a third round:
 
-## Plan review under bees
+- **Brief review**, for every plan, before the owner approves the brief: it checks consistency,
+  dependencies and scores.
+- **Plan review** of the expansion (bees `reference/review.md` "Once per unit"), skipped when the
+  plan has three items or fewer (GATE rows not counted). It checks scores first — any item scored 8
+  or 13 is a High finding, since such an item is split at planning (`plan` skill "Scoring") — then
+  the expansion against the owner-approved brief (`plan` skill "Item fields by stage"): each Outcome
+  and Right is proven by a Tests bullet, no bullet falls outside the brief, none contradicts a
+  Wrong, and Today and Approach match the source they name.
 
-An expanded plan (bees `reference/review.md` "Once per unit") gets **one discovery round at
-`-e high`** — round 1 above, over all the plan's items and the source their Today and Approach name — and no
-loop: the orchestrator applies or dispositions every finding, and the plan is `ready` when no High
-or Med is open. There is **no final pass**, because a plan is re-read by every implementor that runs
-it and reviewed again as code; a second holistic pass buys little.
+A **Med** finding closed by pasting the reviewer's exact text is closed by inspection and needs no
+recheck; a **High**, or any fix that departs from the reviewer's text, gets the recheck, whose
+`Fixed` closes it. A High or Med still open after round 2: a brief's goes to the owner beside the
+brief; a plan's is ruled by the orchestrator and logged.
 
-- A **Med** finding closed by pasting the reviewer's exact text is closed by orchestrator
-  inspection, like a code fix that applies the reviewer's text verbatim.
-- A **High** finding, or any fix that departs from the reviewer's text, gets **one targeted
-  recheck**: a follow-up round in the same session, `--no-subagents`, scoped to those ids
-  ("Follow-up rounds"); its `Fixed` closes them.
-- The round checks scores first: any item scored 8 or 13 is a High finding, since such an item is
-  split at planning (`plan` skill "Scoring").
-- The round checks the expansion against the plan's owner-approved brief (`plan` skill "Item
-  fields by stage"): each Outcome and Right is proven by a Tests bullet, no bullet falls outside the
-  brief, none contradicts a Wrong, and Today and Approach match the source they name.
-- The brief is frozen: a finding against an Outcome, a Right or a Wrong is dispositioned "back to
-  owner", never applied. A finding against the expansion alone is applied or dispositioned like any other.
-
-Code reviews are unchanged: discovery, follow-up, final pass, `APPROVE`.
+The brief is frozen once approved: a plan-review finding against an Outcome, a Right or a Wrong is
+dispositioned "back to owner", never applied. A finding against the expansion alone is applied or
+dispositioned like any other.
 
 ## One session for the whole loop
 
@@ -107,9 +94,8 @@ whole history cold. For a different effort, start fresh with a round-1 prompt an
 previous session's out-file to read.
 
 **A review session continues further than an implementor's**, since a resumed round rereads
-findings, not the repo: `-s` is refused at **120k** for a discovery-agent round and at **150k** with
-`--no-subagents` (`codex-round` passes the line to `opencode-budget`; bees `reference/budgets.md`
-keeps 100k for everything else). Past it, start fresh and hand over the last out-file.
+findings, not the repo: past the session threshold the hook refuses `-s`; start fresh and hand over
+the last out-file.
 
 Your follow-up need not restate old findings: reference them ("your round-2 F1–F4") and say what
 you did with each — **applied**, **applied differently (how)**, or **rejected (why)**. A rejection
@@ -118,12 +104,12 @@ with a reason is a decision: the reviewer may push back once with new evidence, 
 **Reuse established repository understanding.** Reopen only the specific source needed when it
 changed since its read, was never read in this session, or the needed lines are no longer in
 context. Cite `file:line` only from an unchanged file's read still in context, never from summaries
-or memory, so grounding does not require redundant reads. Compaction never warrants a broad rescan.
+or memory, so grounding does not require redundant reads. A long session never warrants a broad rescan.
 "Unchanged" means the repo's contents, uncommitted source included — a SHA alone does not show it.
 
-**Compact review state.** Every round's answer ends with the open findings in compact form — id,
+**Short review state.** Every round's answer ends with the open findings in short form — id,
 severity, status, the problem, the established facts it rests on, the required correction — and
-settled findings as id + status only. No source excerpts. This survives compaction and is normally
+settled findings as id + status only. No source excerpts. This survives a summarized history and is normally
 enough to verify an artifact-only correction without re-reading source.
 
 ```text
@@ -143,17 +129,47 @@ Required correction: put those operations in the documented atomic ordering.
 - **Ask for a findings list**: stable id (F1, F2, …, continuing across rounds); **severity** — High
   / Med / Low for a plan, design or document, Critical / Major / Minor / Nit for a diff under
   bees; the claim; **why, citing file:line**; the **fix as exact replacement text or a diff**. Ask
-  it to **confirm what is sound**, **not to rewrite** the artifact, and to end with the compact
+  it to **confirm what is sound**, **not to rewrite** the artifact, and to end with the short
   review state.
 - **Invite suggestions** as a separate, labelled, non-blocking list.
 - **Ask for a terminal verdict** as the last line: `APPROVE` (no blocking findings remain) or
   `CHANGES_REQUIRED`, with `BEES: reviews=<unit>:<open-ids|->[;…]` directly above it — one entry
   per `-u` unit. `<open-ids>` lists only unresolved blocking findings (High/Med, or
   Critical/Major), `-` when none. `APPROVE` with an open id, `CHANGES_REQUIRED` with none, or a
-  missing line is a malformed report. A follow-up `APPROVE` advances to the final pass; only the
-  final pass's `APPROVE` ends the loop.
+  missing line is a malformed report.
 
-## Follow-up rounds
+## Outside bees
+
+The ad-hoc loop, for a user asking for a codex review of a design, plan or diff. A follow-up
+`APPROVE` advances to the final pass; only the final pass's `APPROVE` ends the loop.
+
+### Shape of the loop
+
+Three kinds of round, one session, no round cap — the loop ends on `APPROVE` from the final pass:
+
+1. **Round 1 — discovery, broad.** The reviewer reads the whole artifact and the source it
+   composes over. Sub-agents are allowed (breadth is wanted, and they keep the parent's context
+   small). On a large artifact, give it explicit lenses — source compatibility,
+   sequencing/dependencies, testability, completeness — and let its sub-agents divide them.
+   Independent parallel reviews are separate loops; never merge their histories or id sequences.
+2. **Follow-up rounds — targeted, delta-only, no sub-agents.** One after any `CHANGES_REQUIRED`,
+   once you have dispositioned every Open or Partial finding.
+3. **Final pass — holistic.** Always the last word; work proceeds or is accepted on its `APPROVE`.
+
+A healthy loop is round 1, one follow-up, final pass. Two things keep it short:
+
+- **Ask for the fix text, not a description.** The reviewer can emit the exact replacement
+  paragraph or a unified diff. Paste it: "applied differently" is the main source of `Partial`
+  verdicts and extra rounds.
+- **Fix everything Open in one batch**, run cheap gates (anchors resolve, cited files and symbols
+  exist, every step names a real test — a script or a Haiku scout, not a sol round), then
+  resubmit. Never resubmit after a subset.
+
+**Churn check, instead of a cap.** After each follow-up: a finding that regressed twice, or new
+findings outnumbering closed ones two rounds running, means a structural problem patches will not
+fix. Stop and rewrite the section before resubmitting.
+
+### Follow-up rounds
 
 Run one once every Open or Partial finding is dispositioned; never when neither the artifact nor a
 disposition changed. **You supply the delta**: the artifact's diff since the last reviewed commit
@@ -176,7 +192,7 @@ cat ~/.claude/skills/codex-review/templates/followup-prompt.txt \
     ~/.claude/skills/codex-review/templates/followup-output-contract.txt > "$T/r<N>-prompt.txt"
 ```
 
-## Final pass
+### Final pass
 
 After round 1 with nothing left Open/Partial, or after a follow-up `APPROVE`, run one holistic pass
 in the same session, `--no-subagents`, with `templates/final-pass-prompt.txt` as the prompt. It

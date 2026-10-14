@@ -32,7 +32,7 @@ fixes, never a round 3.
    Score (an 8 or 13 split into items ≤ 5), Done when — once the work it builds on has landed, so
    they are read from the tree the items will change.
 4. `plan review`: skipped when the plan has three items or fewer (GATE rows not counted).
-   Otherwise codex round 1 (`codex-review` "Plan review under bees"), checking the Tests against
+   Otherwise codex round 1 (`codex-review` "Planning reviews under bees"), checking the Tests against
    the brief; the orchestrator applies findings to the expansion or dispositions them; round 2
    rechecks those ids; a High or Med still open after it is ruled by the orchestrator and logged
    `decision:`. Then `ready`.

@@ -12,7 +12,6 @@ Read before the first round of a session, and when a round fails or goes quiet.
 - The fence
 - Running a round: flags and files
 - Failed rounds
-- Auto-compaction
 - Watching a round
 
 ## Round checklist
@@ -46,7 +45,7 @@ still fails names the path to allow. Check by hand with:
 
 Leave `opencode serve` running across rounds and units; the wrappers reuse a live one.
 
-**Server address.** Every wrapper, `opencode-preflight`, `opencode-sessions` and `bees-watch` take
+**Server address.** Every wrapper, `opencode-preflight` and `bees-watch` take
 `--url`; without it the base URL is `http://127.0.0.1:<--port>`, default port 4096.
 
 ## The fence
@@ -77,7 +76,7 @@ session is busy and no client is attached, and exits 1 naming why otherwise.
 |---|---|
 | `<out-file>` | only the final message's text (`scripts/extract-opencode-final`) — read this |
 | `<out-file>.session` | the session id, for `-s` |
-| `<out-file>.usage` | `context_tokens` (the session-budget figure), tokens, `cost`, and `compacted` when it applies (`scripts/extract-opencode-usage`, scoped to this session's step events) |
+| `<out-file>.usage` | `context_tokens` (the session-budget figure), tokens, and `cost` (`scripts/extract-opencode-usage`, scoped to this session's step events) |
 | `<out-file>.pid`, `.cwd` | the wrapper's PID and the round's directory, for `bees-watch` |
 | `<out-file>.log` | the raw JSONL stream — a liveness aid only; never read it into context |
 
@@ -95,14 +94,6 @@ or (review) an answer not ending in `APPROVE`/`CHANGES_REQUIRED` — gets an out
 counts as a result or a verdict. Widen the fence or re-brief; never answer an ask by hand in the
 TUI and carry on.
 
-## Auto-compaction
-
-The server compacts a session on its own past ~270k: older history becomes a summary, so the next
-`context_tokens` reading legitimately drops. `.usage` then carries a `compacted` object
-(`auto`/`overflow`/`tail_start_id`/`at`) and the wrapper's final stderr line says `COMPACTED`.
-Budget decisions use the post-compaction figure, but treat the session's recall of anything before
-that point as a summary: reopen source before trusting an exact claim or citation from it.
-
 ## Watching a round
 
 - **A quiet round is inspected, not waited on.** Run
@@ -115,8 +106,3 @@ that point as a summary: reopen source before trusting an exact claim or citatio
 - `scripts/opencode-activity` prints what a session's latest message is doing (`tool` or
   `stream <n>`) when checking by hand. `/session/status` is scoped per directory: pass
   `?directory=<the round's .cwd>`, or a busy session in another directory reads as idle.
-- **Live view.** One server serves every repo, but the TUI's `/sessions` shows a single directory
-  (the server's start directory unless `--dir` is passed) and never shows child sessions. Run
-  `scripts/opencode-sessions` for a cross-repo list with a BUSY flag, or
-  `scripts/opencode-sessions --attach` to pick one and attach. The wrapper prints the exact
-  `opencode attach <url> --dir <dir> --session <id>` too.

@@ -109,6 +109,13 @@ names() { # names <kind> <units>: the brief is brief-<units>-<kind>-r<N>.txt and
 }
 names plan-brief U-01
 names plan-expand U-02,U-03
+W="$TMP/work"; touch "$W/report-U-04-review-r1.md"
+if out=$(echo x | "$SCRIPT" --work "$W" --units U-04 --kind review 2>&1); then bad "an existing report path was accepted"
+elif [[ "$out" == *"report-U-04-review-r1.md exists"* ]] && [ ! -f "$W/brief-U-04-review-r1.txt" ]; then ok "an existing report path is refused naming it, writing no brief"
+else bad "existing report: [$out]"; fi
+r1=$(grep -o 'Report: .*' "$(brief --work "$W" --units U-05.1 --kind review)" | tail -1)
+r2=$(grep -o 'Report: .*' "$(brief --work "$W" --units U-05.2 --kind review)" | tail -1)
+if [ -n "$r1" ] && [ "$r1" != "$r2" ]; then ok "reviews of two fix units of one item get distinct reports"; else bad "fix-unit reports: [$r1] [$r2]"; fi
 for kind in plan-brief plan-expand impl; do
   if out=$(echo x | "$SCRIPT" --plan "$PLAN" --units U-09 --kind "$kind" --round 99 2>&1); then
     bad "$kind accepted a unit without a plan section: [$out]"

@@ -16,8 +16,9 @@ the report path. --work <dir> replaces --plan in light mode, where there is no p
 --kind plan-brief drafts the plan's brief (usage, architecture, and Outcome, Right, Wrong per item)
 (plan-brief needs no plan file); --kind plan-expand expands all of one plan's items under the P-03 budget. Both are the read-only
 planner: its standing rules plus the stage's block from templates/planner-<stage>.txt.
-Exit 1 on a missing template, an existing brief (rounds are never overwritten), an unfilled
-placeholder in an include, or a --set that fills nothing.
+Exit 1 on a missing template, an existing brief or report (rounds are never overwritten, and two
+concurrent reviews never share a report), an unfilled placeholder in an include, or a --set that
+fills nothing.
 """
 import argparse, pathlib, re, shlex, sys
 
@@ -92,6 +93,8 @@ name = f"{'_'.join(units)}-{a.kind}-r{a.round}"
 brief, report = work / f"brief-{name}.txt", work / f"report-{name}.md"
 if brief.exists():
     fail(f"{brief} exists; a new round takes the next --round")
+if report.exists():
+    fail(f"{report} exists; a new round takes the next --round, a piece or fix unit its own --units")
 
 body = sys.stdin.read().strip()
 if not body:
