@@ -19,12 +19,11 @@ Right under the title:
 **Focus:** why now, what the document is for
 **By:** claude-opus-5-5 · reasoning: high (name any subagent used)
 **Method:** real verification done — compile check, call-site tracing, a build/test run, a review loop
-**Stage:** expand
 **Brief approved:** 2026-09-25
 ```
 
-`Method` only when something was actually verified. `Stage` is one of the stage names in "Item
-fields by stage" below. `Brief approved` appears once the owner approves the brief and never
+`Method` only when something was actually verified. Stage lives only in `<plan>.status.md` (bees
+"Status and acceptance"). `Brief approved` appears once the owner approves the brief and never
 changes after: the brief is the only owner-approved part of a plan and is frozen from then on. A
 plan the owner shaped in conversation says so in its header instead of a brief review.
 
