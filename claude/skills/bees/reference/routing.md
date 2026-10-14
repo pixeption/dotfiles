@@ -32,8 +32,7 @@ filter, the post-integrate check, a gate). SKILL.md "Routing" holds who does wha
 - Diagnosis before implementation when the score is unknown; a scout before a diagnosis or a brief
   when you need a fact, not a verdict. The saving is that the evidence lands in your context once,
   compact.
-- A codex unit's validation (compile, the fast lane) is part of its cost: do it
-  yourself when the diff is small, otherwise it is a codex run holding the resource.
+- A codex unit's validation (compile, the fast lane) is a codex run holding the resource, per SKILL.md "Routing".
   A baseline before a unit whose acceptance compares against one is a codex run.
 - **Three test levels, each run once at its boundary**, so verification is not repeated within a level:
   - *Round* — the bee, holding its lane: the item's test filter and any red run the fail-before rule requires, its own and

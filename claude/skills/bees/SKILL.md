@@ -111,7 +111,7 @@ A unit taking a pipeline where no committed consumer has gone gets a **path map*
 4. **A fact** before a decision: `bee-scout`. **A cause** before a score: a diagnosis by
    `bee-opus-medium`. **A decision**: `bee-opus-high`, then codex `-e high`. Your judgment picks.
 5. **Codex unavailable** (both channels down or a usage limit): the review is skipped and logged
-   `review: skipped, codex unavailable`; a run goes to a `bee-opus-low`. **A Claude usage limit**
+   `review: skipped, codex unavailable`; a run goes to a `bee-opus-low`, logged `decision: codex unavailable → bee-opus-low run`. **A Claude usage limit**
    sends implementation to codex (`codex-implementor`, in place in the lane), reviewed by a
    separate codex session and logged as a same-vendor exception.
 
