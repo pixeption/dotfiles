@@ -1,103 +1,59 @@
-# Returns, the last-line contract, blockers and advice
+# Briefs, continuations and advice
 
 Read when a brief or report needs more than SKILL.md "Briefing an agent" and rule 9 give: a brief
-kind other than `impl`, an item without Today and Approach, light mode, a codex or scout brief, the BEES line's
-exact form, or a blocker or a question for the owner.
-
-## Contents
-
-- Return format
-- Reports
-- Composing a brief
-- Codex and scout briefs
-- Repeated findings
-- Standing rules
-- The last line is a contract
-- Blocker cap and consults
-
-## Return format
-
-A Claude implementor or reviewer brief carries its role's return contract
-(`templates/return-implementor.txt` or `templates/return-reviewer.txt`, which `bees-brief` fills
-with the report path): the full report goes to that file and the hand-back is a few lines ending in
-the BEES line. Codex returns
-its final message in the out-file, and you fill the same fields from the diff and `.usage`. A
-suite count needs its `report:` line (SKILL.md rule 5) because a count alone can come from an
-earlier run.
+kind other than `impl`, light mode, a scout brief, a continue-or-spawn decision, or a blocker or a
+question for the owner.
 
 ## Reports
 
-Every report is read once, compact, through `bees-report` (SKILL.md rule 9), because a hand-back
-or a `cat` stays in your context every later turn. It prints outcome, suite lines, what it
-needs from you, blocker and options, each finding's first line, the `.usage` context, BEES and
-verdict; `--finding MAJ-02,F3` adds each named finding's whole block with its fix (an id the file
-lacks prints `MISSING:`).
-
-A Claude bee's report path is absolute — a lane bee runs in another worktree —
-`<repo>/docs/plans/<plan>.work/report-<unit>-<impl|fix|review|recheck>-r<N>.md`, in your scratchpad
-in light mode. The `report-` prefix keeps it out of `bees-watch --dir`.
+`bees-report` (SKILL.md rule 9) prints outcome, suite lines, needs, blocker and options, each
+finding's first line, the `.usage` context, BEES and verdict; `--finding MAJ-02,F3` adds those
+whole blocks (an id the file lacks prints `MISSING:`). A Claude bee's report path is absolute,
+since a lane bee runs in another worktree:
+`<repo>/docs/plans/<plan>.work/report-<unit>-<kind>-r<N>.md`, in your scratchpad in light mode; the
+`report-` prefix keeps it out of `bees-watch --dir`.
 
 ## Composing a brief
 
-The command, its stdin and the kinds are SKILL.md "Briefing an agent"'s. The lane is `reuse`d before
-dispatch because the bee only claims it.
+The lane is `reuse`d before dispatch because the bee only claims it.
 
-- `--kind` picks the role's standing rules and names the files `brief-` and `report-<units>-<kind>-r<N>`. An implementor,
-  reviewer or planner also gets its return contract; an advisor writes its answer to its report file, no
-  BEES line, ending `CHANGES_REQUIRED`, since the decision log points to the answer.
-- The orchestrator does not read an item's section to brief it; stdin carries only the piece,
-  decisions and conflicts (SKILL.md "Briefing an agent"). An item without Today and Approach is read
-  by its implementor like any other.
-- `--kind plan-brief` and `--kind plan-expand` are the read-only planner at the `brief draft` and
-  `expand` stages of the `plan` skill's "Item fields by stage": each adds its stage block
-  (`templates/planner-brief.txt`, `templates/planner-expand.txt`) before the planner's standing
-  rules and return contract, because one owned block per stage keeps the fields and budget rules
-  consistent. A `plan-brief` for an owner-added queue row that has no plan yet runs with
-  `--work <plan>.work` and the row on stdin. You write its `Expanded` text into the plan
-  — the queued row's brief goes to the Owner list for `brief review`, a `Back to owner` item too.
-  An implementor treats the item's score as an estimate and never re-sizes it
-  (`templates/standing-rules-implementor.txt`).
+- `--kind` picks the role's standing rules and return contract and names the `brief-` and `report-`
+  files. An advisor writes its answer to its report file, no BEES line, ending `CHANGES_REQUIRED`
+  only because `codex-round review` fails an answer without a verdict.
+- `--kind plan-brief` and `--kind plan-expand` are the read-only planner at the `plan` skill's
+  `brief draft` and `expand` stages ("Item fields by stage"), each adding its stage block
+  (`templates/planner-brief.txt`, `templates/planner-expand.txt`), so one block owns each stage.
 - A `--plan` unit without a `### <ID> · ` section fails the run, so every pointer resolves.
-- A run (a gate's suites, a baseline) briefed to a Claude bee is `--kind run --units GATE-<n>`,
-  stdin naming the slot, target SHA and commands: no plan section, only codex-implementor's
-  `templates/run-contract.md`, the contract a codex run reads.
+- A run (a gate's suites, a baseline) is a codex run (SKILL.md "Routing"); briefed to a Claude bee
+  when codex is unavailable, it is `--kind run --units GATE-<n>`, stdin naming the slot, target SHA
+  and commands, carrying codex-implementor's `templates/run-contract.md` and no plan section.
 - `--kind fix` and `--kind recheck` take `--work <plan>.work`, since a fix unit has no section. A
-  fix's stdin carries `Fixes:`, `Filter:` and `Review:` (report and finding ids; the item's filter)
-  or `Gate:` (gate evidence, tested SHA, failing checks; the repair's verification filter); a gate
-  repair of unknown cause is a diagnosis first, and its recheck names the same gate evidence.
-- The brief points the agent at each unit's plan section as its acceptance, so write acceptance
-  only where it departs from the section. A fix or recheck names the review file and the ids.
-- `--include` adds a repo's slot block (nono4u: the workspaces lane brief) with its
-  `<placeholders>` filled by `--set`; an unfilled one fails the run.
-- A lane brief names skills by name or lane path; the rule lives in the repo's slot block.
-- Light mode has no plan: pass `--work <scratchpad dir>` instead of `--plan`, and include the
-  unit's acceptance criteria and all required verification on stdin, because no plan section
-  supplies them.
-- A codex brief is not built this way: it follows codex-implementor's `templates/brief-implement.md`, or `templates/brief-run.md` for a run.
+  review-finding fix's stdin carries `Fixes:`, `Review:` (report, finding ids) and `Filter:` (the
+  original item's); a gate repair's `Fixes:`, `Gate:` (gate evidence, tested SHA, failing checks)
+  and `Filter:` (the repair's verification). A gate repair of unknown cause is a diagnosis first,
+  which supplies the cause and a scoped repair; its recheck judges the repair against that evidence.
+- `--include` adds a repo's slot block (nono4u: the workspaces lane brief), its `<placeholders>`
+  filled by `--set`; an unfilled one fails the run.
+- Light mode: `--work <scratchpad dir>` instead of `--plan`, with the unit's acceptance and all
+  required verification on stdin, because no plan section supplies them.
+- A codex brief follows codex-implementor's `templates/brief-implement.md`, or `brief-run.md`.
 
-## Codex and scout briefs
+## Continue or spawn
 
-- A **codex** brief gives passages, not documents (codex-implementor "What the session loads, and
-  what it doesn't"), and runs with `-C` set to the repo the unit edits — the session is
-  pinned to it for life. Pass every other repo it names, a read-only one too, as an absolute
-  `--repo` to the OpenCode wrapper so preflight checks the fence allows it.
-- A **blind-worktree** codex brief states it cannot run Unity and must report what it could not
-  verify; an **in-place lane** codex brief carries the editor card and requires live verification.
-- Point rather than paste (SKILL.md "Briefing an agent"): restating a section means reading it
-  first.
+- **Continue** while the mod allows it and the next unit routes to the same agent and area:
+  SendMessage to a Claude bee, `-s <session>` to a codex session; the brief is the delta.
+- **Re-brief inside the cache clock or not at all** (5 minutes Claude, 30 codex, from its report):
+  after it the next turn re-writes the whole context, so decide and answer in the same turn.
+- **Spawn fresh** otherwise: the mod refuses the agent, another agent, area, resource or repo, or a
+  review of its own work. A retiring holder's last message may start `[bees:handover]` to pass the
+  refusal. A paused agent's successor is a fresh agent on the same item, briefed from its pause
+  report — never a replan or a split.
 
-Examples:
+## Scout briefs
 
-- Bad: "Investigate this and tell me what you think."
-- Bad: "Check the lock before running the suite and retry if another agent is using it."
-- Good: "You hold `lane-1` (`~/code/workspaces/lane-1`, its `Game/` and `GameCore/`). Another
-  agent holds `lane-2`, and `integration` is off-limits; do not run or edit anything there. If a
-  command fails because the project is held, stop and report."
-
-A **scout brief** is one question, the area to look in, what "answered" looks like, and
-"read-only, no editor, no sub-agents, stop when answered, `Needs diagnosis` if it needs a run or a
-judgment". Its return is the scout format in `bee-scout.md`; paste its `Answer`/`Constraints`
-lines into the implementor's brief, never the transcript.
+One question, the area to look in, what "answered" looks like, and "read-only, no editor, no
+sub-agents, stop when answered, `Needs diagnosis` if it needs a run or a judgment". Paste its
+`Answer`/`Constraints` lines (`bee-scout.md`) into the implementor's brief, never the transcript.
 
 - Bad: "Diagnose why selection breaks after undo." (a diagnosis unit)
 - Good: "List every writer of `PuzzleProgress` and the tests that cover `UndoStack`; file:line each."
@@ -105,68 +61,30 @@ lines into the implementor's brief, never the transcript.
 ## Repeated findings
 
 A review finding of a kind already seen on an earlier unit goes into the owning repo's guidance
-(its `CLAUDE.md`, README or skill), and later briefs in that area link it. Left in a status note,
+(its `CLAUDE.md`, README or skill), and later briefs in that area link it; left in a status note,
 it is paid for again as a fix round on the next plan.
 
 ## Standing rules
 
-The bee agent files carry only model and effort; every Claude brief carries its role's block from
-`templates/`, added by `bees-brief`, never retyped:
+The bee agent files carry only model and effort; `bees-brief` adds the role's block,
+`~/.claude/skills/bees/templates/standing-rules-<role>.txt`, never retyped: `implementor`
+(`bee-opus-*`), `reviewer` (`review`, `recheck`), `advisor` (`advise`, "Consults") or `planner`
+(`plan-brief`, `plan-expand`, a read-only `bee-opus-*`).
 
-| role | template |
-|---|---|
-| implementor (`bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-implementor.txt` |
-| reviewer (`--kind review`, `--kind recheck`) | `~/.claude/skills/bees/templates/standing-rules-reviewer.txt` |
-| advisor (`--kind advise`: `bee-opus-high`, then Sol; "Blocker cap and consults") | `~/.claude/skills/bees/templates/standing-rules-advisor.txt` |
-| planner (`--kind plan-brief`, `--kind plan-expand`, a read-only `bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-planner.txt` |
+## Consults
 
-The advisor's terminal `CHANGES_REQUIRED` is there because `codex-round review` fails an answer
-without a verdict; it carries no meaning in advice.
+A question for the owner — a capped blocker, a `Needs decision` — goes to the advisors first,
+because a lane must never wait on the owner. Reuse a matching `decision:` line from the plan log
+unless new evidence changes the question; otherwise, in order:
 
-## The last line is a contract
+1. `bee-opus-high`, read-only, `--kind advise`.
+2. If it cannot decide, Sol on the same brief: `codex-round advise -m openai/gpt-6.1-sol-fast -e
+   high` in a fresh session (never `-s` into the implementor or review loop), out-file
+   `review-<unit>-advice-r<N>.txt`, so `bees-watch --dir` sees it.
+3. If neither decides: a `Blocked` `owner:` line; the lane is released or handed to the next ready
+   item, and other work continues.
 
-Codex and bee alike; a Claude brief's return template carries it. Every implementor brief ends with: *"Your final message's last line is exactly
-`BEES: results=<unit>:<done|blocked|paused|needs-decision>:<hashes|->[;…]`"* — one entry
-per unit the round serves (the wrapper's `-u` list), hashes comma-separated, `-` for none: a round
-that finishes F2 and blocks LV-02 ends `BEES: results=F2:done:4a31ceeb;LV-02:blocked:-`.
-
-A planner ends `BEES: results=<unit>:<done|partial|blocked>:-`; `partial` lists the items still
-`to expand`, an incomplete expansion never becomes `ready`, and only the items under `Back to
-owner` wait on the owner.
-
-Every review brief keeps the terminal `APPROVE`/`CHANGES_REQUIRED` as the last line and puts
-`BEES: reviews=<unit>:<open-ids|->[;…]` on the line directly above it.
-
-You read that one line, not the prose, for the outcome; a malformed one is handled as SKILL.md
-"Briefing an agent" says. Commit subjects name the unit
-(`feat(ui): STEP-03 …`); nothing parses them.
-
-## Blocker cap and consults
-
-**Two attempts, then stop.** An agent gets at most two materially different attempts at a
-blocker. If the second fails it STOPs and reports `STOP. Goal / Discovered / Blocker / Tried (both
-attempts) / Options (1–3) / Need from orchestrator`. It stops before any attempt on a missing
-decision or a held resource. A brief that says "keep trying" or "retry until it works" is
-forbidden; the implementor standing rules carry the cap.
-
-**A question for the owner goes to the advisors first** — a capped blocker, an implementor's
-`Needs decision` — because a lane must never wait on the
-owner. First grep the plan log's `decision:` lines and reuse a matching answer unless new evidence
-changes the question. Otherwise, in order:
-
-1. An Opus 5.5 high advisor: `bee-opus-high`, read-only, `--kind advise`.
-2. If it cannot decide, a Sol high advisor on the same brief: `codex-round advise -m
-   openai/gpt-6.1-sol-fast -e high` in a fresh session (never `-s` into the implementor
-   or review loop), out-file `review-<unit>-advice-r<N>.txt`, so `bees-watch --dir` sees it.
-3. If neither decides: one line in the queue's Owner list; the item is 🔴, its lane is released or
-   handed to the next ready item, and other work continues.
-
-An advisor decides only within the approved brief and the owner's rules (the plan's Rules, the
-standing owner rules); a question that needs either changed comes back `Cannot decide` and goes to
-the Owner list. Log each answer `- <date> [<ID>] decision: <answer> (advisor <opus|sol>,
-<report or out-file>)`.
-
-Re-brief the implementor with the decision: continue the blocked agent if it is under the
-continuation line (`reference/budgets.md`), otherwise a fresh one in the same bucket whose brief
-carries the STOP report and the decision. A unit blocked again after an advised way through goes to
-the next step of the chain, never a third silent attempt.
+An advisor decides only within the approved brief and the owner's rules; a question needing either
+changed comes back `Cannot decide`. Log each answer `- <date> [<ID>] decision: <answer> (advisor
+<opus|sol>, <report or out-file>)`, then re-brief per "Continue or spawn" with the STOP report and
+the decision. A unit blocked again after an advised way through goes to the next step of the chain.

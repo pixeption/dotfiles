@@ -15,7 +15,7 @@ You are the **orchestrator**: a technical lead running at most six engineers. Yo
 execute and bring evidence. An **item** is a plan checklist row, a **unit** is what one brief asks
 for (one or more items), a **round** is one wrapper call.
 
-Context × turns is the cost the rules protect (`reference/budgets.md` "What the rules protect").
+Context × turns is the cost the rules protect.
 
 ## Setup (every new bees session)
 
@@ -30,9 +30,9 @@ Nothing is asked per plan; the owner rules in its status file override the defau
 implements by score, codex reviews and runs long commands, in place in a lane when it drives an
 editor; review once per item, of its landed commit) and these **standing owner rules**: a decision with a recommendation takes
 it — except a change to an approved brief, which goes to a `Blocked` `owner:` line; a question for the owner during
-execution goes to the advisors first ([`reference/briefs.md`](reference/briefs.md) "Blocker cap and
-consults"); an expansion needs no owner approval; parallelise items eligible under the `plan`
-skill's "Item fields by stage"; sharding is `reference/routing.md` "Cost routing"'s.
+execution goes to the advisors first ([`reference/briefs.md`](reference/briefs.md)
+"Consults"); an expansion needs no owner approval; parallelise items eligible under the `plan`
+skill's "Item fields by stage"; sharding is `workspaces` "Borrow the test shards"'s.
 
 **Plan lifecycle** — [`reference/plan-lifecycle.md`](reference/plan-lifecycle.md): read its
 planning, mode or adoption passage for those, "Preflight" before the session's first codex unit,
@@ -59,7 +59,7 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
    mod tells you when — the numbers live only in the scripts.** The count is the harness's or
    `.usage` `context_tokens`, never the agent's estimate. A refused agent gets no new brief, not
    even a fix or recheck (every resumed step re-reads the whole session): spawn fresh and hand the
-   resource over; read `reference/budgets.md` before any continue-or-spawn decision. The
+   resource over; read `reference/briefs.md` "Continue or spawn" before deciding. The
    orchestrator hands off at the first safe point after its hook fires (`reference/handoff.md`);
    compaction is the fallback, never the plan. **Another repo or area gets a fresh session** (a
    codex session is pinned to its directory); **the same area is the point of a split** — a
@@ -114,8 +114,10 @@ A unit taking a pipeline where no committed consumer has gone gets a **path map*
 
 Model and effort live in the agent files and wrapper flags — **never pass `model:` on the Agent
 call**. No usage check runs before a round; OpenCode's `cost: 0` is not spend, its tokens serve the
-budget rule only. Channels, validation and the test levels (round, gate):
-[`reference/routing.md`](reference/routing.md).
+budget rule only.
+
+Two test levels, each run once: a round runs only its item's filter, at its end; the full suites
+run only at a GATE row, as a codex run. A bug first caught a level later is an `escape` log line.
 
 Fold a confirmation into the next real brief, but send a ready brief now, inside the cache clock.
 Stop starting units at ~80% of the known spend budget; a cut-off never finds an agent mid-editor.
@@ -127,7 +129,7 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
          brief review → owner approves → expand → plan review → `ready`. Draft the next row's brief while the current runs.
 - [ ] 5. Run: score and route ("Routing"), mode (plan-lifecycle "Choose the mode"); a scout,
          diagnosis or path map only for a decision you must make first; roster resources →
-         holders → slots → order; delegate, continue or spawn (reference/budgets.md).
+         holders → slots → order; delegate, continue or spawn (reference/briefs.md "Continue or spawn").
 - [ ] 6. Each hand-back: evaluate; accept and land it, reuse its lane, start its review
          ("Status and acceptance"); route every gap ("Intake"); one
          scheduling pass (a `ready` row or item with a free lane?); report. Only `owner:` lines
@@ -175,8 +177,8 @@ EOF
 ```
 
 `--kind` is `impl`, `fix`, `review`, `recheck`, `advise`, `run`, `plan-brief` or `plan-expand`;
-a fix unit is briefed as "Fixes" says. **Read `reference/briefs.md`** for any other kind, light mode, a codex
-or scout brief, a blocker or a question for the owner.
+a fix unit is briefed as "Fixes" says. **Read `reference/briefs.md`** for any other kind, light mode, a scout
+brief, a blocker or a question for the owner; a codex brief is `codex-implementor`'s.
 
 - Carry the load-bearing constants agents reported, citing the contract file, never memory; a
   count only with its command; times from `date +%H:%M`; no transcripts or source dumps.
@@ -190,7 +192,7 @@ or scout brief, a blocker or a question for the owner.
 **The BEES line** (`results=` from an implementor, `reviews=` above a reviewer's verdict) is the
 outcome. Missing, duplicated, wrapped or wrong-unit is malformed — you decide what is repeated,
 never an automatic re-run. A `needs-decision` or `blocked` goes to the advisors
-(`reference/briefs.md` "Blocker cap and consults"); a replan they decide is yours (`plan` skill
+(`reference/briefs.md` "Consults"); a replan they decide is yours (`plan` skill
 "Tables at the top"), logged on the unit. A hand-back that ignores its contract is acted on as
 is; the next brief says so in one line.
 
@@ -200,7 +202,7 @@ Launch each codex round as its own Bash call with `run_in_background: true` (a t
 finish goes unnoticed), its `-o` out-file `docs/plans/<plan>.work/impl-<unit>[+<unit>…]-r<N>.txt`
 or `review-…-r<N>.txt`, N counting up per unit and role. Watch with
 `~/.claude/skills/bees/scripts/bees-watch <out-file>...` or `--dir docs/plans/<plan>.work`;
-a round quiet ~20 min gets a `bees-watch`. On a flag, a termination, a worktree or a pause read
+a round quiet ~20 min gets a `bees-watch`. On a flag or a termination read
 `reference/watching.md`. A stuck round goes to the owner in one line, never left for the next
 session.
 
@@ -305,7 +307,6 @@ for dependencies; numbers on the unit's line.
 ## Reference
 
 Read each when its linking passage says: [`plan-lifecycle`](reference/plan-lifecycle.md),
-[`budgets`](reference/budgets.md), [`routing`](reference/routing.md),
 [`briefs`](reference/briefs.md), [`review`](reference/review.md),
 [`watching`](reference/watching.md), [`intake`](reference/intake.md),
 [`handoff`](reference/handoff.md).

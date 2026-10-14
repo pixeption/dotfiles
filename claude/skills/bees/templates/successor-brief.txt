@@ -1,7 +1,5 @@
-Continue <plan path>.
-Read, in this order and nothing else: docs/queue.md, the plan's checklist, its ## Rules and
-## Resume, then `tools/workspace.sh list`.
-Load the bees skill; you are the orchestrator for this plan. Resume its unfinished work without
-re-running triage, pick-up or retro: they run once, at the plan's close, and a close step already
-logged is done (bees reference/plan-lifecycle.md "Plan close"). Read that reference's "Preflight"
-before your first codex unit.
+Continue <plan>.md.
+Read, in this order and nothing else: the plan's checklist, its <plan>.status.md, then
+`tools/workspace.sh list`.
+Load the bees skill; you are the orchestrator for this plan and resume its unfinished work. Read
+bees reference/plan-lifecycle.md "Preflight" before your first codex unit.

@@ -1,28 +1,11 @@
-# Launching, watching and ending rounds
+# Watching rounds and terminations
 
-## Contents
+Read when `bees-watch` flags a round or a round terminates; launching, naming and the `bees-watch`
+commands are SKILL.md "Watching rounds"'s.
 
-- Naming and launching a codex round
-- Watching: `bees-watch` states
-- After a termination
-- Worktrees, pausing, idle reviewers
+## `bees-watch` flags
 
-## Naming and launching a codex round
-
-Read when `bees-watch` flags a round, a round terminates, or you set up a worktree or pause an
-agent; launching, naming and the `bees-watch` commands are SKILL.md "Watching rounds"'s.
-
-- **Naming.** The wrappers take `-o` verbatim, and `bees-watch --dir` reads only files named as
-  SKILL.md says. A Sol advisor is `review-<unit>-advice-r<N>.txt`.
-- **Launching.** `run_in_background: true` covers every `codex-round` job
-  (`implement`, `run`, `review`, `advise`), on either channel: the harness re-invokes you when the
-  round exits.
-- Batch Unity brief instructions are SKILL.md "Briefing an agent"'s.
-
-## Watching: `bees-watch` states
-
-The wrapper's `.log` stays in your context every later turn, hence `bees-watch` (SKILL.md "Watching
-rounds"); `--dir` lists running or flagged rounds, `--all` every one.
+`--dir` lists running or flagged rounds, `--all` every one.
 
 One line per round — running/finished, minutes since the log last grew, BUSY/idle, context
 tokens, session id — and a flag, exit 1, when something needs you. BUSY is the server's status for
@@ -52,15 +35,3 @@ before handing the project on, and say so in the next brief:
 - stray `unity test` loops (`pkill -f 'unity test'`);
 - a hung implementor: `codex-round stop <out-file>` (either channel) — the session
   survives either way.
-
-## Worktrees, pausing, idle reviewers
-
-- Codex worktrees: `git worktree add -b codex/<unit> "$T/wt-<unit>" HEAD` under your scratchpad;
-  remove the worktree after merge or discard so the next session does not find it.
-- Pausing: "stop at the next safe point (tree compiling, editor not in Play, isolation restored),
-  report in five lines, then wait." A paused agent is warm for its cache clock (5 min Claude,
-  30 min codex) and worth continuing while the budget mod allows it; past that, spawn from its
-  handover.
-- A codex reviewer's recheck resumes the same OpenCode session at any time;
-  only the CLI fallback has the 30-minute cliff, after which a fresh session with the findings list
-  and the fix diff in the brief is cheaper than the cold re-read.
