@@ -142,7 +142,7 @@ const codexWorld = (on: On, clock: { advance: (ms: number) => Promise<void> }) =
   }
 }
 
-const IMPLEMENT = 'opencode-implement -C /repo -o /tmp/impl-G1-r1.txt --title GAP-05a -- brief'
+const IMPLEMENT = 'codex-round implement -C /repo -p /tmp/brief.md -o /tmp/impl-G1-r1.txt --title GAP-05a'
 
 test('the band shows a codex session as vendor, model-effort, title and its 30-minute clock', async ($, on) => {
   const clock = hive(on, { tokens: 1, type: 'general-purpose' })
@@ -182,22 +182,22 @@ test('the band shows only codex sessions this session launched or resumed', asyn
   const codex = codexWorld(on, clock)
   await clock.advance(10 * MINUTE)
   await codex.launch($, IMPLEMENT)
-  await codex.launch($, "opencode-review -o '/tmp/plan.md' -- brief", 'session ses_resumed pinned to /repo')
+  await codex.launch($, "codex-round review -C /repo -p /tmp/prompt.txt -o '/tmp/review-X-r1.txt'", 'session ses_resumed pinned to /repo')
   await codex.show($, [
     { id: 's1', label: 'GAP-05a', tokens: 10_000, at: clock.now(), createdAt: clock.now(), isRunning: 1 },
-    { id: 's2', label: 'review plan.md', tokens: 10_000, at: clock.now(), createdAt: clock.now(), isRunning: 1 },
+    { id: 's2', label: 'review review-X-r1.txt', tokens: 10_000, at: clock.now(), createdAt: clock.now(), isRunning: 1 },
     { id: 'ses_resumed', label: 'GAP-01', tokens: 10_000, at: clock.now(), isRunning: 1 },
     { id: 's3', label: 'GAP-10a', tokens: 10_000, at: clock.now(), createdAt: clock.now(), isRunning: 1 },
     { id: 's4', label: 'GAP-05a', tokens: 10_000, at: clock.now(), createdAt: 0, isRunning: 1 },
   ])
   const rows = await (await mountBand($)).findAll({ type: 'Button' })
-  expect(rows.map(r => r.text)).toEqual(['GAP-05a', 'review plan.md', 'GAP-01'])
+  expect(rows.map(r => r.text)).toEqual(['GAP-05a', 'review review-X-r1.txt', 'GAP-01'])
 })
 
 test('the band drops codex sessions from before a /clear', async ($, on) => {
   const clock = hive(on, { tokens: 1, type: 'general-purpose', startedAt: 50 * MINUTE })
   const codex = codexWorld(on, clock)
-  await codex.launch($, 'opencode-implement -s ses_old -s ses_new -- brief')
+  await codex.launch($, 'codex-round implement -C /repo -p /tmp/brief.md -s ses_old -s ses_new')
   await clock.advance(60 * MINUTE)
   await codex.show($, [
     { id: 'ses_old', label: 'review-r1.txt', tokens: 106_000, at: clock.now() - 20 * MINUTE, isRunning: 0 },

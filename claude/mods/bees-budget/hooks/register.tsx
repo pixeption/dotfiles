@@ -117,12 +117,12 @@ const flag = (command: string, name: string) => {
 const basename = (path: string) => path.split('/').pop() ?? path
 
 const launchTitle = (command: string) => {
-  const tool = command.match(/opencode-(implement|review)|opencode run/)?.[0]
-  if (!tool) return undefined
+  const launch = command.match(/codex-round (implement|run|review|advise)|opencode run/)
+  if (!launch) return undefined
   const title = flag(command, '--title')
   const out = flag(command, '-o')
   if (title || !out) return title
-  return tool === 'opencode-review' ? `review ${basename(out)}` : basename(out)
+  return launch[1] === 'review' || launch[1] === 'advise' ? `review ${basename(out)}` : basename(out)
 }
 
 const sessionIds = (text: string) => [...new Set(text.match(/\bses_[A-Za-z0-9]+/g) ?? [])]

@@ -14,7 +14,7 @@
             }
         }
     },
-    // Follow-up rounds of codex-review (`opencode-review --no-subagents`): denies the edit and
+    // Follow-up rounds of codex-review (`codex-round review --no-subagents`): denies the edit and
     // task tools so a resumed round performs the delta review directly. Bash remains available;
     // the review prompt, not an OS sandbox, constrains it to read-only commands.
     "agent": {

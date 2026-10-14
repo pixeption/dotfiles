@@ -13,7 +13,7 @@ default model `gpt-6.1-sol`.
 
 ## Channel
 
-**OpenCode by default** (`scripts/opencode-review`): `opencode run --agent review-discovery`
+**OpenCode by default** (codex-implementor's `scripts/codex-round review`): `opencode run --agent review-discovery`
 against one persistent `opencode serve`, or `--agent review-followup` under `--no-subagents`. The
 edit tool is hard-denied, and `review-followup` also denies the task tool; Bash stays enabled, so
 read-only shell use is instruction-enforced — the reviewer can run a suite or a `unity command` to
@@ -23,7 +23,7 @@ codex-implementor's [`reference/opencode-channel.md`](../codex-implementor/refer
 before the session's first round** — preflight, the fence, flags and files, failed rounds,
 compaction, watching; this skill runs that skill's scripts.
 
-The **codex CLI** (`scripts/codex-review`, `codex exec --sandbox read-only`) is the fallback, only
+The **codex CLI** (`codex-round review` on `codex exec --sandbox read-only`) is the fallback, only
 when the server won't start: codex-implementor's
 [`reference/codex-cli.md`](../codex-implementor/reference/codex-cli.md).
 
@@ -34,10 +34,10 @@ A round that fails on a usage limit (429, limit reached) → the review is skipp
 
 ```bash
 # round 1 — write the prompt to a file first ("Prompt shape")
-~/.claude/skills/codex-review/scripts/opencode-review \
+~/.claude/skills/codex-implementor/scripts/codex-round review \
   -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o "$W/review-<unit>-r1.txt"   # default openai/gpt-6.1-sol-fast / medium
 # follow-up and final pass — same session, --no-subagents
-~/.claude/skills/codex-review/scripts/opencode-review \
+~/.claude/skills/codex-implementor/scripts/codex-round review \
   -C <repo> -p "$T/r2-prompt.txt" -u <unit> -o "$W/review-<unit>-r2.txt" \
   -s "$(cat "$W/review-<unit>-r1.txt.session")" --no-subagents
 # harder review: -e high on round 1, and the same -e on every later round
@@ -109,7 +109,7 @@ previous session's out-file to read.
 
 **A review session continues further than an implementor's**, since a resumed round rereads
 findings, not the repo: `-s` is refused at **120k** for a discovery-agent round and at **150k** with
-`--no-subagents` (`opencode-review` passes the line to `opencode-budget`; bees `reference/budgets.md`
+`--no-subagents` (`codex-round` passes the line to `opencode-budget`; bees `reference/budgets.md`
 keeps 100k for everything else). Past it, start fresh and hand over the last out-file.
 
 Your follow-up need not restate old findings: reference them ("your round-2 F1–F4") and say what

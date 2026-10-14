@@ -116,7 +116,7 @@ The bee agent files carry only model and effort; every Claude brief carries its 
 | advisor (`--kind advise`: `bee-opus-high`, then Sol; "Blocker cap and consults") | `~/.claude/skills/bees/templates/standing-rules-advisor.txt` |
 | planner (`--kind plan-brief`, `--kind plan-expand`, a read-only `bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-planner.txt` |
 
-The advisor's terminal `CHANGES_REQUIRED` is there because `opencode-review` fails an answer
+The advisor's terminal `CHANGES_REQUIRED` is there because `codex-round review` fails an answer
 without a verdict; it carries no meaning in advice.
 
 ## The last line is a contract
@@ -151,8 +151,8 @@ owner. First grep the plan log's `decision:` lines and reuse a matching answer u
 changes the question. Otherwise, in order:
 
 1. An Opus 5.5 high advisor: `bee-opus-high`, read-only, `--kind advise`.
-2. If it cannot decide, a Sol high advisor on the same brief: `opencode-review -m
-   openai/gpt-6.1-sol-fast -e high --no-subagents` in a fresh session (never `-s` into the implementor
+2. If it cannot decide, a Sol high advisor on the same brief: `codex-round advise -m
+   openai/gpt-6.1-sol-fast -e high` in a fresh session (never `-s` into the implementor
    or review loop), out-file `review-<unit>-advice-r<N>.txt`, so `bees-watch --dir` sees it.
 3. If neither decides: one line in the queue's Owner list; the item is 🔴, its lane is released or
    handed to the next ready item, and other work continues.

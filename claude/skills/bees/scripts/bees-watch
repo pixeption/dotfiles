@@ -2,7 +2,7 @@
 # One line per codex round, no tokens spent: is the wrapper log still growing, is the session
 # BUSY, is a permission ask waiting, what is the context size. Replaces tailing the .log.
 #
-#   bees-watch <out-file>...            # the out-file passed to opencode-implement / opencode-review
+#   bees-watch <out-file>...            # the out-file passed to codex-round
 #   bees-watch --dir <plan>.work [--all] # its codex rounds; only running or flagged ones unless --all
 #   bees-watch ... --stale-min 20       # mark STALE past this age (default 20)
 #
@@ -14,7 +14,7 @@
 # In --dir mode a failed or DEAD round is history, not flagged, once its unit has a newer round of
 # the same role or, in <plan>.log.md, a `[<unit>] review:` line for a review round and a
 # `[<unit>] accept:` line for any other (an item's review starts after it is accepted and landed). --dir reads only round logs named
-# impl-<units>-r<N>.txt.log / review-<units>-r<N>.txt.log, never opencode-serve-<port>.log.
+# impl-/review-/run-<units>-r<N>.txt.log, never opencode-serve-<port>.log.
 # A quiet BUSY round says whether opencode-activity sees a tool or a model stream; one sample cannot
 # tell a slow stream from a stalled one, so stalls are opencode-round's call (it compares samples).
 # Exit 0 when every round is live or finished, 1 when any is STALE, DEAD, failed, has an ask waiting,
@@ -23,7 +23,7 @@ set -uo pipefail
 url="http://127.0.0.1:4096"; stale=20; files=(); dir=""; all=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --dir) dir="${2%/}"; for l in "$dir"/{impl,review}-*-r[0-9]*.txt.log; do f="${l%.log}"; [ -e "$f" ] || [ -e "$l" ] && files+=("$f"); done; shift 2 ;;
+    --dir) dir="${2%/}"; for l in "$dir"/{impl,review,run}-*-r[0-9]*.txt.log; do f="${l%.log}"; [ -e "$f" ] || [ -e "$l" ] && files+=("$f"); done; shift 2 ;;
     --all) all=1; shift ;;
     --stale-min) stale="$2"; shift 2 ;;
     --url) url="$2"; shift 2 ;;

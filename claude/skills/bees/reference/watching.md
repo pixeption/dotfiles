@@ -14,8 +14,9 @@ agent; launching, naming and the `bees-watch` commands are SKILL.md "Watching ro
 
 - **Naming.** The wrappers take `-o` verbatim, and `bees-watch --dir` reads only files named as
   SKILL.md says. A Sol advisor is `review-<unit>-advice-r<N>.txt`.
-- **Launching.** `run_in_background: true` covers every wrapper (`opencode-implement`,
-  `opencode-review`, the CLI fallbacks): the harness re-invokes you when the round exits.
+- **Launching.** `run_in_background: true` covers every `codex-round` job
+  (`implement`, `run`, `review`, `advise`), on either channel: the harness re-invokes you when the
+  round exits.
 - Batch Unity brief instructions are SKILL.md "Briefing an agent"'s.
 
 ## Watching: `bees-watch` states
@@ -49,8 +50,8 @@ before handing the project on, and say so in the next brief:
 
 - Play mode, data isolation (`data_restore`);
 - stray `unity test` loops (`pkill -f 'unity test'`);
-- a hung implementor: `pkill -f "opencode run"` (default channel) or `pkill -f "codex exec"` (CLI
-  fallback) — the session survives on the server either way.
+- a hung implementor: `codex-round stop <out-file>` (either channel) — the session
+  survives either way.
 
 ## Worktrees, pausing, idle reviewers
 

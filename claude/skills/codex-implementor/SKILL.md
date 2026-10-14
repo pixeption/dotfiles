@@ -13,11 +13,11 @@ real run, never on its claim. Verified against `opencode 1.18.31`, `codex-cli 0.
 
 ## Channel
 
-**OpenCode by default** (`scripts/opencode-implement`): a server-held session that survives idle
+**OpenCode by default** (`scripts/codex-round implement`): a server-held session that survives idle
 gaps, that the owner can attach to and steer, in a worktree or in place. **Read
 [`reference/opencode-channel.md`](reference/opencode-channel.md) before the session's first
 round** — preflight, the fence, flags and files, failed rounds, compaction, watching.
-The **codex CLI** (`scripts/codex-implement`) is the fallback, only when the server won't
+The **codex CLI** is `codex-round`'s fallback, only when the server won't
 start or the unit must run under an OS sandbox: [`reference/codex-cli.md`](reference/codex-cli.md).
 
 **Resume or fresh** (bees "Rules", the session budget): read `context_tokens` from `.usage`. Below
@@ -54,13 +54,13 @@ source a held editor loads.
 
 ```bash
 # in place (editor-drive) — the common Unity case
-~/.claude/skills/codex-implementor/scripts/opencode-implement \
+~/.claude/skills/codex-implementor/scripts/codex-round implement \
   -C ~/code/workspaces/lane-1 -p "$T/brief.md" -u <unit> -o "$W/impl-<unit>-r1.txt" --title <unit>
 # blind worktree (pure diff)
 git worktree add -b oc/<unit> "$T/wt-<unit>" HEAD
-~/.claude/skills/codex-implementor/scripts/opencode-implement -C "$T/wt-<unit>" -p "$T/brief.md" -u <unit> -o "$W/impl-<unit>-r1.txt"
+~/.claude/skills/codex-implementor/scripts/codex-round implement -C "$T/wt-<unit>" -p "$T/brief.md" -u <unit> -o "$W/impl-<unit>-r1.txt"
 # follow-up round: same session, same -C, context < 100k
-~/.claude/skills/codex-implementor/scripts/opencode-implement -C <same dir> -p "$T/r2.md" -u <unit> \
+~/.claude/skills/codex-implementor/scripts/codex-round implement -C <same dir> -p "$T/r2.md" -u <unit> \
   -o "$W/impl-<unit>-r2.txt" -s "$(cat "$W/impl-<unit>-r1.txt.session")"
 # harder unit: add -e high
 ```

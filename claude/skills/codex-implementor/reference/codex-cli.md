@@ -11,21 +11,21 @@ under `~/.codex/sessions` — the last `token_count` event's `last_token_usage`,
 `total_token_usage` (a cumulative sum across the session, not the current context).
 
 ```sh
-# implement — in place with the editor: -s danger-full-access
-~/.claude/skills/codex-implementor/scripts/codex-implement \
-  -C <dir> -p "$T/brief.md" -o "$W/impl-<unit>-r1.txt" [-e high] [-t fast|standard]
+# implement — in place with the editor: danger-full-access
+~/.claude/skills/codex-implementor/scripts/codex-round implement \
+  -C <dir> -p "$T/brief.md" -o "$W/impl-<unit>-r1.txt" [-e high]
 # follow-up within 30 min
-~/.claude/skills/codex-implementor/scripts/codex-implement ... -r "$(cat "$W/impl-<unit>-r1.txt.session")"
+~/.claude/skills/codex-implementor/scripts/codex-round implement ... -s "$(cat "$W/impl-<unit>-r1.txt.session")"
 
 # review — always --sandbox read-only
-~/.claude/skills/codex-review/scripts/codex-review -p "$T/r1-prompt.txt" -o "$W/review-<unit>-r1.txt" -e medium
-~/.claude/skills/codex-review/scripts/codex-review -p "$T/r2-prompt.txt" -o "$W/review-<unit>-r2.txt" -r "$(cat "$W/review-<unit>-r1.txt.session")"
+~/.claude/skills/codex-implementor/scripts/codex-round review -C <repo> -p "$T/r1-prompt.txt" -o "$W/review-<unit>-r1.txt" -e medium
+~/.claude/skills/codex-implementor/scripts/codex-round review -C <repo> -p "$T/r2-prompt.txt" -o "$W/review-<unit>-r2.txt" -s "$(cat "$W/review-<unit>-r1.txt.session")"
 ```
 
 | | CLI |
 |---|---|
 | isolation | OS seatbelt: `read-only` (review), `workspace-write` / `danger-full-access` (implement) |
-| session | prompt cache **30 min**; `codex-implement` refuses a resume older than that — after it, start fresh with the findings or the delta in the prompt |
+| session | prompt cache **30 min**; `codex-round` refuses a resume older than that — after it, start fresh with the findings or the delta in the prompt |
 | live view | read-only tail of the JSONL `.log` (the owner's, never yours) |
 
 ## The stdin trap

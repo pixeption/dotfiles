@@ -11,11 +11,11 @@ filter, a gate). SKILL.md "Routing" holds who does what by score.
 
 ## Channels
 
-- **Channel.** Codex runs through `opencode-implement` by default, worktree or in place; the
-  `codex-implement` CLI is the fallback when the OpenCode server won't start or the unit must run
+- **Channel.** Codex runs through `codex-round implement`, worktree or in place, on OpenCode by
+  default; the codex CLI is its fallback when the OpenCode server won't start or the unit must run
   under an OS sandbox. Same models; the choice is harness.
 - **Codex can drive the live editor.** Give it the unit **in place** in the real project (a
-  worktree would need its own Library) with `opencode-implement -C <real checkout>`, holding that
+  worktree would need its own Library) with `codex-round implement -C <real checkout>`, holding that
   project's slot, and **put the editor card in the brief** (codex-implementor "What the session
   loads, and what it doesn't") — without it, codex cannot know the command surface exists.
 - **Lanes.** In a repo that runs lanes (nono4u), who runs where — codex in place in a lane or `bee-*`

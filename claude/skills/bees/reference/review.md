@@ -8,7 +8,7 @@ The reviewer is codex, so no model checks its own habits:
 
 | implementor | reviewer | slot |
 |---|---|---|
-| Claude (`bee-opus-*`) | codex via `codex-review` (`opencode-review -m openai/gpt-6.1-sol-fast -e medium`, CLI fallback) | one (background) |
+| Claude (`bee-opus-*`) | codex via `codex-review` (`codex-round review -m openai/gpt-6.1-sol-fast -e medium`, CLI fallback) | one (background) |
 | codex (fallback on a Claude usage limit) | a separate codex `codex-review` session, logged as a same-vendor exception | one |
 
 When codex is unavailable (both channels down or a usage limit), the review is skipped and logged
@@ -50,7 +50,7 @@ A recheck is **targeted**: the brief carries the fix commit range; the reviewer 
 findings from that diff and its stored rationale, reviews the delta and its dependencies for what
 the fix introduced or exposed, and re-reads nothing else. It returns `Fixed / Partial / Open /
 Regressed` id lists plus new findings continuing the id sequence. No sub-agents in a recheck; a
-codex recheck runs `opencode-review --no-subagents`.
+codex recheck runs `codex-round review --no-subagents`.
 
 There is no round cap. For codex, a clean recheck advances to the holistic final pass
 `codex-review` requires, whose `APPROVE` closes the loop. The **churn check** ends either loop early: a finding regressed twice, or new findings

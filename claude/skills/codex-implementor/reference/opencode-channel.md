@@ -1,6 +1,6 @@
 # The OpenCode channel
 
-Shared by `opencode-implement` (this skill) and `opencode-review` (codex-review): both run each
+Shared by `codex-round implement` (this skill) and `codex-round review` (codex-review): both run each
 round through `scripts/opencode-round` against one persistent `opencode serve`. Read before the
 first round of a session, and when a round fails or goes quiet.
 
@@ -70,7 +70,7 @@ session is busy and no client is attached, and exits 1 naming why otherwise.
 - `-u <unit>` (repeatable) labels the round's `BEES:` line. `--repo <dir>` (repeatable) names a
   sibling repo the round reads or edits, so preflight checks the fence allows it.
 - A session is pinned to the directory it was created in: resume with `-s` only under the same
-  `-C`. `opencode-implement` refuses a resume pinned elsewhere.
+  `-C`. `codex-round` refuses a resume pinned elsewhere.
 
 | file | holds |
 |---|---|
