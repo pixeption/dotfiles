@@ -6,9 +6,9 @@
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$here/../scripts/codex-round"
-TMP=$(mktemp -d); trap 'kill $srv 2>/dev/null; rm -rf "$TMP"' EXIT
+TMP=$(mktemp -d); srv=""; stale=""; trap 'kill $srv $stale 2>/dev/null; rm -rf "$TMP"' EXIT
 export HOME="$TMP/home" PATH="$TMP/bin:$PATH" OPENCODE_ROUND_POLL=1
-mkdir -p "$TMP/bin" "$HOME/.local/bin" "$HOME/.codex/sessions" "$TMP/www" "$TMP/work" "$TMP/out" "$TMP/err"
+mkdir -p "$TMP/bin" "$HOME/.local/bin" "$HOME/.codex/sessions" "$TMP/www" "$TMP/www-stale" "$TMP/srv" "$TMP/work" "$TMP/out" "$TMP/err"
 
 cat > "$TMP/bin/opencode" <<'STUB'
 #!/usr/bin/env bash
@@ -20,29 +20,40 @@ cat > "$HOME/.local/bin/codex" <<'STUB'
 #!/usr/bin/env bash
 echo "$*" >> "$STUB_CALLS/codex"
 while [ $# -gt 0 ]; do [ "$1" = --output-last-message ] && out="$2"; shift; done
-if [ "$CODEX_MODE" = limit ]; then echo '{"type":"error","message":"You have hit your usage limit reached"}'; exit 1; fi
+case "$CODEX_MODE" in
+  limit) echo '{"type":"error","message":"You have hit your usage limit reached"}'; exit 1 ;;
+  limit-late) echo '{"type":"error","message":"stream disconnected: connection reset"}'
+              echo '{"type":"turn.failed","error":{"message":"usage limit reached"}}'; exit 1 ;;
+  limit-ok) echo '{"type":"error","message":"429 rate limit, retrying"}' ;;
+esac
 echo '{"type":"thread.started","thread_id":"thr-1"}'
 echo '{"info":{"total_token_usage":{},"last_token_usage":{"input_tokens":10,"output_tokens":5}}}' > "$HOME/.codex/sessions/rollout-thr-1.jsonl"
 printf '%s\n' "$ANSWER" > "$out"
 STUB
 chmod +x "$TMP/bin/opencode" "$HOME/.local/bin/codex"
 
-python3 -c '
-import http.server, json, os, sys
-www, portfile = sys.argv[1], sys.argv[2]
+# The stub server is named `opencode serve --port <p>` so the preflight's pkill can stop it on a restart.
+cat > "$TMP/srv/opencode" <<'STUB'
+import http.server, os, sys
+www = os.environ["WWW"]
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         f = os.path.join(www, self.path.split("?")[0].strip("/").replace("/", "_"))
         body = open(f, "rb").read() if os.path.isfile(f) else None
         self.send_response(200 if body else 404); self.end_headers(); self.wfile.write(body or b"")
     def log_message(self, *a): pass
-s = http.server.HTTPServer(("127.0.0.1", 0), H)
-open(portfile, "w").write(str(s.server_address[1]))
-s.serve_forever()' "$TMP/www" "$TMP/port" &
-srv=$!
-for _ in $(seq 50); do [ -s "$TMP/port" ] && break; sleep 0.1; done
+s = http.server.HTTPServer(("127.0.0.1", int(sys.argv[3])), H)
+open(os.environ["PORTFILE"], "w").write(str(s.server_address[1]))
+s.serve_forever()
+STUB
+serve() { # serve <www> <portfile> <port>: starts a stub server in the background
+  WWW="$1" PORTFILE="$2" python3 "$TMP/srv/opencode" serve --port "$3" &
+  for _ in $(seq 50); do [ -s "$2" ] && break; sleep 0.1; done
+}
+free_port() { python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])'; }
+serve "$TMP/www" "$TMP/port" 0; srv=$!
 live="http://127.0.0.1:$(cat "$TMP/port")"
-dead="http://127.0.0.1:$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+dead="http://127.0.0.1:$(free_port)"
 fence='{"permission": {"external_directory": {"*": "allow"}},
   "agent": {"review-discovery": {"permission": {"edit": "deny"}}, "review-followup": {"permission": {"edit": "deny", "task": "deny"}}}}'
 echo "$fence" > "$TMP/www/config"
@@ -91,6 +102,12 @@ export CODEX_MODE=limit
 if round 3 implement --url "$dead" && [[ $(head -1 "$out") == "Blocked: codex unavailable"* ]] &&
    [ "$(tail -n 1 "$out")" = "BEES: results=U-1:blocked:-" ] && [ -e "$out.usage" ]
 then ok "both channels unavailable"; else bad "both channels unavailable" "$(head -1 "$out")"; fi
+export ANSWER="Did it."
+for mode in limit-late limit-ok; do
+  export CODEX_MODE=$mode
+  if round 3 implement --url "$dead" && [[ $(head -1 "$out") == "Blocked: codex unavailable: codex "*"limit"* ]]
+  then ok "CLI usage limit in any error event ($mode)"; else bad "CLI usage limit ($mode)" "$(head -1 "$out" 2>/dev/null)"; fi
+done
 
 export OC_LOG="$TMP/oc-limit.log"; oc_log "partial" "429 Too Many Requests" > "$OC_LOG"
 if round 3 review --url "$live" && [[ $(head -1 "$out") == "Blocked: codex unavailable: opencode APIError"* ]] && ! called codex
@@ -100,12 +117,25 @@ echo '{}' > "$TMP/www/config"
 if round 1 implement --url "$live" && ! called codex && [ ! -e "$out" ] && [ ! -e "$out.pid" ]
 then ok "fence refusal does not switch channel"; else bad "fence refusal" "exit or files"; fi
 echo "$fence" > "$TMP/www/config"
+echo '{}' > "$TMP/www-stale/config"; cp "$TMP/www/config_providers" "$TMP/www-stale/"; echo '[]' > "$TMP/www-stale/experimental_session"
+serve "$TMP/www-stale" "$TMP/port-stale" "$(free_port)"; stale=$!
+if round 1 implement --url "http://127.0.0.1:$(cat "$TMP/port-stale")" && ! called codex && [ ! -e "$out" ] &&
+   grep -q '^serve' "$STUB_CALLS/opencode"
+then ok "fence refusal whose restart cannot start does not switch channel"; else bad "fence refusal and failed restart" "exit or files"; fi
 
 if round 3 implement --url "$dead" -s ses_x && ! called codex && ! called opencode && [ ! -e "$out" ]
 then ok "OpenCode resume with the server down"; else bad "OpenCode resume with the server down" "codex or preflight ran"; fi
-export CODEX_MODE=ok ANSWER="Resumed."; touch "$HOME/.codex/sessions/rollout-x-0199-uuid.jsonl"
-if round 0 implement --url "$dead" -s 0199-uuid && grep -q '^exec resume 0199-uuid ' "$STUB_CALLS/codex" && ! called opencode
-then ok "CLI resume skips preflight"; else bad "CLI resume" "$(cat "$STUB_CALLS/codex" 2>/dev/null)"; fi
+export CODEX_MODE=ok ANSWER=$'Resumed.\n\nAPPROVE'
+pinned_to() { jq -nc --arg d "$1" '{type: "session_meta", payload: {cwd: $d}}'; }
+pinned_to "$TMP/work" > "$HOME/.codex/sessions/rollout-x-0199-uuid.jsonl"
+pinned_to "$TMP" > "$HOME/.codex/sessions/rollout-x-0299-uuid.jsonl"
+for job in implement review; do
+  sandbox=danger-full-access; [ "$job" = review ] && sandbox=read-only
+  if round 0 "$job" --url "$dead" -s 0199-uuid && grep -q "^exec --sandbox $sandbox resume 0199-uuid " "$STUB_CALLS/codex" && ! called opencode
+  then ok "CLI $job resume skips preflight, keeps its sandbox"; else bad "CLI $job resume" "$(cat "$STUB_CALLS/codex" 2>/dev/null)"; fi
+done
+if round 1 implement --url "$dead" -s 0299-uuid && ! called codex && grep -q 'not pinned to' "$TMP/err/$n"
+then ok "CLI resume pinned to another directory refused"; else bad "CLI resume pinned elsewhere" "$(cat "$STUB_CALLS/codex" 2>/dev/null)"; fi
 
 export ANSWER="I would approve this."
 if round 1 review --url "$dead" && [[ $(head -1 "$out") == "Blocked: the answer does not end"* ]] &&

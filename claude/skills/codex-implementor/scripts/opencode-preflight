@@ -132,14 +132,14 @@ def wait(url, up, seconds):
     return (get(url, "/config") is not None) == up
 
 
-def unavailable(msg):
+def unavailable(msg, exit_code=3):
     say(msg)
-    sys.exit(3)
+    sys.exit(exit_code)
 
 
-def start(url, port, serverlog):
+def start(url, port, serverlog, unavailable_code=3):
     say(f"starting opencode serve on {url}")
-    shutil.which("opencode") or unavailable("'opencode' not on PATH (install opencode) — no server")
+    shutil.which("opencode") or unavailable("'opencode' not on PATH (install opencode) — no server", unavailable_code)
     log = open(serverlog, "a") if serverlog else subprocess.DEVNULL
     server = subprocess.Popen(["opencode", "serve", "--port", port, "--hostname", "127.0.0.1"], stdin=subprocess.DEVNULL,
                               stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -147,9 +147,9 @@ def start(url, port, serverlog):
         if get(url, "/config") is not None:
             return
         if server.poll() is not None:
-            unavailable(f"opencode serve exited {server.returncode} before {url} came up")
+            unavailable(f"opencode serve exited {server.returncode} before {url} came up", unavailable_code)
         time.sleep(1)
-    get(url, "/config") is not None or unavailable(f"server did not come up on {url}")
+    get(url, "/config") is not None or unavailable(f"server did not come up on {url}", unavailable_code)
 
 
 def main():
@@ -184,7 +184,7 @@ def main():
     say(f"{'; '.join(found)} — restarting the idle server")
     subprocess.run(["pkill", "-f", f"opencode serve --port {a.port}( |$)"])
     wait(url, False, 10) or fail(f"server at {url} did not stop (not started as 'opencode serve --port {a.port}'?) — restart it by hand")
-    start(url, a.port, a.serverlog)
+    start(url, a.port, a.serverlog, unavailable_code=1)
     found = problems(url, a.model, workdir, repos, a.port, a.max_rss_mb)
     for p in found:
         say(f"after restart: {p}")

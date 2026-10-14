@@ -103,6 +103,8 @@ cli_resume_checks() {
   local cache_ttl_secs=1800 rollout age   # codex's prompt cache lives 30 min; a later resume re-pays the whole context
   rollout="$(find "${CODEX_HOME:-$HOME/.codex}/sessions" -type f -name "rollout-*${session}.jsonl" 2>/dev/null | head -1)"
   [ -n "$rollout" ] || die 1 "no codex rollout file for session ${session}"
+  local pinned; pinned="$(jq -rR 'fromjson? | select(.type == "session_meta") | .payload.cwd // empty' "$rollout" | head -1)"
+  [ -n "$pinned" ] && [ "$(cd "$pinned" 2>/dev/null && pwd -P)" = "$workdir" ] || die 1 "session ${session} is not pinned to ${workdir} — start a new session without -s"
   age=$(( $(date +%s) - $(stat -f %m "$rollout") ))
   [ "$age" -le "$cache_ttl_secs" ] || die 1 "session ${session} last active $((age / 60))m ago (> 30m prompt-cache TTL) — start a new session without -s"
 }
@@ -159,7 +161,7 @@ cli_args=(-m "$cli_model" -c model_reasoning_effort="$effort" -c service_tier="$
   --skip-git-repo-check --json --output-last-message "$outfile")
 # < /dev/null always: codex exec appends stdin as a block and hangs on an fd that never closes.
 if [ -n "$session" ]; then
-  (cd "$workdir" && "$codex" exec resume "$session" "${cli_args[@]}" "$prompt" < /dev/null > "$logfile" 2>&1)
+  (cd "$workdir" && "$codex" exec --sandbox "$sandbox" resume "$session" "${cli_args[@]}" "$prompt" < /dev/null > "$logfile" 2>&1)
 else
   "$codex" exec -C "$workdir" --sandbox "$sandbox" -c 'project_doc_fallback_filenames=["CLAUDE.md"]' \
     "${cli_args[@]}" "$prompt" < /dev/null > "$logfile" 2>&1
@@ -169,14 +171,14 @@ status=$?
 thread="$(jq -rR 'fromjson? | .thread_id // empty' "$logfile" 2>/dev/null | head -1)"
 sid="${thread:-$session}"
 [ -z "$sid" ] || printf '%s\n' "$sid" > "${outfile}.session"
-clierr="$(jq -rR 'fromjson? | select(.type == "error" or .type == "turn.failed") |
-  .message // .error.message // (.error | tostring)' "$logfile" 2>/dev/null | head -1)"
+clierrors="$(jq -rR 'fromjson? | select(.type == "error" or .type == "turn.failed") |
+  .message // .error.message // (.error | tostring)' "$logfile" 2>/dev/null)"
+clierr="${clierrors%%$'\n'*}"
+usageerr="$(grep -iE "$usage_limit_re" <<<"$clierrors" | head -1)"
 blocked=""; unavailable=""
-if [ "$status" != 0 ] || [ ! -s "$outfile" ]; then
-  if [ -n "$clierr" ] && is_usage_limit "$clierr"; then unavailable=1; blocked="Blocked: codex unavailable: codex ${clierr}"
-  elif [ "$status" != 0 ]; then blocked="Blocked: codex exec exited ${status}${clierr:+: ${clierr}}"
-  else blocked="Blocked: the round ended without a final message"; fi
-fi
+if [ -n "$usageerr" ]; then unavailable=1; blocked="Blocked: codex unavailable: codex ${usageerr}"
+elif [ "$status" != 0 ]; then blocked="Blocked: codex exec exited ${status}${clierr:+: ${clierr}}"
+elif [ ! -s "$outfile" ]; then blocked="Blocked: the round ended without a final message"; fi
 [ -z "$blocked" ] && [ "$role" = review ] && ! ends_in_verdict "$outfile" &&
   blocked="Blocked: the answer does not end in APPROVE or CHANGES_REQUIRED (truncated?)"
 if [ -n "$blocked" ]; then
