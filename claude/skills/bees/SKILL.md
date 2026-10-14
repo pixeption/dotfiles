@@ -123,8 +123,8 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
 ## Lifecycle
 
 ```text
-- [ ] 1–4. Plan the row (plan-lifecycle "Planning a row"): brief draft → brief review (owner)
-         → expand → plan review → `ready`. Draft the next row's brief while the current runs.
+- [ ] 1–4. Plan it (plan-lifecycle "Planning a plan", which caps the rounds): brief draft → codex
+         brief review → owner approves → expand → plan review → `ready`. Draft the next row's brief while the current runs.
 - [ ] 5. Run: score and route ("Routing"), mode (plan-lifecycle "Choose the mode"); a scout,
          diagnosis or path map only for a decision you must make first; roster resources →
          holders → slots → order; delegate, continue or spawn (reference/budgets.md).
@@ -295,7 +295,7 @@ for dependencies; numbers on the unit's line.
 
 | turn | say | length |
 |---|---|---|
-| waiting | `Waiting on codex (G1 round 3, log growing) and slot 2 (B4).` | 1 line |
+| waiting | `Waiting on codex (G1 round 2, log growing) and slot 2 (B4).` | 1 line |
 | agent reported | unit (pts · route · who) · outcome · commit/suite · one clause · continued or retired, why | 2–3 lines |
 | quiet round | what `bees-watch` found, what you did | 1–2 lines |
 | decision or blocker | only one the advisors could not decide, now a `Blocked` `owner:` line: question, options with cost (scope: units and plans), recommendation | ≤ 6 lines |

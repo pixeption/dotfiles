@@ -104,13 +104,13 @@ carries its Outcome, Right and Wrong.
 | brief draft | **Outcome** | what the result looks like and how it is used |
 | | **Right** | a concrete example of the result working as meant |
 | | **Wrong** | a concrete example it must not produce, and what the item deliberately doesn't do |
-| brief review | — | adds no field: the owner approves the briefs of one group row in one sitting |
+| brief review | — | adds no field: codex reviews the brief, then the owner approves it (bees "Planning a plan") |
 | expand | **Today** | what the code does now and why it falls short, naming files and symbols (a line only where it will not move); for a bug, the symptom and its evidence |
 | | **Approach** | the decided mechanism and where it goes, the invariants and traps it must not break, and the guidance sections that apply, by heading. A planner that cannot settle it from the code makes the item a diagnosis first |
 | | **Tests** | one bullet per behaviour that proves the brief, edge and failure cases included, each naming its test class (new or existing) or, where no test fits, its command; then the `--filter` of those classes and their callers' (`--filter` matches classes, never a file name) |
 | | **Score** | the item's points ("Scoring") |
 | | **Done when** | the item's last line: its Tests pass, any check that is not a test, and the review is APPROVE |
-| plan review | — | adds no field: one codex plan review per expanded plan, over all its items (scores, where any 8 or 13 is a High finding, then Tests against the brief, then Today and Approach against the source); the plan is `ready` when no High or Med finding is open |
+| plan review | — | adds no field: codex, skipped for three items or fewer (bees "Planning a plan"), over all its items (scores, where any 8 or 13 is a High finding, then Tests against the brief, then Today and Approach against the source) |
 
 - **The brief is the owner's one gate per plan**, frozen once approved. Expansion never edits it: a
   finding that would change an Outcome or an exclusion (a Wrong, or what is out of scope) goes to

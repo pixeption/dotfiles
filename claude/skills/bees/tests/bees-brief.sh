@@ -100,7 +100,7 @@ has "plan-brief carries no expand block" "$b" "$EXPAND_BLOCK" 0
 has "plan-brief brief points at the unit section" "$b" "sed -En '/^### U-02 ·" 1
 expect_pause plan-brief "$b"
 b=$(brief --work "$TMP/work" --units Q-03 --kind plan-brief)
-if [ -f "$b" ] && ! grep -q "sed -En" "$b" && [ "$(count "$b" "$BRIEF_BLOCK")" == 1 ]; then ok "plan-brief from a queue row needs no plan"; else bad "plan-brief --work: brief [$b]"; fi
+if [ -f "$b" ] && ! grep -q "sed -En" "$b" && [ "$(count "$b" "$BRIEF_BLOCK")" == 1 ]; then ok "plan-brief needs no plan file"; else bad "plan-brief --work: brief [$b]"; fi
 if echo x | "$SCRIPT" --plan "$PLAN" --units U-01 --kind plan-ac --round 98 >/dev/null 2>&1; then bad "kind plan-ac is gone"; else ok "kind plan-ac is gone"; fi
 if echo x | "$SCRIPT" --plan "$PLAN" --units U-01 --kind plan --round 99 >/dev/null 2>&1; then bad "kind plan is gone"; else ok "kind plan is gone"; fi
 names() { # names <kind> <units>: the brief is brief-<units>-<kind>-r<N>.txt and its last Report line names report-<units>-<kind>-r<N>.md beside it

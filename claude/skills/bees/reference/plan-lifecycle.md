@@ -1,13 +1,13 @@
 # Plan lifecycle: planning, mode, adoption, path maps, preflight, close
 
-Read the passage you need when SKILL.md "Setup" sends you here: planning a row, choosing the
+Read the passage you need when SKILL.md "Setup" sends you here: planning a plan, choosing the
 mode or adopting a plan, before the session's first codex unit, scheduling a unit that takes a
 pipeline where no committed consumer has gone, or closing a plan at its green final gate. A context
 handoff needs only the preflight.
 
 ## Contents
 
-- Planning a row
+- Planning a plan
 - Choose the mode
 - Adopting a plan
 - Path maps
@@ -17,24 +17,30 @@ handoff needs only the preflight.
   - Pick-up
   - Retro
 
-## Planning a row
+## Planning a plan
 
-SKILL.md "Lifecycle" steps 1–4, from `to plan` to `ready`:
+SKILL.md "Lifecycle" steps 1–4, from `brief draft` to `ready`; the status file's `Stage:` moves at
+each step. Each review stage is at most two codex rounds, one discovery and one recheck of the
+fixes, never a round 3.
 
-1. Queue: take the first eligible row (SKILL.md "Setup"). `to plan` → a planner drafts the brief
-   (`--kind plan-brief`, stage `brief draft`: usage, architecture note, and Outcome, Right, Wrong
-   per item; `plan` skill "Item fields by stage"); the briefs of one group row go together.
-2. Brief review, once per plan: the brief goes to the queue's Owner list, stage `brief review`. The
-   next row's brief is drafted while this one runs (SKILL.md "Lifecycle"), so the list is never
-   empty when a plan closes. The approved brief is frozen.
-3. Expand once per plan, over all its items (`--kind plan-expand`, stage `expand`): Today,
-   Approach, Tests, Score (an 8 or 13 split into items ≤ 5), Done when — once the work it builds on has landed, so they are
-   read from the tree the items will change. A finding that would change an Outcome or an
-   exclusion goes back to the Owner list with a proposed edit; every other question is yours,
-   the planner's and codex's.
-4. Plan review, stage `plan review`: one codex discovery round per expanded plan (`codex-review`
-   "Plan review under bees"), checking the Tests against the brief. Apply or disposition every
-   finding; no High or Med open → stage `ready`.
+1. `brief draft`: a planner drafts the brief (`--kind plan-brief`, `--work <plan>.work`) for the
+   plan the owner named: usage, architecture note, and Outcome, Right, Wrong per item (`plan`
+   skill "Item fields by stage").
+2. `brief review`: codex round 1 over the brief (consistency, dependencies, scores); the planner
+   applies the findings (`plan-brief --round 2`); codex round 2 rechecks only those ids. A High or
+   Med still open after round 2 goes to the owner beside the brief. Then a Blocked
+   `owner: approve the brief` line; the owner's approval writes `**Brief approved:**`, and the
+   brief is frozen.
+3. `expand`: once per plan, over all its items (`--kind plan-expand`): Today, Approach, Tests,
+   Score (an 8 or 13 split into items ≤ 5), Done when — once the work it builds on has landed, so
+   they are read from the tree the items will change.
+4. `plan review`: skipped when the plan has three items or fewer (GATE rows not counted).
+   Otherwise codex round 1 (`codex-review` "Plan review under bees"), checking the Tests against
+   the brief; the orchestrator applies findings to the expansion or dispositions them; round 2
+   rechecks those ids; a High or Med still open after it is ruled by the orchestrator and logged
+   `decision:`. Then `ready`.
+
+An approved brief is never edited: a finding against it is an `owner:` line with a proposed edit.
 
 ## Choose the mode
 
