@@ -6,7 +6,7 @@
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$here/../scripts/opencode-preflight"
-TMP=$(mktemp -d); trap 'pkill -f "$TMP/srv/opencode" 2>/dev/null; rm -rf "$TMP"' EXIT
+TMP=$(mktemp -d); trap '/usr/bin/pkill -f "$TMP/srv/opencode" 2>/dev/null; rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/srv" "$TMP/www" "$TMP/work"
 export PATH="$TMP/bin:$PATH" WWW="$TMP/www" PIDFILE="$TMP/pidfile"
 
@@ -25,6 +25,8 @@ s.serve_forever()
 STUB
 printf '#!/usr/bin/env bash\nexec python3 "%s" "$@"\n' "$TMP/srv/opencode" > "$TMP/bin/opencode"; chmod +x "$TMP/bin/opencode"
 port=$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')
+# A guard pkill on PATH: only a pattern naming the stub's port reaches the real pkill, so no case can stop another server.
+printf '#!/usr/bin/env bash\ncase "$*" in *"--port %s("*) exec /usr/bin/pkill "$@" ;; esac\necho "guard: refused pkill $*" >&2; exit 1\n' "$port" > "$TMP/bin/pkill"; chmod +x "$TMP/bin/pkill"
 url="http://127.0.0.1:$port"
 serve() { rm -f "$PIDFILE"; opencode serve --port "$port" & for _ in $(seq 50); do curl -sf "$url/config" >/dev/null && break; sleep 0.1; done; }
 server_pid() { cat "$PIDFILE"; }
@@ -53,9 +55,9 @@ busy
 if ! "$SCRIPT" --stop --port "$port" 2>"$TMP/err" && grep -q "not stopping .*: a session is busy" "$TMP/err" && up
 then ok "--stop while busy: exit 1, server lives"; else bad "--stop while busy"; fi
 idle; (exec -a "opencode attach $url" sleep 30) & client=$!; sleep 0.2
-if ! "$SCRIPT" --stop --port "$port" 2>"$TMP/err" && grep -q "not stopping .*: a client is attached" "$TMP/err" && up
-then ok "--stop with a client attached: exit 1, server lives"; else bad "--stop with a client attached"; fi
+if ! "$SCRIPT" --stop --url "$url" 2>"$TMP/err" && grep -q "not stopping .*: a client is attached" "$TMP/err" && up
+then ok "--stop --url with a client attached: exit 1, server lives"; else bad "--stop --url with a client attached"; fi
 kill $client; wait $client 2>/dev/null
-if "$SCRIPT" --stop --port "$port" 2>"$TMP/err" && ! up
-then ok "--stop while idle: stopped"; else bad "--stop while idle"; fi
+if "$SCRIPT" --stop --url "$url" 2>"$TMP/err" && ! up
+then ok "--stop --url while idle: stopped"; else bad "--stop --url while idle"; fi
 exit $fail

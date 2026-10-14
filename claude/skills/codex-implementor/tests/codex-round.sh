@@ -35,18 +35,19 @@ chmod +x "$TMP/bin/opencode" "$HOME/.local/bin/codex"
 
 # The stub server is named `opencode serve --port <p>` so the preflight's pkill can stop it on a restart.
 cat > "$TMP/srv/opencode" <<'STUB'
-import http.server, os, sys
+import http.server, os, sys, time
 www = os.environ["WWW"]
 class H(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         f = os.path.join(www, self.path.split("?")[0].strip("/").replace("/", "_"))
+        if os.path.isfile(f + ".delay"): time.sleep(float(open(f + ".delay").read()))
         body = open(f, "rb").read() if os.path.isfile(f) else None
         self.send_response(200 if body else 404); self.end_headers(); self.wfile.write(body or b"")
     def do_POST(self):
         open(www + ".posts", "a").write(self.path + "\n")
         self.do_GET()
     def log_message(self, *a): pass
-s = http.server.HTTPServer(("127.0.0.1", int(sys.argv[3])), H)
+s = http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[3])), H)
 open(os.environ["PORTFILE"], "w").write(str(s.server_address[1]))
 s.serve_forever()
 STUB
@@ -180,4 +181,11 @@ then ok "stop of an unknown session fails"; else bad "stop of an unknown session
 fake_round "$TMP/out/s3.txt" ses_b
 if ! stop "$TMP/out/s3.txt" && grep -q "ses_b still busy" "$TMP/err/stop"
 then ok "stop fails while the session stays busy"; else bad "stop with a busy session" "$(cat "$TMP/err/stop")"; fi
+fake_round "$TMP/out/s4.txt" ses_b; echo 2 > "$TMP/www-stop/session_status.delay"; start=$SECONDS
+if ! stop "$TMP/out/s4.txt" && (( SECONDS - start < 4 )) && grep -q "ses_b still busy or unreadable" "$TMP/err/stop" && tree_gone
+then ok "stop keeps to its wait when the status answers slowly"; else bad "stop with a slow status" "$((SECONDS - start)) s: $(cat "$TMP/err/stop")"; fi
+echo true > "$TMP/www-stop/session_ses_e_abort"; fake_round "$TMP/out/s5.txt" ses_e; echo 0.5 > "$TMP/www-stop/session_status.delay"
+(until grep -qs "ses_e/abort" "$TMP/www-stop.posts"; do sleep 0.1; done; kill "${tree[0]}") & fakes="$fakes $!"
+if stop "$TMP/out/s5.txt" && tree_gone
+then ok "stop ends the descendants of a root that exits on the abort"; else bad "stop with a root that exits on the abort" "$(cat "$TMP/err/stop")"; fi
 exit $fail

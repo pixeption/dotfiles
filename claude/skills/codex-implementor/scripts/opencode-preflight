@@ -193,6 +193,8 @@ def main():
     a.add_argument("--max-rss-mb", type=int, default=4096)  # restarts a days-old server, not one mid-plan
     a = a.parse_args()
     url = a.url or f"http://127.0.0.1:{a.port}"
+    endpoint = urllib.parse.urlsplit(url)
+    a.port = str(endpoint.port or (443 if endpoint.scheme == "https" else 80))
     if a.stop:
         return stop_server(url, a.port)
     if not (a.model and a.dir):

@@ -44,8 +44,8 @@ here="$(cd "$(dirname "$0")" && pwd)"
 say() { echo "codex-round: $*" >&2; }
 die() { say "$2"; exit "$1"; }
 
-session_idle() { # session_idle <url> <directory> <session>
-  curl -sfG -m 10 "$1/session/status" --data-urlencode "directory=$2" 2>/dev/null |
+session_idle() { # session_idle <url> <directory> <session> <timeout-s>
+  curl -sfG -m "$4" "$1/session/status" --data-urlencode "directory=$2" 2>/dev/null |
     jq -e --arg s "$3" 'type == "object" and (.[$s].type // "idle") == "idle"' >/dev/null 2>&1
 }
 descendants() { # descendants <pid>: every descendant process, deepest first
@@ -65,6 +65,7 @@ stop_round() {
   local out=$1 root sid url cwd p tree=() left=()
   [ -s "$out.pid" ] || die 2 "no round at $out (no $out.pid)"
   root="$(cat "$out.pid")"
+  if alive "$root"; then tree=($(descendants "$root") "$root"); fi
   if [ -s "$out.url" ]; then
     url="$(cat "$out.url")"; cwd="$(cat "$out.cwd" 2>/dev/null)"
     sid="$(cat "$out.session" 2>/dev/null)"
@@ -72,11 +73,15 @@ stop_round() {
     if [ -z "$sid" ]; then left+=("no session recorded for the round")
     elif ! abort_session "$url" "$sid" "$cwd"; then left+=("session $sid: the abort on $url failed")
     else
-      for _ in $(seq "${CODEX_ROUND_STOP_WAIT:-30}"); do session_idle "$url" "$cwd" "$sid" && break; sleep 1; done
-      session_idle "$url" "$cwd" "$sid" || left+=("session $sid still busy on $url")
+      local deadline=$((SECONDS + ${CODEX_ROUND_STOP_WAIT:-30})) remaining idle=
+      while :; do
+        remaining=$((deadline - SECONDS)); (( remaining > 0 )) || break
+        if session_idle "$url" "$cwd" "$sid" "$remaining"; then idle=1; break; fi
+        (( SECONDS < deadline )) && sleep 1
+      done
+      [ -n "$idle" ] || left+=("session $sid still busy or unreadable on $url")
     fi
   fi
-  if alive "$root"; then tree=($(descendants "$root") "$root"); fi
   for p in ${tree[@]+"${tree[@]}"}; do terminate "$p"; done
   for p in ${tree[@]+"${tree[@]}"}; do alive "$p" && left+=("process $p still running"); done
   [ ${#left[@]} = 0 ] || { for p in "${left[@]}"; do say "stop $out: $p"; done; exit 1; }
