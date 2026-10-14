@@ -1,8 +1,9 @@
 # The OpenCode channel
 
-Shared by `codex-round implement` (this skill) and `codex-round review` (codex-review): both run each
-round through `scripts/opencode-round` against one persistent `opencode serve`. Read before the
-first round of a session, and when a round fails or goes quiet.
+Shared by every job of codex-implementor's `scripts/codex-round` (`implement`, `run`, `review`,
+`advise`): each round runs through `scripts/opencode-round` against one persistent `opencode serve`,
+and `codex-round stop <out-file>` stops a running one. `scripts/` paths here are codex-implementor's.
+Read before the first round of a session, and when a round fails or goes quiet.
 
 ## Contents
 

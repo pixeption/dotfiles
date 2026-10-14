@@ -19,13 +19,12 @@ edit tool is hard-denied, and `review-followup` also denies the task tool; Bash 
 read-only shell use is instruction-enforced — the reviewer can run a suite or a `unity command` to
 *check* a claim. The session is server-held with no TTL, which matters because applying findings
 between rounds routinely outlasts the CLI's 30-minute cache. **Read
-codex-implementor's [`reference/opencode-channel.md`](../codex-implementor/reference/opencode-channel.md)
+[`reference/opencode-channel.md`](reference/opencode-channel.md)
 before the session's first round** — preflight, the fence, flags and files, failed rounds,
-compaction, watching; this skill runs that skill's scripts.
+compaction, watching; this skill runs codex-implementor's scripts.
 
-The **codex CLI** (`codex-round review` on `codex exec --sandbox read-only`) is the fallback, only
-when the server won't start: codex-implementor's
-[`reference/codex-cli.md`](../codex-implementor/reference/codex-cli.md).
+The **codex CLI** (`codex-round review` on `codex exec --sandbox read-only`) is the automatic
+fallback when the server won't start.
 
 A round that fails on a usage limit (429, limit reached) → the review is skipped and logged
 `review: skipped, codex unavailable`, per bees `reference/review.md`.
@@ -201,4 +200,4 @@ Reviews the repository's uncommitted changes as a diff, without a prompt you wri
 skill's prompt flow for a **document or design**, `codex exec review` for a **raw diff** when you
 want no framing. Run it as
 `codex="$("$HOME/.claude/skills/codex-implementor/scripts/resolve-codex")" && "$codex" exec review < /dev/null`
-(the `< /dev/null` avoids codex-implementor `reference/codex-cli.md`'s stdin trap).
+(`< /dev/null`: codex appends stdin and hangs on an open one).

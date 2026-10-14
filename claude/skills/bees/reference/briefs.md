@@ -69,7 +69,7 @@ dispatch because the bee only claims it.
 - Light mode has no plan: pass `--work <scratchpad dir>` instead of `--plan`, and include the
   unit's acceptance criteria and all required verification on stdin, because no plan section
   supplies them.
-- A codex brief is not built this way: it follows codex-implementor's `templates/brief.md`.
+- A codex brief is not built this way: it follows codex-implementor's `templates/brief-implement.md`, or `templates/brief-run.md` for a run.
 
 ## Codex and scout briefs
 
