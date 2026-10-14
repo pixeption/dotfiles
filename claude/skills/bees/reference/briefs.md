@@ -58,9 +58,13 @@ dispatch because the bee only claims it.
   An implementor treats the item's score as an estimate and never re-sizes it
   (`templates/standing-rules-implementor.txt`).
 - A `--plan` unit without a `### <ID> · ` section fails the run, so every pointer resolves.
-- A gate a codex runner session runs is `--kind gate --units GATE-<n>`: no plan section,
-  implementor rules and return contract, so its report lands in a file like any other — a
-  hand-written brief lacks the heredoc line, and the Write tool refuses subagent report files.
+- A run (a gate's suites, a baseline) briefed to a Claude bee is `--kind run --units GATE-<n>`,
+  stdin naming the slot, target SHA and commands: no plan section, only codex-implementor's
+  `templates/run-contract.md`, the contract a codex run reads.
+- `--kind fix` and `--kind recheck` take `--work <plan>.work`, since a fix unit has no section. A
+  fix's stdin carries `Fixes:`, `Filter:` and `Review:` (report and finding ids; the item's filter)
+  or `Gate:` (gate evidence, tested SHA, failing checks; the repair's verification filter); a gate
+  repair of unknown cause is a diagnosis first, and its recheck names the same gate evidence.
 - The brief points the agent at each unit's plan section as its acceptance, so write acceptance
   only where it departs from the section. A fix or recheck names the review file and the ids.
 - `--include` adds a repo's slot block (nono4u: the workspaces lane brief) with its

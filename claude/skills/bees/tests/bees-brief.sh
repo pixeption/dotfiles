@@ -18,12 +18,19 @@ FILTER="Filter long command output to the actionable lines"
 PAUSE="When the context hook tells you to pause"
 BUDGET="budgets.md"
 PLAN="$TMP/plan.md"
-printf '# Plan\n\n### U-01 · first\n\nx\n\n### U-02 · second\n\ny\n\n### U-03 · unrelated\n\nz\n' > "$PLAN"
+printf '# Plan\n\n### U-01 · first\n\nSECTION-BODY Tests: --filter SectionTests\n\n### U-02 · second\n\ny\n\n### U-03 · unrelated\n\nz\n' > "$PLAN"
 round=0
-brief() { # brief <args…>: builds a fresh round and prints the brief's path
+IN="Objective: test."
+brief() { # brief <args…>: builds a fresh round from $IN and prints the brief's path
   round=$((round + 1))
-  echo "Objective: test." | "$SCRIPT" "$@" --round "$round" | head -1 | sed 's/ · .*//'
+  printf '%s\n' "$IN" | "$SCRIPT" "$@" --round "$round" | head -1 | sed 's/ · .*//'
 }
+W="$TMP/work"
+REVIEW_FIX=$'Fixes: MAJ-01 — guard the empty list — a.py:3\nReview: /r/review-U-01-r1.txt, ids MAJ-01\nFilter: --filter SectionTests'
+GATE_FIX=$'Fixes: restore the shard count\nGate: /r/gate-1.txt, tested 0123abcd, failing ShardTests.Count\nFilter: --filter ShardTests'
+fixbrief() { IN="$REVIEW_FIX" brief "$@"; }
+RUN="Run exactly the named commands"
+RETURN="Then hand back only these lines"
 count() { tr '\n' ' ' < "$1" | grep -oF -- "$2" | wc -l | tr -d ' '; }
 has() { if [ "$(count "$2" "$3")" == "$4" ]; then ok "$1"; else bad "$1: want $4 of [$3] got $(count "$2" "$3")"; fi; }
 expect_rules() { # expect_rules <name> <brief> <want-skill> <want-section> <want-saved> <want-filter>
@@ -36,12 +43,19 @@ expect_pause() { # expect_pause <kind> <brief>: pauses when the hook says, once,
   has "$1 rules name no 250k" "$2" "250k" 0
 }
 
-for kind in impl fix; do
-  expect_rules "$kind gets the four hygiene rules" "$(brief --plan "$PLAN" --units U-01 --kind $kind)" 1 1 1 1
+T="$here/../templates"
+expect_rules "the reading template holds the shared paragraph" "$T/standing-rules-reading.txt" 1 1 1 1
+for role in implementor planner advisor reviewer; do has "$role template has no reading copy" "$T/standing-rules-$role.txt" "Invoke a skill's entry point" 0; done
+expect_rules "fix gets the four hygiene rules" "$(fixbrief --work "$W" --units U-01-fix1 --kind fix)" 1 1 1 1
+for mode in "--plan $PLAN" "--work $W"; do
+  b=$(brief $mode --units GATE-1 --kind run)
+  if [ -f "$b" ] && ! grep -q "sed -En" "$b"; then ok "run ($mode) has no section pointer"; else bad "run ($mode): brief [$b]"; fi
+  has "run ($mode) has no implementor rules" "$b" "Standing rules:" 0
+  has "run ($mode) carries the run contract once" "$b" "$RUN" 1
+  has "run ($mode) carries the run return once" "$b" "BEES: results=<unit>:<done|blocked>:-" 1
 done
-b=$(brief --plan "$PLAN" --units GATE-1 --kind gate); expect_rules "gate gets the four hygiene rules" "$b" 1 1 1 1; if [ -f "$b" ] && ! grep -q "sed -En" "$b"; then ok "plan-mode gate has no section pointer"; else bad "plan-mode gate: brief [$b]"; fi
 for kind in review recheck; do
-  b=$(brief --plan "$PLAN" --units U-01 --kind $kind)
+  if [ $kind == review ]; then b=$(brief --plan "$PLAN" --units U-01 --kind $kind); else b=$(brief --work "$W" --units U-01-fix1 --kind $kind); fi
   expect_rules "$kind gets the first three" "$b" 1 1 1 0
   expect_pause "$kind" "$b"
   has "$kind pause returns the unreviewed rest" "$b" "\`Paused: <files and Tests not yet reviewed>\`, verdict \`CHANGES_REQUIRED\`" 1
@@ -51,8 +65,33 @@ b=$(brief --plan "$PLAN" --units U-02,U-01 --kind impl)
 got=$(grep -oE "sed -En '/\^### U-0[0-9] ·" "$b" | grep -oE 'U-0[0-9]' | tr '\n' ' ')
 if [ "$got" == "U-02 U-01 " ]; then ok "plan mode points at each named unit only"; else bad "plan mode pointers: [$got]"; fi
 
-b=$(brief --work "$TMP/work" --units GATE-1 --kind gate)
-if [ -f "$b" ] && ! grep -q "sed -En" "$b"; then ok "light-mode gate has no section pointer"; else bad "light-mode gate: brief [$b]"; fi
+b=$(brief --plan "$PLAN" --units U-01 --kind impl)
+expect_rules "impl gets the four hygiene rules" "$b" 1 1 1 1
+has "impl points at the section without copying it" "$b" "SECTION-BODY" 0
+has "impl copies no section filter" "$b" "SectionTests" 0
+has "impl carries its return contract once" "$b" "$RETURN" 1
+if echo x | "$SCRIPT" --plan "$PLAN" --units U-01 --kind gate --round 95 >/dev/null 2>&1; then bad "kind gate is gone"; else ok "kind gate is gone"; fi
+for kind in fix recheck; do
+  if out=$(printf '%s\n' "$REVIEW_FIX" | "$SCRIPT" --plan "$PLAN" --units U-01 --kind $kind --round 94 2>&1); then bad "$kind accepted --plan"
+  elif [[ "$out" == *"takes --work"* ]]; then ok "$kind refuses --plan"; else bad "$kind --plan: [$out]"; fi
+done
+fix_refused() { # fix_refused <name> <stdin> <want-in-error>
+  local out
+  if out=$(printf '%s\n' "$2" | "$SCRIPT" --work "$W" --units U-07-fix1 --kind fix 2>&1); then bad "$1 accepted"
+  elif [[ "$out" == *"needs $3 on stdin"* ]]; then ok "$1 fails naming $3"; else bad "$1: [$out]"; fi
+}
+fix_refused "fix without Fixes" $'Review: r\nFilter: f' "Fixes:"
+fix_refused "fix without Filter" $'Fixes: x\nGate: g' "Filter:"
+fix_refused "fix without Review or Gate" $'Fixes: x\nFilter: f' "Review: or Gate:"
+b=$(fixbrief --work "$W" --units U-01-fix2 --kind fix)
+while IFS= read -r line; do has "review fix carries [${line%% *}] exactly" "$b" "$line" 1; done <<<"$REVIEW_FIX"
+has "review fix carries its return contract once" "$b" "$RETURN" 1
+g=$(IN="$GATE_FIX" brief --work "$W" --units GATE-1-fix1 --kind fix)
+r=$(IN="$GATE_FIX" brief --work "$W" --units GATE-1-fix1 --kind recheck)
+while IFS= read -r line; do
+  has "gate repair carries [${line%% *}]" "$g" "$line" 1; has "its recheck carries [${line%% *}]" "$r" "$line" 1
+done <<<"$GATE_FIX"
+has "gate repair carries its return contract once" "$g" "$RETURN" 1
 
 ESTIMATE="The item's score is an estimate: more files or work than expected is not a reason to stop."
 b=$(brief --plan "$PLAN" --units U-03 --kind impl)
@@ -109,7 +148,7 @@ names() { # names <kind> <units>: the brief is brief-<units>-<kind>-r<N>.txt and
 }
 names plan-brief U-01
 names plan-expand U-02,U-03
-W="$TMP/work"; touch "$W/report-U-04-review-r1.md"
+touch "$W/report-U-04-review-r1.md"
 if out=$(echo x | "$SCRIPT" --work "$W" --units U-04 --kind review 2>&1); then bad "an existing report path was accepted"
 elif [[ "$out" == *"report-U-04-review-r1.md exists"* ]] && [ ! -f "$W/brief-U-04-review-r1.txt" ]; then ok "an existing report path is refused naming it, writing no brief"
 else bad "existing report: [$out]"; fi

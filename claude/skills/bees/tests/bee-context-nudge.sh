@@ -124,8 +124,10 @@ respond A 210000; call A; expect "no-warn-after-pause 210k" ""
 # entry, and no context figure.
 printf '# P\n\n### X-01 · unit\n\nBody.\n' > "$TMP/plan.md"
 pause_text=$(pause 250 | jq -r .hookSpecificOutput.additionalContext)
-for kind in impl fix gate; do
-  echo "Objective: contract." | "$here/../scripts/bees-brief" --plan "$TMP/plan.md" --units X-01 --kind $kind >/dev/null
+for kind in impl fix; do
+  if [ $kind == impl ]; then where=(--plan "$TMP/plan.md"); in="Objective: contract."
+  else where=(--work "$TMP/plan.work"); in=$'Fixes: x\nFilter: f\nReview: r'; fi
+  printf '%s\n' "$in" | "$here/../scripts/bees-brief" "${where[@]}" --units X-01 --kind $kind >/dev/null
   brief="$TMP/plan.work/brief-X-01-$kind-r1.txt"
   missing=""
   [[ $pause_text == *"your standing rules"* && $pause_text != *"Outcome"* ]] || missing+=" hook-text"
@@ -134,5 +136,9 @@ for kind in impl fix gate; do
   if grep -Eo '[0-9]+k\b' "$brief"; then missing+=" context-figure"; fi
   if [ -z "$missing" ]; then echo "ok   brief-contract $kind"; else echo "FAIL brief-contract $kind:$missing"; fail=1; fi
 done
+echo "Objective: run." | "$here/../scripts/bees-brief" --work "$TMP/plan.work" --units X-01 --kind run >/dev/null
+brief="$TMP/plan.work/brief-X-01-run-r1.txt"
+if [ "$(tail -n +2 "$brief" | sed '1,/^$/d')" == "$(cat "$here/../../codex-implementor/templates/run-contract.md")" ] && ! grep -q "When the context hook tells you to pause" "$brief"; then
+  echo "ok   brief-contract run is the shared run contract"; else echo "FAIL brief-contract run"; fail=1; fi
 
 exit $fail

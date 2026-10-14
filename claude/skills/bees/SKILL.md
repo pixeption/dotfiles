@@ -174,7 +174,7 @@ Conflicts: RenderGoldenTests belongs to the unit re-taking render goldens: leave
 EOF
 ```
 
-`--kind` is `impl`, `fix`, `review`, `recheck`, `advise`, `gate`, `plan-brief` or `plan-expand`;
+`--kind` is `impl`, `fix`, `review`, `recheck`, `advise`, `run`, `plan-brief` or `plan-expand`;
 a fix unit is briefed as "Fixes" says. **Read `reference/briefs.md`** for any other kind, light mode, a codex
 or scout brief, a blocker or a question for the owner.
 
@@ -261,8 +261,8 @@ already written the fix, so a finding is never a checklist row, a planner brief 
   review included. It goes to any free lane, never back to the original lane for its context.
 - **Run.** Branch from the target's tip, not the reviewed commit, so the fix is tested against the
   code it lands on: `reuse <lane> --unit <item>-fix<n> --base <target tip> --target <target>`, then
-  `bees-brief --kind fix --plan <plan> --units <item>` (the item's section supplies the filter),
-  stdin naming the Fixes lines, the review file and the finding ids. The implementor applies the
+  `bees-brief --kind fix --work <plan>.work --units <item>-fix<n>`, stdin carrying `Fixes:` (the
+  lines), `Review:` (the review file and finding ids) and `Filter:` (the item's filter). The implementor applies the
   fixes and runs the item's filter and each finding's fail-before.
 - **Recheck.** Once the implementor has handed back (the lane is idle, so the tree is quiescent),
   codex `--kind recheck` on the lane's `git diff <base>..HEAD`, out-file
