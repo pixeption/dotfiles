@@ -30,20 +30,20 @@
 
 One rule for both vendors (SKILL.md "Rules", the session budget), plus each vendor's cache clock:
 
-| | `bee-opus-*`, `bee-sonnet-medium`, `bee-haiku-runner` | `bee-reviewer`, an advisor (`bee-opus-high`) | `bee-scout` | codex session |
+| | `bee-opus-*` | an advisor (`bee-opus-high`) | `bee-scout` | codex session |
 |---|---|---|---|---|
-| units per brief | one | one unit's diff / question | none (one question) | one |
-| units per session | as many as fit under the context lines below | one unit + rechecks | one question, then retired | one unit + follow-up rounds |
+| units per brief | one | one unit's question | none (one question) | one |
+| units per session | as many as fit under the context lines below | one unit + follow-ups | one question, then retired | one unit + follow-up rounds |
 | continue freely below | 100k | 100k | never continued | 100k (`.usage` `context_tokens`); a review session 120k, 150k for a follow-up (`codex-review` "One session for the whole loop") |
 | finish the current round below | 250k | 250k | — | 250k |
 | **no new brief at or past** | **100k** | **100k** | any — spawn a new scout | **100k** (review: 120k / 150k), or any other directory |
 | **cache warm for** | **5 min** idle | **5 min** idle | irrelevant | **30 min** idle |
 | resumable after the cache | one cold turn | one cold turn | — | OpenCode: any time, same `--dir`, one cold turn · CLI: never |
-| warned at | 200k (hook) | 200k (the advisor's hook; the unhooked reviewer's own reading) | — | — |
-| **agent self-pauses at** | **250k (hook)**; `bee-haiku-runner` below its window | **250k**, returning the unfinished round (its standing rules) | reports `Needs diagnosis` at ~100k | — |
+| warned at | 200k (hook) | 200k (the advisor's hook) | — | — |
+| **agent self-pauses at** | **250k (hook)** | **250k**, returning the unfinished round (its standing rules) | reports `Needs diagnosis` at ~100k | — |
 
 **A smaller window or a coming compaction pauses earlier.** An agent pauses before its model window
-fills (`bee-haiku-runner`'s hook lines sit below its window) and before a compaction it can see
+fills and before a compaction it can see
 coming. A compacted session — Claude, or OpenCode's summary at ~270k, flagged by a `compacted` key
 in `.usage` and the wrapper's stderr line — counts as freshly spawned for recall whatever its new
 size: record the smaller `context_tokens` as-is (codex-implementor's `extract-opencode-usage`).

@@ -27,8 +27,8 @@ The **codex CLI** (`scripts/codex-review`, `codex exec --sandbox read-only`) is 
 when the server won't start: codex-implementor's
 [`reference/codex-cli.md`](../codex-implementor/reference/codex-cli.md).
 
-A round that fails on a usage limit (429, limit reached) → the review goes to `bee-reviewer`
-(scores 1, 2, 3, 5), per bees `reference/review.md`.
+A round that fails on a usage limit (429, limit reached) → the review is skipped and logged
+`review: skipped, codex unavailable`, per bees `reference/review.md`.
 
 ## Run it
 

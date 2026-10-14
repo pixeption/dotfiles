@@ -100,11 +100,11 @@ that produced it. Never send transcripts or source dumps.
 
 ```text
 - [ ] Read the report and the diff.
-- [ ] Re-run the acceptance suite once yourself (or hand it to a bee-sonnet-medium holding the
+- [ ] Re-run the acceptance suite once yourself (or as a codex run holding the
       resource): a blind-worktree diff is unverified until compiled in a lane; an in-place
       report is checked, not trusted.
 - [ ] Findings go back as the next round's prompt in the same session (-s).
-- [ ] Review: under bees, bee-reviewer (scores 1, 2, 3, 5).
+- [ ] Review: under bees, a separate codex-review session, logged as a same-vendor exception.
 - [ ] Land it: worktree → apply its commits/diff, then `git worktree remove`; in place → its
       commits are already on the branch.
 ```

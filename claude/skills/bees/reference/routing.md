@@ -1,8 +1,8 @@
 # Channels, validation and test levels
 
-Read when choosing a unit's channel (codex worktree or in place, Claude instead of codex), deciding
+Read when choosing a unit's channel (codex worktree or in place, codex instead of Claude), deciding
 who validates a codex diff or records a baseline, or running a check at a test level (a round's
-filter, the post-integrate check, a gate). SKILL.md "Routing" holds the scores and buckets.
+filter, the post-integrate check, a gate). SKILL.md "Routing" holds who does what by score.
 
 ## Contents
 
@@ -22,10 +22,9 @@ filter, the post-integrate check, a gate). SKILL.md "Routing" holds the scores a
   sub-agents holding one for units that edit or drive an editor, sub-agents for read-only work and the gate — is its
   `workspaces` skill "Who works where"; a lane is reused once its item is accepted and landed
   (`reference/review.md` "Once per unit").
-- **Claude instead of codex** only when the unit needs judgment a batch run cannot settle (a
-  screenshot read, a live Play-mode check), or its codex round failed on a usage limit (SKILL.md
-  "Routing"). Before routing for browser judgment, verify the assigned bee can open the target
-  with a browser tool; otherwise make the live check an owner acceptance step.
+- **Codex instead of Claude** only on a Claude usage limit (SKILL.md "Routing"). Before routing
+  a Claude bee for browser judgment, verify it can open the target with a browser tool; otherwise
+  make the live check an owner acceptance step.
 
 ## Cost routing
 
@@ -34,8 +33,8 @@ filter, the post-integrate check, a gate). SKILL.md "Routing" holds the scores a
   when you need a fact, not a verdict. The saving is that the evidence lands in your context once,
   compact.
 - A codex unit's validation (compile, the fast lane) is part of its cost: do it
-  yourself when the diff is small, otherwise hand it to `bee-sonnet-medium` holding the resource.
-  A baseline before a unit whose acceptance compares against one goes to `bee-haiku-runner`.
+  yourself when the diff is small, otherwise it is a codex run holding the resource.
+  A baseline before a unit whose acceptance compares against one is a codex run.
 - **Three test levels, each run once at its boundary**, so verification is not repeated within a level:
   - *Round* — the bee, holding its lane: the item's test filter and any red run the fail-before rule requires, its own and
     its callers' test classes, once at the end of the round
@@ -44,8 +43,8 @@ filter, the post-integrate check, a gate). SKILL.md "Routing" holds the scores a
     item's filter only.
   - *Gate* — each GATE row (`plan` skill "Review, landing and the gate"): the full suites on its
     target SHA, holding `test-shards`, and `integration` only while it copies that SHA
-    (`workspaces` "Integrate a lane"), on a `bee-haiku-runner`, because it outlasts the 5-minute
-    cache clock and a cold turn is cheapest on Haiku and keeps the run out of your context.
+    (`workspaces` "Integrate a lane"), as a codex run, because it outlasts a Claude sub-agent's
+    5-minute cache clock and keeps the run out of your context.
   At any level a GameCore run selecting more than one Integration test borrows the test shards
   (`workspaces` "Borrow the test shards"); Game runs in one editor, since its `file:` packages
   cannot shard. Every run records the SHA or worktree it tested, the command, the filter and the

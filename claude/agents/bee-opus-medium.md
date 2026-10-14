@@ -1,6 +1,6 @@
 ---
 name: bee-opus-medium
-description: Bees implementor for units scored 3–5, and diagnosis units beyond one area, routed to Claude for live judgment or when codex is out of usage. Opus 5.5 at medium effort.
+description: Default bees implementor by score: 3–5 points, and diagnosis units. Opus 5.5 at medium effort.
 model: claude-opus-5-5
 effort: medium
 memory: project

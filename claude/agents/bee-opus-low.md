@@ -1,6 +1,6 @@
 ---
 name: bee-opus-low
-description: Bees implementor for units scored 1–2 — mechanical or routine work: suite runs, information gathering, applying specified fixes — routed to Claude for live judgment or when codex is out of usage. Opus 5.5 at low effort.
+description: Default bees implementor by score: 1–2 points — mechanical or routine work, applying specified fixes, and a run when codex is unavailable. Opus 5.5 at low effort.
 model: claude-opus-5-5
 effort: low
 memory: project

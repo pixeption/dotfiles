@@ -4,15 +4,15 @@ Read before briefing any reviewer or choosing one.
 
 ## Pairing
 
-The reviewer is the **other vendor** from the implementor, so no model checks its own habits:
+The reviewer is codex, so no model checks its own habits:
 
 | implementor | reviewer | slot |
 |---|---|---|
-| Claude (`bee-opus-*`, `bee-sonnet-medium`) | codex via `codex-review` (`opencode-review -m openai/gpt-6.1-sol-fast -e medium`, CLI fallback) | one (background) |
-| codex | `bee-reviewer` | one |
+| Claude (`bee-opus-*`) | codex via `codex-review` (`opencode-review -m openai/gpt-6.1-sol-fast -e medium`, CLI fallback) | one (background) |
+| codex (fallback on a Claude usage limit) | a separate codex `codex-review` session, logged as a same-vendor exception | one |
 
-When a codex review round fails on a usage limit (429, limit reached), the review goes to the Claude reviewer for its score, and a
-log line says so.
+When codex is unavailable (both channels down or a usage limit), the review is skipped and logged
+`review: skipped, codex unavailable`.
 
 ## Once per unit
 
@@ -64,7 +64,6 @@ Log either as `review: orchestrator inspection`; a clean inspection closes the l
 else, including a fix that departs from the reviewer's fix text, goes to the reviewer.
 
 There is no round cap. For codex, a clean recheck advances to the holistic final pass
-`codex-review` requires, whose `APPROVE` closes the loop; for a Claude reviewer, a clean recheck
-closes it. The **churn check** ends either loop early: a finding regressed twice, or new findings
+`codex-review` requires, whose `APPROVE` closes the loop. The **churn check** ends either loop early: a finding regressed twice, or new findings
 outnumbering closed ones two rounds running, is a structural problem — stop, report, and re-plan
 the unit rather than queue another fix round.

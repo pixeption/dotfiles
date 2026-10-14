@@ -1,7 +1,7 @@
 ---
 name: bees
 description: >-
-  Orchestrates multi-agent development: scores units, routes each to a codex or Claude cost bucket, pairs it with a cross-vendor reviewer and keeps state in committed plan files. Use when the user asks to delegate or orchestrate coding work across agents, run a plan with bees, or says "bees".
+  Orchestrates multi-agent development: scores units, routes implementation to Claude bees by score, review and long command runs to codex, and keeps state in committed plan files. Use when the user asks to delegate or orchestrate coding work across agents, run a plan with bees, or says "bees".
 hooks:
   PostToolUse:
     - hooks:
@@ -26,9 +26,9 @@ from score, route, dependencies and status; open a unit's section
 (`sed -En '/^### <unit> ·/,/^#{1,3} /p'`) only when a decision, blocker or finding turns on it — it
 is its implementor's to read.
 
-Nothing is asked per plan; the owner rules in its status file override the defaults (buckets by
-score, codex preferred, in place in a lane when it drives an editor; review cross-vendor, once per
-item before it lands) and these **standing owner rules**: a decision with a recommendation takes
+Nothing is asked per plan; the owner rules in its status file override the defaults (Claude
+implements by score, codex reviews and runs long commands, in place in a lane when it drives an
+editor; review once per item before it lands) and these **standing owner rules**: a decision with a recommendation takes
 it — except a change to an approved brief, which goes to a `Blocked` `owner:` line; a question for the owner during
 execution goes to the advisors first ([`reference/briefs.md`](reference/briefs.md) "Blocker cap and
 consults"); an expansion needs no owner approval; parallelise items eligible under the `plan`
@@ -42,8 +42,8 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
 
 1. **You own decisions**: goal, expansion, decomposition, scoring, routing, resources, evaluating
    results, blockers, acceptance.
-2. **Six concurrent agents and four lanes, hard caps, both vendors** — every agent (codex,
-   reviewer, scout, runner, advisor) counts, being one more event stream you absorb; at most
+2. **Six concurrent agents and four lanes, hard caps, both vendors** — every agent (Claude
+   bee, codex review or run, scout, advisor) counts, being one more event stream you absorb; at most
    four hold a lane; a seventh or a fifth lane unit waits; only the user changes the caps.
    Briefs say "do not spawn sub-agents". Start with up to four lane implementors plus two review or
    scout slots (lanes share the Unity host cap, `workspaces` skill); a scout runs in a free slot
@@ -66,10 +66,9 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
    `-s` (the `bees-budget` and `opencode-budget` mods enforce it); read `reference/budgets.md`
    before any continue-or-spawn decision.
 5. **Evidence, not claims**: a suite count, a real run, a byte-identity check. A blind-worktree
-   codex diff is unverified until you or a `bee-sonnet-medium` holding the resource compile and
-   test it; codex in place with the editor card verifies itself. **No report, no commit**: a Unity
-   test run with no XML this session leaves the tree dirty, `Blocked`, for you to validate; other
-   verification records each command, exit status and result. A suite count counts only beside its
+   codex diff is unverified until a codex run in the resource compiles and tests it; codex in
+   place with the editor card verifies itself. **No report, no commit**: a Unity test run with no
+   XML this session leaves the tree dirty, `Blocked`, for you to validate; other verification records each command, exit status and result. A suite count counts only beside its
    `report: … · finished <HH:MM>` line, timed to the round — never open the XML.
 6. **A background task is inspected, never waited on** ("Watching rounds").
 7. **Review once per item, after its build, on the lane before it lands**, in proportion to risk,
@@ -93,35 +92,33 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
 ## Routing
 
 Each item carries its `plan` skill score, 1, 2, 3 or 5: an 8 or 13 was split at planning and never
-reaches a bucket. A fix round scores the findings it closes: a reviewer's exact fixes are a 1; a
+reaches routing. A fix round scores the findings it closes: a reviewer's exact fixes are a 1; a
 finding of unknown cause is a diagnosis first.
 
 An item you cannot score is a **diagnosis** unit: read-only, it judges causes, usually runs
-something, and returns the split and real scores — in one area unscored work for
-`bee-sonnet-medium`, broader a scored 3. A **scout** (`bee-scout`) answers one enumerable question —
-callers, writers, call path, tests, owners, evidence in a log — with no points and no judgment: if
-you can write the report's headings before spawning, scout; if the answer needs *why* or *which*,
-diagnosis. A question that needs a run goes to `bee-haiku-runner` when the brief can name the
-commands and the answer is their raw output, else to `bee-sonnet-medium`.
+something, and returns the split and real scores. If you can write the report's headings before
+spawning, it is a scout; if the answer needs *why* or *which*, a diagnosis.
 
 A unit taking a pipeline where no committed consumer has gone gets a **path map** first
 (plan-lifecycle "Path maps").
 
-**Buckets** — codex is `codex-implementor` with `-m openai/gpt-6.1-sol-fast` and the row's `-e`:
-
-| scores | codex (preferred) | Claude (needs live judgment, or a codex round hit a usage limit) |
-|---|---|---|
-| 1 2 | `-e medium` | `bee-opus-low` |
-| 3 | `-e medium` | `bee-opus-medium` |
-| 5 | `-e high` | `bee-opus-medium` |
-| support, no points | — | `bee-haiku-runner`, `bee-sonnet-medium` (above) |
+1. **Implement or fix**: a Claude bee, `bee-opus-low` for 1–2 points, `bee-opus-medium` for 3–5.
+   It runs its own item filter inside its round.
+2. **Review and recheck**: codex via `codex-review`, `-e medium`, `-e high` for a 5.
+3. **Every run you order** — a baseline, a gate's suites, a render batch, a codex diff's
+   validation — goes to a codex runner session through `codex-implementor` with the commands, and
+   returns their results, because a Claude sub-agent's 5-minute cache expires while it waits.
+4. **A fact** before a decision: `bee-scout`. **A cause** before a score: a diagnosis by
+   `bee-opus-medium`. **A decision**: `bee-opus-high`, then codex `-e high`. Your judgment picks.
+5. **Codex unavailable** (both channels down or a usage limit): the review is skipped and logged
+   `review: skipped, codex unavailable`; a run goes to a `bee-opus-low`. **A Claude usage limit**
+   sends implementation to codex (`codex-implementor`, in place in the lane), reviewed by a
+   separate codex session and logged as a same-vendor exception.
 
 Model and effort live in the agent files and wrapper flags — **never pass `model:` on the Agent
-call**. **Usage limits**: no usage check runs before a round; a codex round failing on one (429)
-goes to its bucket's Claude column, same score, its review to the Claude reviewer, logged (`[G1]
-decision: codex 429 → bee-opus-medium`); OpenCode's `cost: 0` is not spend, its tokens serve the
-budget rule only. Channels, Claude instead of codex, validation and the three test levels
-(round, post-integrate, gate): [`reference/routing.md`](reference/routing.md).
+call**. No usage check runs before a round; OpenCode's `cost: 0` is not spend, its tokens serve the
+budget rule only. Channels, validation and the three test levels (round, post-integrate, gate):
+[`reference/routing.md`](reference/routing.md).
 
 Fold a confirmation into the next real brief, but send a ready brief now, inside the cache clock.
 Stop starting units at ~80% of the known spend budget; a cut-off never finds an agent mid-editor.
@@ -131,7 +128,7 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
 ```text
 - [ ] 1–4. Plan the row (plan-lifecycle "Planning a row"): brief draft → brief review (owner)
          → expand → plan review → `ready`. Draft the next row's brief while the current runs.
-- [ ] 5. Run: score and bucket ("Routing"), mode (plan-lifecycle "Choose the mode"); a scout,
+- [ ] 5. Run: score and route ("Routing"), mode (plan-lifecycle "Choose the mode"); a scout,
          diagnosis or path map only for a decision you must make first; roster resources →
          holders → slots → order; delegate, continue or spawn (reference/budgets.md).
 - [ ] 6. Each hand-back: evaluate; review the item on its lane (reference/review.md), fix,
@@ -249,7 +246,7 @@ for dependencies; numbers on the unit's line.
 | turn | say | length |
 |---|---|---|
 | waiting | `Waiting on codex (G1 round 3, log growing) and slot 2 (B4).` | 1 line |
-| agent reported | unit (pts · bucket · who) · outcome · commit/suite · one clause · continued or retired, why | 2–3 lines |
+| agent reported | unit (pts · route · who) · outcome · commit/suite · one clause · continued or retired, why | 2–3 lines |
 | quiet round | what `bees-watch` found, what you did | 1–2 lines |
 | decision or blocker | only one the advisors could not decide, now a `Blocked` `owner:` line: question, options with cost (scope: units and plans), recommendation | ≤ 6 lines |
 | pause or end | changed rows, `Next`, uncommitted state | ≤ 10 lines |

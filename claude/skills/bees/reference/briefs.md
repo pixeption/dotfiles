@@ -62,7 +62,7 @@ dispatch because the bee only claims it.
   An implementor treats the item's score as an estimate and never re-sizes it
   (`templates/standing-rules-implementor.txt`).
 - A `--plan` unit without a `### <ID> · ` section fails the run, so every pointer resolves.
-- A gate a `bee-sonnet-medium` runs is `--kind gate --units GATE-<n>`: no plan section,
+- A gate a codex runner session runs is `--kind gate --units GATE-<n>`: no plan section,
   implementor rules and return contract, so its report lands in a file like any other — a
   hand-written brief lacks the heredoc line, and the Write tool refuses subagent report files.
 - The brief points the agent at each unit's plan section as its acceptance, so write acceptance
@@ -115,8 +115,8 @@ The bee agent files carry only model and effort; every Claude brief carries its 
 
 | role | template |
 |---|---|
-| implementor (`bee-opus-*`, `bee-sonnet-medium`, `bee-haiku-runner`) | `~/.claude/skills/bees/templates/standing-rules-implementor.txt` |
-| reviewer (`bee-reviewer`) | `~/.claude/skills/bees/templates/standing-rules-reviewer.txt` |
+| implementor (`bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-implementor.txt` |
+| reviewer (`--kind review`, `--kind recheck`) | `~/.claude/skills/bees/templates/standing-rules-reviewer.txt` |
 | advisor (`--kind advise`: `bee-opus-high`, then Sol; "Blocker cap and consults") | `~/.claude/skills/bees/templates/standing-rules-advisor.txt` |
 | planner (`--kind plan-brief`, `--kind plan-expand`, a read-only `bee-opus-*`) | `~/.claude/skills/bees/templates/standing-rules-planner.txt` |
 

@@ -59,7 +59,6 @@ before handing the project on, and say so in the next brief:
 - Pausing: "stop at the next safe point (tree compiling, editor not in Play, isolation restored),
   report in five lines, then wait." A paused agent is warm for its cache clock (5 min Claude,
   30 min codex) and worth continuing under ~100k after it; past that, spawn from its handover.
-- A Claude reviewer waiting > ~30 min for a fix is retired; a fresh one rechecks from the findings
-  list and the fix diff. A codex reviewer's recheck resumes the same OpenCode session at any time;
+- A codex reviewer's recheck resumes the same OpenCode session at any time;
   only the CLI fallback has the 30-minute cliff, after which a fresh session with the findings list
   and the fix diff in the brief is cheaper than the cold re-read.

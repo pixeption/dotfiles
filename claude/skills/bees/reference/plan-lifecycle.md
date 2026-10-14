@@ -94,7 +94,7 @@ handoff resumes whichever of them is unfinished and never re-runs one already lo
 
 ### Triage
 
-1. Collect the plan's `gap:` lines (a `bee-haiku-runner` counts the log — never read it yourself,
+1. Collect the plan's `gap:` lines (a codex run counts the log — never read it yourself,
    SKILL.md rule 10). Any gap that came up twice becomes a row.
 2. Every `?` row gets one outcome: **close** (small, or a workaround — which alone never closes a
    gap whose summed cost is high; one Status line, row removed next triage), **fix** (kept for
@@ -114,7 +114,7 @@ started only by the owner.
 
 ### Retro
 
-The `bee-haiku-runner` counts the plan's log and you append one row per plan to
+A codex run counts the plan's log and you append one row per plan to
 `docs/plans/retro-numbers.md`: rounds per item by outcome, review passes per item, `docs(plans)`
 commits and item ids per item commit (`git log --first-parent --format=%s <from>..<to>`), fix rounds by a fresh bee vs the implementor, orchestrator `replan` log events, incomplete
 expansions and mid-run splits,
