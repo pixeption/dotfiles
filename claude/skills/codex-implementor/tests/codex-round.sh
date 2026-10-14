@@ -2,11 +2,12 @@
 # Offline test for codex-round's channel choice and completion contract. HOME, PATH and the ports
 # are private: a stub `opencode` (its `serve` exits, `run` replays $OC_LOG), a stub `codex` at
 # ~/.local/bin (resolve-codex's first choice; it answers per $CODEX_MODE) and a stub server
-# answering the preflight's and codex-round's GETs from $TMP/www. Never touches the real server.
+# answering the preflight's and codex-round's GETs and POSTs from $TMP/www (POSTs logged to
+# $TMP/www.posts); `stop` runs against fake rounds. Never touches the real server.
 set -uo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$here/../scripts/codex-round"
-TMP=$(mktemp -d); srv=""; stale=""; trap 'kill $srv $stale 2>/dev/null; rm -rf "$TMP"' EXIT
+TMP=$(mktemp -d); srv=""; stale=""; other=""; fakes=""; trap 'kill $srv $stale $other $fakes 2>/dev/null; rm -rf "$TMP"' EXIT
 export HOME="$TMP/home" PATH="$TMP/bin:$PATH" OPENCODE_ROUND_POLL=1
 mkdir -p "$TMP/bin" "$HOME/.local/bin" "$HOME/.codex/sessions" "$TMP/www" "$TMP/www-stale" "$TMP/srv" "$TMP/work" "$TMP/out" "$TMP/err"
 
@@ -41,6 +42,9 @@ class H(http.server.BaseHTTPRequestHandler):
         f = os.path.join(www, self.path.split("?")[0].strip("/").replace("/", "_"))
         body = open(f, "rb").read() if os.path.isfile(f) else None
         self.send_response(200 if body else 404); self.end_headers(); self.wfile.write(body or b"")
+    def do_POST(self):
+        open(www + ".posts", "a").write(self.path + "\n")
+        self.do_GET()
     def log_message(self, *a): pass
 s = http.server.HTTPServer(("127.0.0.1", int(sys.argv[3])), H)
 open(os.environ["PORTFILE"], "w").write(str(s.server_address[1]))
@@ -149,4 +153,31 @@ n=$((n + 1)); out="$TMP/out/r$n.txt"; echo keep > "$out"; export STUB_CALLS="$TM
 "$SCRIPT" implement -C "$TMP/work" -p "$TMP/prompt" -o "$out" --url "$dead" 2>/dev/null; code=$?
 if [ "$code" = 2 ] && [ "$(cat "$out")" = keep ] && ! called codex && ! called opencode
 then ok "existing out-file refused"; else bad "existing out-file refused" "exit $code"; fi
+# stop: fake rounds on a second stub server, so the recorded .url (not the default port) is used.
+gone() { local stat; ! stat="$(ps -o stat= -p "$1" 2>/dev/null)" || [[ $stat == Z* ]]; }
+fake_round() { # fake_round <out> <session> [--log]: a round process with a child and a grandchild
+  bash -c 'bash -c "sleep 300; :" & wait' 2>/dev/null & echo $! > "$1.pid"
+  printf '%s\n' "$TMP/work" > "$1.cwd"; printf '%s\n' "$stopurl" > "$1.url"
+  if [ "${3:-}" = --log ]; then jq -nc --arg s "$2" '{type: "step_start", sessionID: $s}' > "$1.log"; else echo "$2" > "$1.session"; fi
+  sleep 0.5; tree=("$(cat "$1.pid")"); tree+=($(pgrep -P "${tree[0]}")); tree+=($(pgrep -P "${tree[1]}"))
+  fakes="$fakes ${tree[*]}"
+}
+stop() { STUB_CALLS="$TMP/calls/stop" CODEX_ROUND_STOP_WAIT=1 "$SCRIPT" stop "$1" 2>"$TMP/err/stop"; }
+tree_gone() { local p; [ ${#tree[@]} = 3 ] || return 1; for p in "${tree[@]}"; do gone "$p" || return 1; done; }
+mkdir -p "$TMP/www-stop"; echo true > "$TMP/www-stop/session_ses_s_abort"; echo true > "$TMP/www-stop/session_ses_b_abort"
+echo '{"ses_b": {"type": "busy"}}' > "$TMP/www-stop/session_status"
+serve "$TMP/www-stop" "$TMP/port-stop" 0; stale="$stale $!"
+stopurl="http://127.0.0.1:$(cat "$TMP/port-stop")"
+sleep 300 & other=$!
+
+fake_round "$TMP/out/s1.txt" ses_s
+if stop "$TMP/out/s1.txt" && tree_gone && ! gone "$other" &&
+   grep -qix "/session/ses_s/abort?directory=$(jq -rn --arg d "$TMP/work" '$d | @uri')" "$TMP/www-stop.posts"
+then ok "stop aborts the session on its recorded server and ends the round's tree"; else bad "stop" "$(cat "$TMP/err/stop")"; fi
+fake_round "$TMP/out/s2.txt" ses_unknown --log
+if ! stop "$TMP/out/s2.txt" && grep -q "ses_unknown: the abort" "$TMP/err/stop" && tree_gone && ! gone "$other"
+then ok "stop of an unknown session fails"; else bad "stop of an unknown session" "$(cat "$TMP/err/stop")"; fi
+fake_round "$TMP/out/s3.txt" ses_b
+if ! stop "$TMP/out/s3.txt" && grep -q "ses_b still busy" "$TMP/err/stop"
+then ok "stop fails while the session stays busy"; else bad "stop with a busy session" "$(cat "$TMP/err/stop")"; fi
 exit $fail

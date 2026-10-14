@@ -28,6 +28,15 @@
 # bees-watch reads it as "finished".
 #
 # Exit 0 finished · 1 the round failed or was refused · 2 usage · 3 codex unavailable.
+#
+#   codex-round stop <out-file>
+#
+# Stops a running round by its files, never by a command pattern, which would hit every round's
+# client. OpenCode (the round has a .url): the session (.session, else the log's first sessionID)
+# is aborted on that server for the .cwd directory, then /session/status must stop reading it busy
+# within CODEX_ROUND_STOP_WAIT seconds (30). Then the process tree rooted at .pid is terminated,
+# deepest first, the root last. Exit 0 only when the session is idle and every process of the tree
+# has exited; else 1, naming what remains · 2 no round at <out-file>.
 set -uo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -35,7 +44,48 @@ here="$(cd "$(dirname "$0")" && pwd)"
 say() { echo "codex-round: $*" >&2; }
 die() { say "$2"; exit "$1"; }
 
+session_idle() { # session_idle <url> <directory> <session>
+  curl -sfG -m 10 "$1/session/status" --data-urlencode "directory=$2" 2>/dev/null |
+    jq -e --arg s "$3" 'type == "object" and (.[$s].type // "idle") == "idle"' >/dev/null 2>&1
+}
+descendants() { # descendants <pid>: every descendant process, deepest first
+  ps -A -o pid= -o ppid= | awk -v root="$1" '
+    { parent[NR] = $2; pid[NR] = $1 }
+    END { n = 1; tree[1] = root
+          for (i = 1; i <= n; i++) for (j = 1; j <= NR; j++) if (parent[j] == tree[i]) tree[++n] = pid[j]
+          for (i = n; i > 1; i--) print tree[i] }'
+}
+alive() { local stat; stat="$(ps -o stat= -p "$1" 2>/dev/null)" && [[ $stat != Z* ]]; }
+terminate() { # TERM, then KILL after 5 s
+  kill -TERM "$1" 2>/dev/null
+  for _ in $(seq 50); do alive "$1" || return 0; sleep 0.1; done
+  kill -KILL "$1" 2>/dev/null; sleep 0.2
+}
+stop_round() {
+  local out=$1 root sid url cwd p tree=() left=()
+  [ -s "$out.pid" ] || die 2 "no round at $out (no $out.pid)"
+  root="$(cat "$out.pid")"
+  if [ -s "$out.url" ]; then
+    url="$(cat "$out.url")"; cwd="$(cat "$out.cwd" 2>/dev/null)"
+    sid="$(cat "$out.session" 2>/dev/null)"
+    [ -n "$sid" ] || sid="$(jq -Rr 'fromjson? | .sessionID // empty' "$out.log" 2>/dev/null | head -1)"
+    if [ -z "$sid" ]; then left+=("no session recorded for the round")
+    elif ! abort_session "$url" "$sid" "$cwd"; then left+=("session $sid: the abort on $url failed")
+    else
+      for _ in $(seq "${CODEX_ROUND_STOP_WAIT:-30}"); do session_idle "$url" "$cwd" "$sid" && break; sleep 1; done
+      session_idle "$url" "$cwd" "$sid" || left+=("session $sid still busy on $url")
+    fi
+  fi
+  if alive "$root"; then tree=($(descendants "$root") "$root"); fi
+  for p in ${tree[@]+"${tree[@]}"}; do terminate "$p"; done
+  for p in ${tree[@]+"${tree[@]}"}; do alive "$p" && left+=("process $p still running"); done
+  [ ${#left[@]} = 0 ] || { for p in "${left[@]}"; do say "stop $out: $p"; done; exit 1; }
+  say "stopped $out${sid:+ (session $sid idle)}; ${#tree[@]} process(es) ended"
+  exit 0
+}
+
 job="${1:-}"; [ $# = 0 ] || shift
+[ "$job" != stop ] || { [ $# = 1 ] || die 2 "usage: codex-round stop <out-file>"; stop_round "$1"; }
 case "$job" in
   implement|run|review|advise) ;;
   -h|--help) grep '^#' "$0" | sed '1d; s/^# \{0,1\}//'; exit 0 ;;

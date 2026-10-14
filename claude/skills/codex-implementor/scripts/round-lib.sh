@@ -18,6 +18,20 @@ ends_in_verdict() {
   [ "$(grep -v '^[[:space:]]*$' "$1" | tail -n 1)" = "$v" ] || printf '\n%s\n' "$v" >> "$1"
 }
 
+# A POST to the server whose reply is `true`.
+post_ok() {
+  local reply
+  reply="$(curl -sf -m 10 -X POST "$@" 2>/dev/null)" || return 1
+  [ "$reply" = true ]
+}
+# abort_session <url> <session> <dir>... — /session/<id>/abort is scoped per directory, so each
+# spelling of the round's directory is tried until one answers true.
+abort_session() {
+  local url=$1 sid=$2 d; shift 2
+  for d in "$@"; do post_ok -G "${url}/session/${sid}/abort" --data-urlencode "directory=$d" && return 0; done
+  return 1
+}
+
 # write_blocked <out-file> <Blocked: reason> [unit]... — the reason, the partial answer without BEES
 # lines, and `BEES: results=<unit>:blocked:-` per unit, so a failed round never reads as done.
 write_blocked() {

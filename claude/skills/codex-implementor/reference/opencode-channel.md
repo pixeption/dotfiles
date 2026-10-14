@@ -56,8 +56,9 @@ config, Unity and temp directories allowed; bash denies `git reset --hard`, `git
 <path>`, `git stash`, `git clean`, force push and `rm -rf` on root/home. If a unit reports a denied
 path it legitimately needed, the owner widens the fence; the unit never works around it. After an
 edit, `opencode-preflight` restarts an idle server itself, as it does one whose resident memory
-passes `--max-rss-mb` (default 1024: the server keeps every session it has served on its heap); by
-hand, `pkill -f "opencode serve"` when no session is busy.
+passes `--max-rss-mb` (default 4096: the server keeps every session it has served on its heap); a
+busy server over the cap only gets a warning. `opencode-preflight --stop` stops the server when no
+session is busy and no client is attached, and exits 1 naming why otherwise.
 
 ## Running a round: flags and files
 
@@ -107,8 +108,9 @@ that point as a summary: reopen source before trusting an exact claim or citatio
   `~/.claude/skills/bees/scripts/bees-watch <out-file>`; bees `reference/watching.md` lists its
   flags and what to do for each. `quiet but BUSY (model stream …)` is left alone:
   `opencode-round` fails the round itself (`Blocked: the model stream stalled`) after
-  `OPENCODE_ROUND_STALL_MIN` (15) minutes unchanged, and it is resumed with `-s`. `STALE` → `pkill
-  -f "opencode run"` and resume the session.
+  `OPENCODE_ROUND_STALL_MIN` (15) minutes unchanged, and it is resumed with `-s`. `STALE` →
+  `codex-round stop <out-file>` (aborts the session, ends that round's processes only) and resume
+  the session.
 - `scripts/opencode-activity` prints what a session's latest message is doing (`tool` or
   `stream <n>`) when checking by hand. `/session/status` is scoped per directory: pass
   `?directory=<the round's .cwd>`, or a busy session in another directory reads as idle.

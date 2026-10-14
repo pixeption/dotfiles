@@ -52,18 +52,9 @@ pending_ask() {
         else error("not a list") end' 2>/dev/null || return 1
   done
 }
-post_ok() {
-  local reply
-  reply="$(curl -sf -m 10 -X POST "$@" 2>/dev/null)" || return 1
-  [ "$reply" = true ]
-}
 reject() {
   post_ok "${url}/permission/$(jq -r '"\(.id)/reply?directory=\(.directory | @uri)"' <<<"$1")" \
     -H 'content-type: application/json' -d '{"reply":"reject","message":"headless run: outside the fence"}'
-}
-abort_session() {
-  for d in "${dirs[@]}"; do post_ok -G "${url}/session/$1/abort" --data-urlencode "directory=$d" && return 0; done
-  return 1
 }
 
 poll="${OPENCODE_ROUND_POLL:-15}"; stall_min="${OPENCODE_ROUND_STALL_MIN:-15}"
@@ -97,12 +88,12 @@ while kill -0 "$runpid" 2>/dev/null; do
     reject "$ask" || unsafe="Rejecting the ask failed"
   elif stalled "$sid"; then
     blocked="Blocked: the model stream stalled — no output and no tool running for ${stall_min} min."
-    abort_session "$sid" && blocked="$blocked Session aborted; resume it with -s." || unsafe="Aborting the stalled stream failed"
+    abort_session "$url" "$sid" "${dirs[@]}" && blocked="$blocked Session aborted; resume it with -s." || unsafe="Aborting the stalled stream failed"
   else
     continue
   fi
   if [ -n "$unsafe" ]; then
-    abort_session "$sid" && unsafe="$unsafe; session aborted" || unsafe="$unsafe; session ${sid} is still pending on the server — do not resume it"
+    abort_session "$url" "$sid" "${dirs[@]}" && unsafe="$unsafe; session aborted" || unsafe="$unsafe; session ${sid} is still pending on the server — do not resume it"
     blocked="${blocked:-Blocked:} $unsafe."
   fi
   kill "$runpid" 2>/dev/null

@@ -7,7 +7,8 @@ only, so a long-running server can lack the fence, lack a newly allowed director
 model the wrapper asks for (a stale catalogue: `ProviderModelNotFoundError`, 2026-09-24).
 
   opencode-preflight -m <provider/model> -C <dir> [--repo <dir>]... [--url http://127.0.0.1:4096]
-                     [--port 4096] [--serverlog <file>] [--no-restart] [--max-rss-mb 1024]
+                     [--port 4096] [--serverlog <file>] [--no-restart] [--max-rss-mb 4096]
+  opencode-preflight --stop [--url http://127.0.0.1:4096] [--port 4096]
 
 Checks, against the live server:
   fence  /config has a permission.external_directory block
@@ -18,7 +19,11 @@ Checks, against the live server:
          on its JavaScript heap, so a week-old server reaches gigabytes)
 A server that is down is started. A failed check restarts it only when no `opencode run`/`attach`
 process names its port and no session in any directory is busy, then checks again; a busy server,
-or one whose sessions cannot be listed, is never restarted. Success prints one line naming the
+or one whose sessions cannot be listed, is never restarted. Memory alone never refuses a round: a
+busy server over the cap (or one under --no-restart) gets a warning and exit 0, so parallel rounds
+do not serialise on it; fence, path and model findings on a busy server still exit 1.
+--stop stops `opencode serve --port <p>` only when it is idle by the same test, exit 1 naming why
+not; exit 0 when it stopped or was not running. Success prints one line naming the
 server state, the model and the repos checked against the fence. Exit 0 ok · 1 not fixed · 2 usage ·
 3 no server and it cannot be started (`opencode` missing, or `serve` exits or times out), which
 codex-round reads as "use the CLI channel"; a failed check stays 1 and is never bypassed.
@@ -79,14 +84,16 @@ def server_rss_mb(port):
     return sum(int(kb) for kb in rss.split()) // 1024
 
 
-def problems(url, model, workdir, repos, port, max_rss_mb):
+def over_memory(port, max_rss_mb):
+    rss = server_rss_mb(port)
+    return [f"the server holds {rss} MB resident, over --max-rss-mb {max_rss_mb}"] if rss > max_rss_mb else []
+
+
+def problems(url, model, workdir, repos):
     config = get(url, "/config")
     if config is None:
         return ["no server"]
     out = []
-    rss = server_rss_mb(port)
-    if rss > max_rss_mb:
-        out.append(f"the server holds {rss} MB resident, over --max-rss-mb {max_rss_mb}")
     fence = (config.get("permission") or {}).get("external_directory")
     if not isinstance(fence, dict):
         out.append("the server has no permission fence (external_directory) — every outside path would be an ask nobody answers")
@@ -120,8 +127,12 @@ def client_attached(port):
     return clients.returncode != 1
 
 
-def busy(url, port):
-    return client_attached(port) or session_busy(url)
+def busy_reason(url, port):
+    if client_attached(port):
+        return "a client is attached"
+    if session_busy(url):
+        return "a session is busy or its status is unreadable"
+    return None
 
 
 def wait(url, up, seconds):
@@ -152,18 +163,41 @@ def start(url, port, serverlog, unavailable_code=3):
     get(url, "/config") is not None or unavailable(f"server did not come up on {url}", unavailable_code)
 
 
+def kill_server(url, port):
+    subprocess.run(["pkill", "-f", f"opencode serve --port {port}( |$)"])
+    wait(url, False, 10) or fail(f"server at {url} did not stop (not started as 'opencode serve --port {port}'?) — stop it by hand")
+
+
+def stop_server(url, port):
+    if get(url, "/config") is None:
+        say(f"no server at {url}")
+        return 0
+    reason = busy_reason(url, port)
+    if reason:
+        fail(f"not stopping {url}: {reason}")
+    kill_server(url, port)
+    say(f"stopped the idle server at {url}")
+    return 0
+
+
 def main():
     a = argparse.ArgumentParser(prog="opencode-preflight")
-    a.add_argument("-m", "--model", required=True)
-    a.add_argument("-C", "--dir", required=True)
+    a.add_argument("--stop", action="store_true")
+    a.add_argument("-m", "--model")
+    a.add_argument("-C", "--dir")
     a.add_argument("--repo", action="append", default=[])
     a.add_argument("--url")
     a.add_argument("--port", default="4096")
     a.add_argument("--serverlog")
     a.add_argument("--no-restart", action="store_true")
-    a.add_argument("--max-rss-mb", type=int, default=1024)
+    a.add_argument("--max-rss-mb", type=int, default=4096)  # restarts a days-old server, not one mid-plan
     a = a.parse_args()
     url = a.url or f"http://127.0.0.1:{a.port}"
+    if a.stop:
+        return stop_server(url, a.port)
+    if not (a.model and a.dir):
+        say("need -m <provider/model> and -C <dir>, or --stop")
+        return 2
     workdir = os.path.realpath(a.dir)
     repos = set(a.repo)
     checked = " ".join(outside(workdir, repos)) or "no repo outside -C"
@@ -172,20 +206,25 @@ def main():
     if get(url, "/config") is None:
         start(url, a.port, a.serverlog)
         server = "started"
-    found = problems(url, a.model, workdir, repos, a.port, a.max_rss_mb)
-    if not found:
+    found = problems(url, a.model, workdir, repos)
+    memory = over_memory(a.port, a.max_rss_mb)
+    if not found and not memory:
         ok(server)
         return 0
-    if a.no_restart or busy(url, a.port):
-        for p in found:
+    reason = "--no-restart" if a.no_restart else busy_reason(url, a.port)
+    if reason and not found:
+        say(f"warning: {memory[0]} — not restarting: {reason}")
+        ok(server)
+        return 0
+    if reason:
+        for p in found + memory:
             say(p)
-        say("not restarting: " + ("--no-restart" if a.no_restart else "a session is busy, its status is unreadable, or a client is attached — let it finish, then re-run"))
+        say(f"not restarting: {reason} — let it finish, then re-run")
         return 1
-    say(f"{'; '.join(found)} — restarting the idle server")
-    subprocess.run(["pkill", "-f", f"opencode serve --port {a.port}( |$)"])
-    wait(url, False, 10) or fail(f"server at {url} did not stop (not started as 'opencode serve --port {a.port}'?) — restart it by hand")
+    say(f"{'; '.join(found + memory)} — restarting the idle server")
+    kill_server(url, a.port)
     start(url, a.port, a.serverlog, unavailable_code=1)
-    found = problems(url, a.model, workdir, repos, a.port, a.max_rss_mb)
+    found = problems(url, a.model, workdir, repos)
     for p in found:
         say(f"after restart: {p}")
     if found:
