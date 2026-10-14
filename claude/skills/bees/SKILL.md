@@ -28,7 +28,7 @@ is its implementor's to read.
 
 Nothing is asked per plan; the owner rules in its status file override the defaults (Claude
 implements by score, codex reviews and runs long commands, in place in a lane when it drives an
-editor; review once per item before it lands) and these **standing owner rules**: a decision with a recommendation takes
+editor; review once per item, of its landed commit) and these **standing owner rules**: a decision with a recommendation takes
 it — except a change to an approved brief, which goes to a `Blocked` `owner:` line; a question for the owner during
 execution goes to the advisors first ([`reference/briefs.md`](reference/briefs.md) "Blocker cap and
 consults"); an expansion needs no owner approval; parallelise items eligible under the `plan`
@@ -70,9 +70,9 @@ planning, mode or adoption passage for those, "Preflight" before the session's f
    XML this session leaves the tree dirty, `Blocked`, for you to validate; other verification records each command, exit status and result. A suite count counts only beside its
    `report: … · finished <HH:MM>` line, timed to the round — never open the XML.
 6. **A background task is inspected, never waited on** ("Watching rounds").
-7. **Review once per item, after its build, on the lane before it lands**, in proportion to risk,
-   until the recheck is clean; the churn check, not a round count, stops a loop that is not
-   converging (`reference/review.md`, read when choosing or briefing a reviewer).
+7. **Review once per item, of its landed commit, by codex in the background**: it holds no lane
+   and no editor, and its findings go to the status file's Fixes (`reference/review.md`, read when
+   choosing or briefing a reviewer).
 8. **State is two committed files per plan beside `<plan>.md`: `<plan>.status.md` and
    `<plan>.log.md`, nothing derived** (full mode; "Status and acceptance").
 9. **Delegate execution, including reading.** Inspect directly only when cheaper than a spawn: one
@@ -114,7 +114,7 @@ A unit taking a pipeline where no committed consumer has gone gets a **path map*
 
 Model and effort live in the agent files and wrapper flags — **never pass `model:` on the Agent
 call**. No usage check runs before a round; OpenCode's `cost: 0` is not spend, its tokens serve the
-budget rule only. Channels, validation and the three test levels (round, post-integrate, gate):
+budget rule only. Channels, validation and the test levels (round, gate):
 [`reference/routing.md`](reference/routing.md).
 
 Fold a confirmation into the next real brief, but send a ready brief now, inside the cache clock.
@@ -128,8 +128,8 @@ Stop starting units at ~80% of the known spend budget; a cut-off never finds an 
 - [ ] 5. Run: score and route ("Routing"), mode (plan-lifecycle "Choose the mode"); a scout,
          diagnosis or path map only for a decision you must make first; roster resources →
          holders → slots → order; delegate, continue or spawn (reference/budgets.md).
-- [ ] 6. Each hand-back: evaluate; review the item on its lane (reference/review.md), fix,
-         recheck; accept and land it ("Status and acceptance"); route every gap ("Intake"); one
+- [ ] 6. Each hand-back: evaluate; accept and land it, reuse its lane, start its review
+         ("Status and acceptance"); route every gap ("Intake"); one
          scheduling pass (a `ready` row or item with a free lane?); report. Only `owner:` lines
          in a status file wait on the owner, and during execution they gain only questions the
          advisors could not decide; nothing `ready` → report starvation and stop, never adding a
@@ -205,18 +205,25 @@ Full mode only. State is hand-written markdown committed with the plan, never on
 overwritten when they change, holding `unknown` for an unknown fact; Rules, this plan's owner
 rules, are edited in place. An unresolved owner question is a `Blocked` `owner:` line.
 
-**Accepting** an item: Status ✅ `<reviewed lane SHA> <count>`, and the
-log line `- <date '+%F %H:%M'> [<unit>] accept: <suite count, review verdict, reviewed lane SHA>`;
-then land it with `tools/workspace.sh land` — editors closed, claim released, plan, status file
-and log folded into the item's squash (flags: `workspaces` skill "Integrate a lane").
-**Post-integrate**, after every landing: hold `integration` and run the landed item's filter
-only, as background Bash; the full suites wait for the plan's gates. Finish before the next
-landing moves the target; a red target is the next lane unit, ahead of every other. Record tested
-SHA, command, filter and count. A GameCore filter selecting more than one Integration test borrows the test shards (`workspaces`
-"Borrow the test shards"); Game runs in one editor. It is target evidence, not acceptance.
+**Accepting** an item takes the hand-back's own `report: … · finished <HH:MM>` count (rule 5)
+for the item's whole filter, every fail-before and its Done when — none missing, none red. Then
+`tools/workspace.sh land <lane> --plan <plan> --log <log> --with <plan>.status.md --mark
+'<ID>=✅ <count>'` with the log line `- <date '+%F %H:%M'> [<ID>] accept: <count> green, <filter>,
+lane <lane sha>` (flags: `workspaces` skill "Integrate a lane"). From `land`'s printed
+`<old>..<new>`, write `<ID> · landed <new> · review <out-file>` in the status file's Now, and
+`reuse` the lane for its next unit at once.
+
+**The review** of the landed commit needs no lane and no editor:
+`git -C <repo> worktree add --detach <review dir> <new>` (nono4u `~/code/workspaces/review-<ID>`;
+a skill repo, a worktree of `~/.config`), then a `codex-review` with `-C <review dir>` over
+`git show <new>` minus the folded `docs/plans/<plan>.*` files, against the item's section,
+out-file `review-<ID>-r1.txt`, `run_in_background`. Nobody edits that worktree; remove it after
+the verdict. The verdict is the log line `[<ID>] review: <new> <clean | findings <ids> → Fixes>
+(review-<ID>-r1.txt)`, and the Now line goes. Codex unavailable → `review: skipped, codex
+unavailable`.
 
 The log keeps five kinds of line, nothing else: `accept`; `review` —
-`[<ID>] review: <reviewed sha> <verdict> (<report>)` or `[<ID>] review: skipped, codex unavailable`;
+`[<ID>] review: <landed sha> <verdict> (<report>)` or `[<ID>] review: skipped, codex unavailable`;
 `gate` — `[GATE-<n>] gate: <target sha> <commands> <counts> <green|red>`; `decision` — a change
 of plan or an owner answer (one still applying next session is also a Rules line); and `escape`.
 More than one line is a checklist row or plan section instead.

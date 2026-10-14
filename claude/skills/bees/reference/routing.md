@@ -2,7 +2,7 @@
 
 Read when choosing a unit's channel (codex worktree or in place, codex instead of Claude), deciding
 who validates a codex diff or records a baseline, or running a check at a test level (a round's
-filter, the post-integrate check, a gate). SKILL.md "Routing" holds who does what by score.
+filter, a gate). SKILL.md "Routing" holds who does what by score.
 
 ## Contents
 
@@ -34,12 +34,10 @@ filter, the post-integrate check, a gate). SKILL.md "Routing" holds who does wha
   compact.
 - A codex unit's validation (compile, the fast lane) is a codex run holding the resource, per SKILL.md "Routing".
   A baseline before a unit whose acceptance compares against one is a codex run.
-- **Three test levels, each run once at its boundary**, so verification is not repeated within a level:
+- **Two test levels, each run once at its boundary**, so verification is not repeated within a level:
   - *Round* — the bee, holding its lane: the item's test filter and any red run the fail-before rule requires, its own and
     its callers' test classes, once at the end of the round
     (`templates/standing-rules-implementor.txt`); never a full suite or another item's filter.
-  - *Post-integrate* — SKILL.md "Status and acceptance" owns the per-landing check: the landed
-    item's filter only.
   - *Gate* — each GATE row (`plan` skill "Review, landing and the gate"): the full suites on its
     target SHA, holding `test-shards`, and `integration` only while it copies that SHA
     (`workspaces` "Integrate a lane"), as a codex run, because it outlasts a Claude sub-agent's

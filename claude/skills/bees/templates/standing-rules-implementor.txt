@@ -26,8 +26,8 @@ reasoning (`asserts X; the old code yields Y at file:line`), because a Unity red
 extra recompiles. Run, once at the end of the round, the item's test filter — its own test classes
 and its callers', as the item's section names them, narrowed to your piece when the brief names one — with --filter,
 fast and Integration alike, and nothing else: never a full suite, a whole category or another
-item's filter, because the orchestrator reruns the filter in the post-integrate check after the
-item lands and runs the full suites at the plan's gates. A GameCore filter that selects more than
+item's filter, because the orchestrator lands the item on that filter's count and runs the full
+suites at the plan's gates. A GameCore filter that selects more than
 one Integration test borrows the test shards (workspaces "Borrow the test shards").
 No single command blocks for more than 270 s (Bash timeout < 300000), because past 5 idle minutes
 your prompt cache goes cold and the next turn re-writes your whole context: run anything longer in

@@ -19,12 +19,12 @@ When codex is unavailable (both channels down or a usage limit), the review is s
 | What | Review |
 |---|---|
 | Every expanded plan | one discovery round in plan-review mode, over all its items |
-| Every item | one review after its build, on its lane before it lands, then fix → recheck under `codex-review`'s contract |
+| Every item | one review of its landed commit after landing, in the background (SKILL.md "Status and acceptance"), then fix → recheck under `codex-review`'s contract |
 | A fix that applies the reviewer's exact fixes | orchestrator inspection ("Rechecks and the end of the loop") |
 | A production diff ≤ ~5 lines | orchestrator inspection (same) |
 
-Code reviews check the change against the item's brief and Tests. An item's acceptance records its filter
-and the review verdict for the reviewed lane SHA. A recheck is a fresh session pointed at the review
+Code reviews check the change against the item's brief and Tests. The reviewed SHA is the landed
+SHA, and its verdict is the item's `review:` log line. A recheck is a fresh session pointed at the review
 file whenever the first passed its review line (`codex-review` "One session for the whole loop").
 
 ## The review
@@ -32,8 +32,8 @@ file whenever the first passed its review line (`codex-review` "One session for 
 - A reviewer is fresh, read-only, holds no resource, never edits, and is never the implementor of
   the unit. Every Claude review brief carries the reviewer standing rules
   (`reference/briefs.md`).
-- It covers a **quiescent tree** and states the commit or diff hash reviewed; never while another
-  agent edits the same domain. Input: changed files, surrounding code, acceptance criteria,
+- It covers a **quiescent tree** — an item's is the detached worktree at its landed SHA — and
+  states the commit reviewed; never while another agent edits the same domain. Input: changed files, surrounding code, acceptance criteria,
   related tests.
 - Findings are one line each with a stable id (`MAJ-02 — sentence — file:line`), severity
   **Critical / Major / Minor / Nit**; only Critical/Major block, and each carries its **fix as
