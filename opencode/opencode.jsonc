@@ -1,5 +1,6 @@
 {
     "$schema": "https://opencode.ai/config.json",
+    "model": "openai/gpt-6.1-sol-fast",
     // Snapshots embed full file patches in every message.updated event, and Unity YAML assets
     // (TMP font SDFs) make each one megabytes; it bloated opencode.db to 4 GB. Runs use git anyway.
     "snapshot": false,

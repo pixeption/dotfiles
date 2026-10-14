@@ -8,7 +8,7 @@ The reviewer is the **other vendor** from the implementor, so no model checks it
 
 | implementor | reviewer | slot |
 |---|---|---|
-| Claude (`bee-opus-*`, `bee-sonnet-medium`) | codex via `codex-review` (`opencode-review -m openai/gpt-6.1-sol -e medium`, CLI fallback) | one (background) |
+| Claude (`bee-opus-*`, `bee-sonnet-medium`) | codex via `codex-review` (`opencode-review -m openai/gpt-6.1-sol-fast -e medium`, CLI fallback) | one (background) |
 | codex | `bee-reviewer` | one |
 
 When a codex review round fails on a usage limit (429, limit reached), the review goes to the Claude reviewer for its score, and a

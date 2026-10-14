@@ -75,7 +75,7 @@ turns every external directory into an unanswered ask, denies a newly allowed on
 model id that exists:
 
 ```sh
-~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-6.1-sol -C <repo the unit edits> --repo <each other repo the unit reads or edits>...
+~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-6.1-sol-fast -C <repo the unit edits> --repo <each other repo the unit reads or edits>...
 ```
 
 Exit 0 = the server is up, carries the fence, lists the model, and every `--repo` outside `-C` is

@@ -35,7 +35,7 @@ A round that fails on a usage limit (429, limit reached) → the review goes to 
 ```bash
 # round 1 — write the prompt to a file first ("Prompt shape")
 ~/.claude/skills/codex-review/scripts/opencode-review \
-  -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o "$W/review-<unit>-r1.txt"   # default openai/gpt-6.1-sol / medium
+  -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o "$W/review-<unit>-r1.txt"   # default openai/gpt-6.1-sol-fast / medium
 # follow-up and final pass — same session, --no-subagents
 ~/.claude/skills/codex-review/scripts/opencode-review \
   -C <repo> -p "$T/r2-prompt.txt" -u <unit> -o "$W/review-<unit>-r2.txt" \

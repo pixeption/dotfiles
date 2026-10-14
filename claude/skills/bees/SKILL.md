@@ -108,7 +108,7 @@ commands and the answer is their raw output, else to `bee-sonnet-medium`.
 A unit taking a pipeline where no committed consumer has gone gets a **path map** first
 (plan-lifecycle "Path maps").
 
-**Buckets** — codex is `codex-implementor` with `-m openai/gpt-6.1-sol` and the row's `-e`:
+**Buckets** — codex is `codex-implementor` with `-m openai/gpt-6.1-sol-fast` and the row's `-e`:
 
 | scores | codex (preferred) | Claude (needs live judgment, or a codex round hit a usage limit) |
 |---|---|---|

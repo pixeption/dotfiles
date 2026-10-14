@@ -156,7 +156,7 @@ changes the question. Otherwise, in order:
 
 1. An Opus 5.5 high advisor: `bee-opus-high`, read-only, `--kind advise`.
 2. If it cannot decide, a Sol high advisor on the same brief: `opencode-review -m
-   openai/gpt-6.1-sol -e high --no-subagents` in a fresh session (never `-s` into the implementor
+   openai/gpt-6.1-sol-fast -e high --no-subagents` in a fresh session (never `-s` into the implementor
    or review loop), out-file `review-<unit>-advice-r<N>.txt`, so `bees-watch --dir` sees it.
 3. If neither decides: one line in the queue's Owner list; the item is 🔴, its lane is released or
    handed to the next ready item, and other work continues.

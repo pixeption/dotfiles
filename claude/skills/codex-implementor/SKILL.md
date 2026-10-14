@@ -29,7 +29,7 @@ and a brief for another repo trips the fence instead of running.
 
 | model | id (opencode / codex) | default effort |
 |---|---|---|
-| sol **(default)** | `openai/gpt-6.1-sol` / `gpt-6.1-sol` | **medium** |
+| sol **(default)** | `openai/gpt-6.1-sol-fast` / `gpt-6.1-sol` | **medium** |
 | luna | `openai/gpt-6-luna` / `gpt-6-luna` | max |
 
 Default to sol at medium; raise `-e` only when capability changes the outcome. Effort → codex `-e`
