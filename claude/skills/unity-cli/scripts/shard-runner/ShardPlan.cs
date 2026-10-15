@@ -18,19 +18,24 @@ namespace UnitySuite
         }
 
         // Longest-processing-time packing of tests into `shards` bins. A fixture stays whole unless it
-        // alone outweighs a bin; an unseen test weighs the median. Every tie breaks by ordinal name,
+        // alone outweighs a bin. An unseen test weighs its fixture's mean, else the median: a new case
+        // of a slow parameterized fixture is as slow as its siblings. Every tie breaks by ordinal name,
         // so every shard computes the same, disjoint, covering split from the same inputs.
         public static List<string>[] Pack(IEnumerable<(string Name, string Fixture)> tests,
                                           IReadOnlyDictionary<string, double> durations, int shards)
         {
             var all = tests.OrderBy(t => t.Name, StringComparer.Ordinal).ToList();
-            var median = Median(all.Where(t => durations.ContainsKey(t.Name)).Select(t => durations[t.Name]));
-            double Weight(string name) => durations.TryGetValue(name, out var d) ? d : median;
+            var known = all.Where(t => durations.ContainsKey(t.Name)).ToList();
+            var median = Median(known.Select(t => durations[t.Name]));
+            var fixtureMean = known.GroupBy(t => t.Fixture, StringComparer.Ordinal)
+                .ToDictionary(f => f.Key, f => f.Average(t => durations[t.Name]), StringComparer.Ordinal);
+            double Weight((string Name, string Fixture) t) =>
+                durations.TryGetValue(t.Name, out var d) ? d : fixtureMean.TryGetValue(t.Fixture, out var mean) ? mean : median;
 
-            var bin = all.Sum(t => Weight(t.Name)) / shards;
+            var bin = all.Sum(Weight) / shards;
             var items = all.GroupBy(t => t.Fixture, StringComparer.Ordinal)
-                .SelectMany(f => Split(f.Select(t => t.Name).ToList(), Weight, bin))
-                .Select(names => (Names: names, Weight: names.Sum(Weight)))
+                .SelectMany(f => Split(f.ToList(), Weight, bin))
+                .Select(group => (Names: group.Select(t => t.Name).ToList(), Weight: group.Sum(Weight)))
                 .OrderByDescending(i => i.Weight).ThenBy(i => i.Names[0], StringComparer.Ordinal);
 
             var bins = Enumerable.Range(0, shards).Select(_ => new List<string>()).ToArray();
@@ -46,26 +51,26 @@ namespace UnitySuite
 
         // A fixture heavier than a bin becomes ceil(weight / bin) consecutive method groups of
         // about equal weight; any other fixture is one item.
-        private static IEnumerable<List<string>> Split(List<string> names, Func<string, double> weight, double bin)
+        private static IEnumerable<List<T>> Split<T>(List<T> tests, Func<T, double> weight, double bin)
         {
-            var total = names.Sum(weight);
+            var total = tests.Sum(weight);
             var groups = bin > 0 ? (int)Math.Ceiling(total / bin) : 1;
             if (groups <= 1)
             {
-                yield return names;
+                yield return tests;
                 yield break;
             }
-            var group = new List<string>();
+            var group = new List<T>();
             var done = 0.0;
             var made = 0;
-            foreach (var name in names)
+            foreach (var test in tests)
             {
-                group.Add(name);
-                done += weight(name);
+                group.Add(test);
+                done += weight(test);
                 if (made < groups - 1 && done >= total * (made + 1) / groups)
                 {
                     yield return group;
-                    group = new List<string>();
+                    group = new List<T>();
                     made++;
                 }
             }

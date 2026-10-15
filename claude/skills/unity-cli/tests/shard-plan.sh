@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Offline test for the shard runner's planner (scripts/shard-runner/ShardPlan.cs), compiled with
 # plain dotnet: the split is deterministic whatever the input order, disjoint, covers every test,
-# keeps a fixture lighter than a bin whole and splits one heavier than a bin; selection matches a
-# batch run's --filter and --category.
+# keeps a fixture lighter than a bin whole and splits one heavier than a bin, weighing an unseen test
+# at its fixture's mean; selection matches a batch run's --filter and --category.
 set -uo pipefail
 command -v dotnet >/dev/null || { echo "FAIL: dotnet not on PATH - install the .NET SDK"; exit 1; }
 PLAN="$(cd "$(dirname "$0")/.." && pwd)/scripts/shard-runner/ShardPlan.cs"
@@ -58,6 +58,11 @@ Check(BinsHolding(four, "Ns.Huge") > 1, "a fixture heavier than a bin is split")
 Check(Enumerable.Range(0, 30).All(f => BinsHolding(four, $"Ns.F{f:D2}") == 1), "a fixture lighter than a bin stays whole");
 var two = tests.Where(t => t.Name.EndsWith(".M1") && t.Fixture.CompareTo("Ns.F02") < 0);
 Check(ShardPlan.Pack(two, durations, 4).Count(b => b.Count == 0) == 2, "more shards than tests leaves bins empty");
+var slow = Enumerable.Range(0, 5).Select(m => ($"Ns.Slow.M{m}", "Ns.Slow"))
+    .Concat(Enumerable.Range(0, 30).Select(m => ($"Ns.Many.M{m:D2}", "Ns.Many"))).ToList();
+var slowDurations = slow.Where(t => t.Item2 == "Ns.Many" || t.Item1 == "Ns.Slow.M0")
+    .ToDictionary(t => t.Item1, t => t.Item2 == "Ns.Slow" ? 10.0 : 1.0);
+Check(BinsHolding(ShardPlan.Pack(slow, slowDurations, 2), "Ns.Slow") > 1, "an unseen test weighs its fixture's mean, not the median");
 var integration = new[] { "Integration" };
 Check(ShardPlan.Selected("Ns.Apply.M", integration, "Apply|Theme", "Integration"), "a test matching a filter term and the category is selected");
 Check(!ShardPlan.Selected("Ns.Seed.M", integration, "Apply|Theme", "Integration"), "a test matching no filter term is not");

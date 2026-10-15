@@ -323,8 +323,9 @@ budget, so the caller sizes N. What each run does, and why:
   `Assets/Editor/ShardRunner/`, excluded from the sync so it never recompiles. Each editor runs
   `-executeMethod UnitySuite.ShardRunner.Run -shard k/N`: it reads the current test list, packs it
   into N bins by fixture, longest first, weighted by `<dir>/timings.xml` (the last merged report;
-  an unseen test weighs the median), splits only a fixture heavier than a bin, breaks ties by name,
-  and runs bin k by exact name. Every shard computes the same disjoint, covering split. `unity
+  an unseen test weighs its fixture's mean, else the
+  median), splits only a fixture heavier than a bin, breaks ties by name, and runs bin k by exact
+  name. Every shard computes the same disjoint, covering split. `unity
   test --filter`/`--shard` cost ~50 s of filter parsing per shard; exact names cost nothing.
 - **`[Explicit]` tests are not run** (a name filter would run them) but are merged in as
   skipped, as a full run reports them.
