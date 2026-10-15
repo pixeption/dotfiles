@@ -2,8 +2,8 @@
 # Offline test for `unity-suite --shards`: a stub editor binary stands in for the shard runner. A
 # missing shard is seeded as a git checkout with the runner installed, mirroring the project's
 # outside file: packages and --mirror paths beside it, and its .claude/ mirrored; the shard reports and the
-# explicit tests merge into one report, cases sharing one reported name included, which also becomes the next run's -timings unless the run
-# was filtered; --filter and --category reach every shard. A duplicate
+# explicit tests merge into one report, cases sharing one reported name included, which also becomes the next run's -timings; a filtered
+# run merges its durations into them instead; --filter and --category reach every shard. A duplicate
 # test, a shard without a report, shards listing different tests, a crashed or hung shard editor, a
 # failed suite and an occupied shard fail the run; a shard killed at its timeout names the tests
 # it did not finish; stopping the run stops its editors.
@@ -54,7 +54,7 @@ tests=${tests//_GeneratedTestCase2/}
 
 suite=Passed; [[ $k == 1 && $STUB == suitefail ]] && suite='Failed" site="TearDown'
 { echo "<test-run duration=\"1\"><test-suite fullname=\"S$k\" result=\"$suite\"><failure><message>teardown threw</message></failure>"
-  for t in $tests; do echo "<test-case fullname=\"$t\" result=\"Passed\" duration=\"0.5\"/>"; done
+  for t in $tests; do echo "<test-case fullname=\"$t\" result=\"Passed\" duration=\"${DUR:-0.5}\"/>"; done
   echo '</test-suite></test-run>'; } >"$out"
 [[ $k == 2 && $STUB == crash ]] && exit 3
 [[ $k == 2 && $STUB == exit2 ]] && exit 2
@@ -98,12 +98,13 @@ done
 out=$(suite ok) || fail "repeat run without the project's .claude/"
 echo "ok   a missing .claude/ clears stale skills and supports subsequent runs"
 
-cp "$ROOT/timings.xml" "$TMP/timings.before"; rm "$TMP/args"
-out=$(suite ok --filter 'A|B' --category Integration) || fail "filtered run"
+sed -i '' 's|<test-case fullname="A.a"|<test-case fullname="Z.z" duration="7"/>&|' "$ROOT/timings.xml"; rm "$TMP/args"
+out=$(DUR=0.9 suite ok --filter 'A|B' --category Integration) || fail "filtered run"
 [[ $(grep -c -- "-shardFilter A|B -shardCategory Integration" "$TMP/args") == 2 ]] || fail "filter and category reach both shards"
-cmp -s "$ROOT/timings.xml" "$TMP/timings.before" || fail "a filtered run replaced the timings"
+grep -q 'fullname="Z.z" duration="7"' "$ROOT/timings.xml" && grep -q 'fullname="A.a" duration="0.9"' "$ROOT/timings.xml" \
+  || fail "a filtered run merges its durations into the timings"
 out=$(suite ok --category 'A || B'); [[ $? == 2 && $out == *"one --category"* ]] || fail "category expression refused"
-echo "ok   --filter and --category reach every shard, keep the full run's timings, and take one category"
+echo "ok   --filter and --category reach every shard, merge their durations into the timings, and take one category"
 
 out=$(suite ok --mirror ../outside); code=$?
 [[ $code == 2 && $out == *"is outside $TMP/src, the most a shard mirrors"* ]] || fail "mirror outside the parent (exit $code)"

@@ -304,7 +304,7 @@ rather than guessing from the exit code. Under the count line it prints
 **Sharded.** `unity-suite <project> --shards N --shard-root <dir> [--mirror <path>]... [--filter <A|B>]
 [--category <Name|!Name>] [--output <report.xml>]` runs the Edit-Mode suite, or the part `--filter` (a regex per term) and one
 `--category` select, in N batch editors at once, one per warm copy `<dir>/shard-<k>/<project name>`,
-and never touches `<project>` or its editor. A filtered run keeps the last full run's timings. It
+and never touches `<project>` or its editor. A filtered run merges its durations into the last full run's timings. It
 takes no `--mode`, `--assemblies` or `--failed-only`, and picks no N: one editor per shard counts against the host
 budget, so the caller sizes N. What each run does, and why:
 
@@ -322,8 +322,8 @@ budget, so the caller sizes N. What each run does, and why:
 - **The runner ships in `scripts/shard-runner/`** and is installed to each shard's
   `Assets/Editor/ShardRunner/`, excluded from the sync so it never recompiles. Each editor runs
   `-executeMethod UnitySuite.ShardRunner.Run -shard k/N`: it reads the current test list, packs it
-  into N bins by fixture, longest first, weighted by `<dir>/timings.xml` (the last merged report;
-  an unseen test weighs its fixture's mean, else the
+  into N bins by fixture, longest first, weighted by `<dir>/timings.xml` (the last full report, with
+  later filtered runs' durations merged in; an unseen test weighs its fixture's mean, else the
   median), splits only a fixture heavier than a bin, breaks ties by name, and runs bin k by exact
   name. Every shard computes the same disjoint, covering split. `unity
   test --filter`/`--shard` cost ~50 s of filter parsing per shard; exact names cost nothing.

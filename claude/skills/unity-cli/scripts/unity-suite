@@ -410,8 +410,23 @@ run.attrib.update(total=str(sum(seen.values()) + len(explicit)), passed=count("P
 ET.ElementTree(run).write(report, encoding="utf-8", xml_declaration=True)
 MERGE
   (( broken == 0 )) || DIE_CODE=2 die "a shard editor crashed or timed out (see its Logs/Editor.log)"
-  # A partial run would drop every unselected test's duration from the next full split.
-  [[ -n "$FILTER$CATEGORY" ]] || cp "$REPORT" "$timings"
+  # A full run replaces the timings, dropping removed tests; a filtered run merges its durations in, so
+  # the tests it added are weighed by their own time next run, and the unselected keep theirs.
+  if [[ -z "$FILTER$CATEGORY" ]]; then cp "$REPORT" "$timings"; else merge_timings "$timings" "$REPORT"; fi
+}
+
+merge_timings() {
+  python3 - "$1" "$2" <<'TIMINGS'
+import os, sys, xml.etree.ElementTree as ET
+timings, report = sys.argv[1:]
+durations = lambda path: {c.get("fullname"): c.get("duration") for c in ET.parse(path).getroot().iter("test-case")
+                          if c.get("duration")} if os.path.isfile(path) else {}
+merged = {**durations(timings), **durations(report)}
+run = ET.Element("test-run")
+for name in sorted(merged): ET.SubElement(run, "test-case", fullname=name, duration=merged[name])
+ET.ElementTree(run).write(timings + ".tmp", encoding="utf-8", xml_declaration=True)
+os.replace(timings + ".tmp", timings)
+TIMINGS
 }
 
 if [[ -n "$SHARDS" ]]; then
