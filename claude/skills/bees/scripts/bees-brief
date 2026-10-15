@@ -18,8 +18,8 @@ codex-implementor's run contract, the one a codex run reads.
 --kind fix and --kind recheck take --work only, since a fix unit has no plan section. A fix's stdin
 needs Fixes: and Filter: lines and Review: (the review report and finding ids; the original item's
 filter) or Gate: (the gate evidence, tested SHA and failing checks; the repair's verification
-filter). A gate repair of unknown cause is a diagnosis first (--kind advise or a bee-opus-medium
-diagnosis); its recheck names the same gate evidence.
+filter). A gate repair of unknown cause is a codex diagnosis first
+(--kind advise); its recheck names the same gate evidence.
 --kind advise asks an advisor a question meant for the owner: advisor rules, no return contract.
 --kind plan-brief drafts the plan's brief (usage, architecture, and Outcome, Right, Wrong per item)
 (plan-brief needs no plan file); --kind plan-expand expands all of one plan's items under the P-03 budget. Both are the read-only

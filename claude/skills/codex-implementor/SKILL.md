@@ -1,7 +1,7 @@
 ---
 name: codex-implementor
 description: >-
-  Runs codex-family jobs through one codex-round script over OpenCode, falling back to the codex CLI: command runs (suites, baselines, gates, render batches) in a claimed lane, and in-place implementation when Claude is out of usage. Use when the user asks to have codex run tests or commands, to implement with codex, or to delegate a unit to codex. For a review use codex-review.
+  Runs codex-family jobs through one codex-round script over OpenCode, falling back to the codex CLI: command runs (suites, baselines, gates, render batches) in a claimed lane, authoring at volume (cases, inventories, mechanical migrations) in place, and in-place implementation when Claude is out of usage. Use when the user asks to have codex run tests or commands, to implement with codex, or to delegate a unit to codex. For a review use codex-review.
 ---
 
 # Codex implementor

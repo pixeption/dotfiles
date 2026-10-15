@@ -1,7 +1,7 @@
 ---
 name: bees
 description: >-
-  Orchestrates multi-agent development: scores units, routes implementation to Claude bees by score, review and long command runs to codex, and keeps state in committed plan files. Use when the user asks to delegate or orchestrate coding work across agents, run a plan with bees, or says "bees".
+  Orchestrates multi-agent development: scores units, routes code implementation, planning and advice to Claude bees and everything else — authoring, runs, diagnosis, review — to codex, and keeps state in committed plan files. Use when the user asks to delegate or orchestrate coding work across agents, run a plan with bees, or says "bees".
 hooks:
   PostToolUse:
     - hooks:
@@ -50,12 +50,20 @@ session's first codex unit, or "Plan close" at the green final gate.
 An item carries its `plan` skill score, 1–5; one you cannot score is a read-only **diagnosis** that
 returns the split and real scores, or a scout if you can write its report's headings now.
 
-1. **Implement or fix**: `bee-opus-low` for 1–2 points (a reviewer's exact fixes score 1),
-   `bee-opus-medium` for 3–5. **Review and recheck**: `codex-review`, `-e high` for a 5 else medium.
-2. **Every run you order** (a baseline, a gate's suites, a codex diff's validation) goes to a codex
-   runner via `codex-implementor`, because a waiting Claude sub-agent's cache expires.
-3. **A fact**: `bee-scout`. **A cause**: `bee-opus-medium`. **A decision**: `bee-opus-high`, then codex.
-4. **Codex unavailable**: log `review: skipped, codex unavailable`; a run goes to `bee-opus-low`.
+1. **Claude bees do only three things**, because Claude usage is the scarce budget: **implement or
+   fix code** — production or tool logic and the tests that pin it — `bee-opus-low` for 1–2 points
+   (a reviewer's exact fixes score 1), `bee-opus-medium` for 3–5; **plan** — draft, expand and
+   apply plan-review findings — so codex reviews another vendor's plan; and **advise** on a
+   decision (briefs "Consults").
+2. **Everything else is codex's**: authoring at volume (corpus, fixture or catalogue cases,
+   inventories, mechanical migrations, planted breaks) by `codex-implementor` in place in a lane;
+   **a run you order** — a baseline, a gate's suites or a codex diff's validation, never an
+   implementor's own filter — by a codex runner, also because a waiting Claude sub-agent's cache
+   expires; a **cause** (a diagnosis) by `codex-round advise`, or `run` in a lane when it must run
+   something; **review and recheck** by `codex-review`, `-e high` for a 5 else medium.
+   **A fact**: `bee-scout`.
+3. **Codex unavailable**: log `review: skipped, codex unavailable`; a run goes to `bee-opus-low`, a
+   diagnosis to `bee-opus-medium`.
    **A Claude usage limit**: codex implements in place, a separate codex session reviews, logged as
    a same-vendor exception.
 
