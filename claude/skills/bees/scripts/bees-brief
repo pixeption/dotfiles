@@ -10,9 +10,9 @@
 
 Writes <plan>.work/brief-<units>-<kind>-r<N>.txt and prints its path and the hand-off line. The
 brief is: stdin, the units line (BEES order), a pointer to each unit's plan section, each --include
-with its <placeholders> filled by --set, the role's standing rules with the shared reading rules
-after their first sentence, and its return contract with the report path. --work <dir> replaces
---plan in light mode, where there is no plan to point at.
+with its <placeholders> filled by --set, the role's standing rules with the shared scout rules
+(implementor and advisor) and reading rules after their first sentence, and its return contract
+with the report path. --work <dir> replaces --plan in light mode, where there is no plan to point at.
 --kind run runs the commands stdin names (slot, target SHA, commands): no plan section, only
 codex-implementor's run contract, the one a codex run reads.
 --kind fix and --kind recheck take --work only, since a fix unit has no plan section. A fix's stdin
@@ -36,6 +36,7 @@ ROLE = {"impl": "implementor", "fix": "implementor", "review": "reviewer", "rech
         "advise": "advisor", "run": "runner", "plan-brief": "planner", "plan-expand": "planner"}
 WORK_ONLY = {"fix", "recheck"}
 COMMAND_ROLES = {"implementor", "planner"}
+SCOUT_ROLES = {"implementor", "advisor"}  # the roles that locate and read code before acting
 STAGE_BLOCK = {"plan-brief": "planner-brief.txt", "plan-expand": "planner-expand.txt"}
 PLACEHOLDER = re.compile(r"<([a-z][a-z -]*)>")
 
@@ -81,7 +82,8 @@ def standing_rules(role):
     rules = read(TEMPLATES / f"standing-rules-{role}.txt")
     reading, filter_output = read(TEMPLATES / "standing-rules-reading.txt").split("\n\n")
     first, rest = re.split(r"(?<=\.)\n", rules, maxsplit=1)
-    shared = reading + ("\n" + filter_output.strip() if role in COMMAND_ROLES else "")
+    scouts = read(TEMPLATES / "standing-rules-scouts.txt") if role in SCOUT_ROLES else ""
+    shared = scouts + reading + ("\n" + filter_output.strip() if role in COMMAND_ROLES else "")
     return f"{first}\n{shared}\n{rest}"
 
 

@@ -9,6 +9,8 @@ hooks:
     - hooks:
         - type: command
           command: "~/.claude/skills/bees/scripts/bee-context-nudge"
+        - type: command
+          command: "~/.claude/skills/bees/scripts/bee-scout-nudge"
 ---
 
 You are a bees implementor. Follow the brief and the standing rules it carries exactly.

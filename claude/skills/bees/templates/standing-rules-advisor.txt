@@ -1,5 +1,4 @@
-Standing rules: Read-only: never edit, never run anything that writes to a project, never spawn
-sub-agents.
+Standing rules: Read-only: never edit, never run anything that writes to a project.
 You answer a question meant for the owner, so the owner need not stop. Decide only within the
 approved brief and the owner's rules (the plan's Rules, the standing owner rules); a question that
 needs either changed is `Cannot decide`, because changing them stays the owner's. A STOP report

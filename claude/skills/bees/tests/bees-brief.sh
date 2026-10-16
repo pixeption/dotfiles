@@ -14,11 +14,12 @@ SKILL="Invoke a skill's entry point once with the Skill tool"
 SECTION="Start from the unit-section pointer in the brief"
 SAVED="Inspect a truncated output's saved file by search or bounded ranges"
 FILTER="Filter long command output to the actionable lines"
+SCOUTS="Three steps are fixed"
 
 PAUSE="When the context hook tells you to pause"
 BUDGET="budgets.md"
 PLAN="$TMP/plan.md"
-printf '# Plan\n\n### U-01 · first\n\nSECTION-BODY Tests: --filter SectionTests\n\n### U-02 · second\n\ny\n\n### U-03 · unrelated\n\nz\n' > "$PLAN"
+printf '# Plan\n\n### U-01 · first\n\nSECTION-BODY Tests: --filter SectionTests\n\n### U-02 · second\n\ny\n\n### U-03 · unrelated\n\nz\n\n### U-04 · item\n\nshared\n\n#### U-04.1 · sub\n\nw\n' > "$PLAN"
 round=0
 IN="Objective: test."
 brief() { # brief <args…>: builds a fresh round from $IN and prints the brief's path
@@ -46,6 +47,9 @@ expect_pause() { # expect_pause <kind> <brief>: pauses when the hook says, once,
 T="$here/../templates"
 expect_rules "the reading template holds the shared paragraph" "$T/standing-rules-reading.txt" 1 1 1 1
 for role in implementor planner advisor reviewer; do has "$role template has no reading copy" "$T/standing-rules-$role.txt" "Invoke a skill's entry point" 0; done
+for role in implementor planner advisor reviewer; do has "$role template has no scout copy" "$T/standing-rules-$role.txt" "$SCOUTS" 0; done
+has "advise gets the scout rules once" "$(brief --plan "$PLAN" --units U-04 --kind advise)" "$SCOUTS" 1
+has "review gets no scout rules" "$(brief --plan "$PLAN" --units U-04 --kind review)" "$SCOUTS" 0
 expect_rules "fix gets the four hygiene rules" "$(fixbrief --work "$W" --units U-01-fix1 --kind fix)" 1 1 1 1
 for mode in "--plan $PLAN" "--work $W"; do
   b=$(brief $mode --units GATE-1 --kind run)
@@ -97,6 +101,8 @@ has "gate repair is diagnosed first when its cause is unknown" "$g" "A gate repa
 ESTIMATE="The item's score is an estimate: more files or work than expected is not a reason to stop."
 b=$(brief --plan "$PLAN" --units U-03 --kind impl)
 has "impl rules treat the score as an estimate" "$b" "$ESTIMATE" 1
+sed -n '/^Standing rules:/,/Invoke a skill/p' "$b" > "$TMP/head"
+has "impl gets the scout rules once, before the reading rules" "$TMP/head" "$SCOUTS" 1
 expect_pause impl "$b"
 has "impl rules stop only to the advisors" "$b" "report \`Outcome: Needs decision\` (\`Blocked\` after two attempts)" 1
 has "impl return vocabulary has no replan" "$b" "<done|blocked|paused|needs-decision>" 2

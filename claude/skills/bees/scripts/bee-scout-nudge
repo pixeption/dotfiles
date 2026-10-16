@@ -1,0 +1,69 @@
+#!/usr/bin/env python3
+"""PostToolUse hook (bee implementor and advisor frontmatter): remind an agent that searches or reads
+for itself to send a scout instead, as the scout standing rules say.
+
+Counts broad lookups since the agent's last Agent call (a repo-wide grep/find/rg, Grep, Glob, or a
+read of more than BEE_SCOUT_READ lines of code) and nudges each time the count reaches
+BEE_SCOUT_EVERY, then restarts it. Reading a test run's failures (a Logs/*.xml, a ^FAIL list) nudges
+once per Agent call. State lives in $TMPDIR keyed by session and agent; no agent_id means no output.
+  BEE_SCOUT_EVERY  default 3: one or two lookups are often the lines about to be edited
+  BEE_SCOUT_READ   default 60: the rules' per-read limit
+"""
+import fcntl, json, os, pathlib, re, sys
+
+SEARCH = re.compile(r"\bgrep\s+(-[\w-]+\s+)*-\w*[rR]|\bfind\s+\S|\bgit grep\b|\brg\s")
+CODE = re.compile(r"\.(cs|py|js|mjs|ts|uss|uxml|shader)\b")
+CAT = re.compile(r"(^|[;&|(]\s*)cat\s+(?!>)")
+RANGE = re.compile(r"\bsed -n\s*'?(\d+),(\d+)p")
+FAILURES = re.compile(r"Logs/\S*\.xml|\^FAIL|test-case|ET\.parse")
+RUNS = re.compile(r"unity-suite|run_tests|test-shards|cat\s*>")  # starting a run or writing its script names the XML too
+
+
+def long_code_read(name, args, limit):
+    if name == "Read":
+        return bool(CODE.search(args.get("file_path", ""))) and not 0 < (args.get("limit") or 0) <= limit
+    command = args.get("command", "")
+    if name != "Bash" or not CODE.search(command):
+        return False
+    return bool(CAT.search(command)) or any(int(b) - int(a) + 1 > limit for a, b in RANGE.findall(command))
+
+
+def broad(name, args, limit):
+    searched = name in ("Grep", "Glob") or (name == "Bash" and bool(SEARCH.search(args.get("command", ""))))
+    return searched or long_code_read(name, args, limit)
+
+
+def failures(name, args):
+    target = args.get("file_path") or args.get("command", "")
+    return name in ("Read", "Bash") and bool(FAILURES.search(target)) and not RUNS.search(target)
+
+
+hook = json.load(sys.stdin)
+sid, agent = hook.get("session_id"), hook.get("agent_id")
+if not (sid and agent):
+    sys.exit(0)
+name, args = hook.get("tool_name", ""), hook.get("tool_input") or {}
+every, limit = int(os.environ.get("BEE_SCOUT_EVERY", 3)), int(os.environ.get("BEE_SCOUT_READ", 60))
+base = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / f"bee-scout-nudge-{sid}-{agent}"
+lock = open(f"{base}.lock", "a")
+fcntl.flock(lock, fcntl.LOCK_EX)
+state_file = pathlib.Path(f"{base}.state")
+state = json.loads(state_file.read_text()) if state_file.exists() else {"broad": 0, "failures": False}
+say = None
+if name == "Agent":
+    state = {"broad": 0, "failures": False}
+elif failures(name, args):
+    if not state["failures"]:
+        say = ("Scout reminder: a run's failures go to a scout first. Spawn `bee-scout` to group them by "
+               "cause from the XML (pattern, count, one example, the assert's file:line) before reading them yourself.")
+    state["failures"] = True
+elif broad(name, args, limit):
+    state["broad"] += 1
+    if state["broad"] >= every:
+        say = (f"Scout reminder: {state['broad']} searches or long reads of your own since your last scout. "
+               f"Send `bee-scout` for excerpts, callers, the closest test or call shapes instead, and read "
+               f"yourself only the lines you are about to edit, at most {limit} per read.")
+        state["broad"] = 0
+state_file.write_text(json.dumps(state) + "\n")
+if say:
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": say}}))
