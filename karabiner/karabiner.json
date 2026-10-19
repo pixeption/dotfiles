@@ -9,12 +9,12 @@
                             {
                                 "identifiers": [
                                     {
-                                        "product_id": 1149,
-                                        "vendor_id": 33129
+                                        "vendor_id": 1149,
+                                        "product_id": 33129
                                     },
                                     {
-                                        "product_id": 1149,
-                                        "vendor_id": 33128
+                                        "vendor_id": 1149,
+                                        "product_id": 33128
                                     }
                                 ],
                                 "type": "device_if"
@@ -24,7 +24,7 @@
                             {
                                 "from": {
                                     "key_code": "keypad_plus",
-                                    "modifiers": { "mandatory": ["left_command"] }
+                                    "modifiers": { "optional": ["any"] }
                                 },
                                 "to": [{ "pointing_button": "button10" }],
                                 "type": "basic"
@@ -36,12 +36,12 @@
                             {
                                 "identifiers": [
                                     {
-                                        "product_id": 1149,
-                                        "vendor_id": 33129
+                                        "vendor_id": 1149,
+                                        "product_id": 33129
                                     },
                                     {
-                                        "product_id": 1149,
-                                        "vendor_id": 33128
+                                        "vendor_id": 1149,
+                                        "product_id": 33128
                                     }
                                 ],
                                 "type": "device_if"
@@ -51,7 +51,7 @@
                             {
                                 "from": {
                                     "key_code": "keypad_hyphen",
-                                    "modifiers": { "mandatory": ["left_command"] }
+                                    "modifiers": { "optional": ["any"] }
                                 },
                                 "to": [{ "pointing_button": "button9" }],
                                 "type": "basic"
@@ -63,12 +63,12 @@
                             {
                                 "identifiers": [
                                     {
-                                        "product_id": 1149,
-                                        "vendor_id": 33129
+                                        "vendor_id": 1149,
+                                        "product_id": 33129
                                     },
                                     {
-                                        "product_id": 1149,
-                                        "vendor_id": 33128
+                                        "vendor_id": 1149,
+                                        "product_id": 33128
                                     }
                                 ],
                                 "type": "device_if"
@@ -78,7 +78,7 @@
                             {
                                 "from": {
                                     "key_code": "open_bracket",
-                                    "modifiers": { "mandatory": ["left_command"] }
+                                    "modifiers": { "optional": ["any"] }
                                 },
                                 "to": [{ "pointing_button": "button4" }],
                                 "type": "basic"
@@ -90,12 +90,12 @@
                             {
                                 "identifiers": [
                                     {
-                                        "product_id": 1149,
-                                        "vendor_id": 33129
+                                        "vendor_id": 1149,
+                                        "product_id": 33129
                                     },
                                     {
-                                        "product_id": 1149,
-                                        "vendor_id": 33128
+                                        "vendor_id": 1149,
+                                        "product_id": 33128
                                     }
                                 ],
                                 "type": "device_if"
@@ -106,7 +106,7 @@
                             {
                                 "from": {
                                     "key_code": "close_bracket",
-                                    "modifiers": { "mandatory": ["left_command"] }
+                                    "modifiers": { "optional": ["any"] }
                                 },
                                 "to": [{ "pointing_button": "button5" }],
                                 "type": "basic"
@@ -134,6 +134,10 @@
                         {
                             "from": { "consumer_key_code": "volume_increment" },
                             "to": [{ "pointing_button": "button8" }]
+                        },
+                        {
+                            "from": { "key_code": "left_command" },
+                            "to": [{ "key_code": "vk_none" }]
                         }
                     ]
                 },
@@ -155,6 +159,10 @@
                         {
                             "from": { "consumer_key_code": "volume_increment" },
                             "to": [{ "pointing_button": "button8" }]
+                        },
+                        {
+                            "from": { "key_code": "left_command" },
+                            "to": [{ "key_code": "vk_none" }]
                         }
                     ]
                 },
