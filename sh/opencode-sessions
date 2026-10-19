@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# List OpenCode sessions across EVERY directory (newest first, BUSY marker, attach command per row),
+# or pick one and attach to it. One `opencode serve` already serves every repo; only the TUI's
+# /sessions list is scoped to one directory (the server's start dir unless `--dir` is passed), so
+# this is the cross-repo view and the one-command way in.
+#
+# Usage: opencode-sessions [-n 20] [--busy] [--children] [--url http://127.0.0.1:4096]
+#        opencode-sessions --attach [same filters]     # pick (fzf if present, else a numbered menu) and attach
+set -euo pipefail
+n=20; busy_only=0; children=0; attach=0; url="http://127.0.0.1:4096"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n) n="$2"; shift 2 ;;
+    --busy) busy_only=1; shift ;;
+    --children) children=1; shift ;;
+    --attach) attach=1; shift ;;
+    --url) url="$2"; shift 2 ;;
+    -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) echo "opencode-sessions: unknown arg '$1'" >&2; exit 2 ;;
+  esac
+done
+db="${XDG_DATA_HOME:-$HOME/.local/share}/opencode/opencode.db"
+[ -f "$db" ] || { echo "opencode-sessions: no db at $db" >&2; exit 2; }
+
+where="parent_id is null"; [ "$children" = 1 ] && where="1=1"
+rows="$(sqlite3 -separator $'\t' "$db" \
+  "select id, directory, title, datetime(time_updated/1000,'unixepoch','localtime')
+   from session where $where order by time_updated desc limit $n")"
+
+busy=""
+for dir in $(printf '%s\n' "$rows" | cut -f2 | sort -u); do
+  ids="$(curl -sf "$url/session/status?directory=$dir" 2>/dev/null \
+    | python3 -c 'import sys,json; print("\n".join(k for k,v in json.load(sys.stdin).items() if v.get("type")=="busy"))' 2>/dev/null || true)"
+  busy="$busy $ids"
+done
+
+lines=()
+while IFS=$'\t' read -r id dir title updated; do
+  [ -n "$id" ] || continue
+  case " $busy " in *" $id "*) state="BUSY";; *) state="idle";; esac
+  [ "$busy_only" = 1 ] && [ "$state" = idle ] && continue
+  lines+=("$(printf '%s  %-4s  %s  %-40.40s  %s' "$updated" "$state" "$id" "$title" "$dir")")
+done <<< "$rows"
+
+if [ "$attach" = 0 ]; then
+  for l in "${lines[@]}"; do
+    printf '%s\n        opencode attach %s --dir %s --session %s\n' "$l" "$url" "${l##* }" "$(printf '%s' "$l" | awk '{print $4}')"
+  done
+  exit 0
+fi
+
+[ "${#lines[@]}" -gt 0 ] || { echo "opencode-sessions: nothing to attach to" >&2; exit 1; }
+if command -v fzf >/dev/null 2>&1; then
+  pick="$(printf '%s\n' "${lines[@]}" | fzf --prompt='attach> ' --no-sort)"
+else
+  i=0; for l in "${lines[@]}"; do i=$((i+1)); printf '%2d  %s\n' "$i" "$l"; done
+  printf 'attach> ' >&2; read -r k
+  pick="${lines[$((k-1))]}"
+fi
+[ -n "$pick" ] || exit 1
+id="$(printf '%s' "$pick" | awk '{print $4}')"; dir="${pick##* }"
+exec opencode attach "$url" --dir "$dir" --session "$id"
