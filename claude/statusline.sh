@@ -27,6 +27,9 @@ seven_day=$(echo "$input" | jq -r '.rate_limits.seven_day.used_percentage // emp
 seven_day_reset=$(echo "$input" | jq -r '.rate_limits.seven_day.resets_at // empty')
 ctx_used=$(echo "$input" | jq -r '.context_window.total_input_tokens // empty')
 ctx_size=$(echo "$input" | jq -r '.context_window.context_window_size // empty')
+cache_ttl=$(echo "$input" | jq -r '.prompt_cache.ttl // empty')
+cache_warm=$(echo "$input" | jq -r '.prompt_cache.warm // empty')
+cache_expires=$(echo "$input" | jq -r '.prompt_cache.expires_at // empty')
 
 # ANSI styles
 RESET=$'\033[0m'; DIM=$'\033[2m'; BOLD=$'\033[1m'
@@ -84,6 +87,14 @@ if [ -n "$ctx_used" ] && [ -n "$ctx_size" ]; then
   ratio=$(awk -v u="$ctx_used" -v s="$ctx_size" 'BEGIN { if (s > 0) printf "%.0f", (u / s) * 100; else print 0 }')
   c=$(pct_color "$ratio")
   add "${DIM}ctx:${RESET} ${c}$(human "$ctx_used")/$(human "$ctx_size")${RESET}" "$ctx_used"
+fi
+
+if [ -n "$cache_ttl" ]; then
+  if [ "$cache_warm" = true ] && [ -n "$cache_expires" ]; then
+    add "${DIM}cache:${RESET} ${GREEN}${cache_ttl}${RESET} ${DIM}($(remaining "$cache_expires"))${RESET}" "$cache_ttl"
+  else
+    add "${DIM}cache:${RESET} ${RED}cold${RESET} ${DIM}(${cache_ttl})${RESET}" "$cache_ttl"
+  fi
 fi
 
 printf '%s\n' "$output"
