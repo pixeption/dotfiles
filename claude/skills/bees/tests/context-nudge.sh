@@ -18,7 +18,7 @@ call() { # sets $out and $code
   out=$(jq -nc --arg s "$sid" --arg t "$case_dir/t.jsonl" '{session_id: $s, transcript_path: $t,
       hook_event_name: "PostToolUse", tool_name: "Read"}' | env TMPDIR="$case_dir/tmp" "$SCRIPT" 2>&1); code=$?
 }
-nudge() { jq -nc --arg t "Context at $1k: start nothing new, finish the running unit, then hand off per bees reference/handoff.md." \
+nudge() { jq -nc --arg t "Context at $1k: start nothing new, finish the step in hand, then hand off per bees reference/handoff.md." \
   '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $t}}'; }
 expect() { # expect <label> <want-json|"">
   local got; got=$(jq -c . <<<"$out" 2>/dev/null || echo "$out")

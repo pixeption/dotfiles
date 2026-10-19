@@ -1,42 +1,49 @@
 {
     "$schema": "https://opencode.ai/config.json",
-    "model": "openai/gpt-6.1-sol-fast",
+    "model": "openai/gpt-6.1-sol",
     // Snapshots embed full file patches in every message.updated event, and Unity YAML assets
     // (TMP font SDFs) make each one megabytes; it bloated opencode.db to 4 GB. Runs use git anyway.
     "snapshot": false,
-    // Fast mode by default on the models the codex wrappers run: the priority tier that the
-    // `openai/<model>-fast` variants use.
-    "provider": {
-        "openai": {
-            "models": {
-                "gpt-6.1-sol": { "options": { "serviceTier": "priority" } },
-                "gpt-6-luna": { "options": { "serviceTier": "priority" } }
-            }
-        }
-    },
-    // Follow-up rounds of codex-review (`codex-round review --no-subagents`): denies the edit and
-    // task tools so a resumed round performs the delta review directly. Bash remains available;
-    // the review prompt, not an OS sandbox, constrains it to read-only commands.
+    // Follow-up rounds of codex-review (`codex-round review --no-subagents`) and advise rounds deny
+    // the edit tool and every sub-agent but `scout`, so a resumed round performs the delta review
+    // itself. Bash remains available; the review prompt, not an OS sandbox, constrains it to
+    // read-only commands.
     "agent": {
+        // The one sub-agent codex rounds may spawn: a read-only lookup on luna, sharing bee-scout's
+        // prompt. Unlike bee-scout it has no time or step limit.
+        "scout": {
+            "mode": "subagent",
+            "description": "Read-only repository lookups: maps the code a task will touch, finds where things are when you are unsure where to look, traces call paths, quotes code, groups a run's failures. Returns a compact report.",
+            "model": "openai/gpt-6-luna",
+            "variant": "xhigh",
+            "prompt": "{file:~/.claude/agents/bee-scout.md}",
+            "permission": {
+                "edit": "deny",
+                "task": "deny"
+            }
+        },
         "review-discovery": {
             "mode": "primary",
             "description": "Read-only reviewer for discovery rounds; sub-agents allowed.",
             "permission": {
-                "edit": "deny"
+                "edit": "deny",
+                "task": "allow"
             }
         },
         "review-followup": {
             "mode": "primary",
-            "description": "Read-only reviewer for follow-up rounds; no edits, no sub-agents.",
+            "description": "Read-only reviewer for follow-up and advise rounds; no edits, scouts only.",
             "permission": {
                 "edit": "deny",
-                "task": "deny"
+                "task": { "*": "deny", "scout": "allow" }
             }
         }
     },
     // Fence for headless `opencode run --auto` (the codex-implementor / codex-review wrappers).
     // --auto approves every "ask"; only "deny" rules hold. Last matching rule wins, so "*" goes first.
     "permission": {
+        // Implement and run rounds spawn only scouts; review-discovery keeps its default sub-agents.
+        "task": { "*": "deny", "scout": "allow" },
         "external_directory": {
             "*": "deny",
             "~/code/**": "allow",

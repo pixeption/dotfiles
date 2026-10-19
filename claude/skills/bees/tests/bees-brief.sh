@@ -14,7 +14,6 @@ SKILL="Invoke a skill's entry point once with the Skill tool"
 SECTION="Start from the unit-section pointer in the brief"
 SAVED="Inspect a truncated output's saved file by search or bounded ranges"
 FILTER="Filter long command output to the actionable lines"
-SCOUTS="Three steps are fixed"
 
 PAUSE="When the context hook tells you to pause"
 BUDGET="budgets.md"
@@ -47,9 +46,9 @@ expect_pause() { # expect_pause <kind> <brief>: pauses when the hook says, once,
 T="$here/../templates"
 expect_rules "the reading template holds the shared paragraph" "$T/standing-rules-reading.txt" 1 1 1 1
 for role in implementor planner advisor reviewer; do has "$role template has no reading copy" "$T/standing-rules-$role.txt" "Invoke a skill's entry point" 0; done
-for role in implementor planner advisor reviewer; do has "$role template has no scout copy" "$T/standing-rules-$role.txt" "$SCOUTS" 0; done
-has "advise gets the scout rules once" "$(brief --plan "$PLAN" --units U-04 --kind advise)" "$SCOUTS" 1
-has "review gets no scout rules" "$(brief --plan "$PLAN" --units U-04 --kind review)" "$SCOUTS" 0
+SCOUT="Send every other lookup"
+for role in implementor planner advisor reviewer; do has "$role template has no scout rule of its own" "$T/standing-rules-$role.txt" "sub-agent" 0; done
+for kind in impl advise review plan-expand; do has "$kind brief carries the scout rule once" "$(brief --plan "$PLAN" --units U-02 --kind $kind)" "$SCOUT" 1; done
 expect_rules "fix gets the four hygiene rules" "$(fixbrief --work "$W" --units U-01-fix1 --kind fix)" 1 1 1 1
 for mode in "--plan $PLAN" "--work $W"; do
   b=$(brief $mode --units GATE-1 --kind run)
@@ -68,6 +67,10 @@ done
 b=$(brief --plan "$PLAN" --units U-02,U-01 --kind impl)
 got=$(grep -oE "sed -En '/\^### U-0[0-9] ·" "$b" | grep -oE 'U-0[0-9]' | tr '\n' ' ')
 if [ "$got" == "U-02 U-01 " ]; then ok "plan mode points at each named unit only"; else bad "plan mode pointers: [$got]"; fi
+
+b=$(brief --plan "$PLAN" --units U-04.1 --kind impl)
+has "a sub-item points at its item's shared context" "$b" "sed -En '/^### U-04 ·" 1
+has "a sub-item points at its own section" "$b" "sed -En '/^#### U-04.1 ·" 1
 
 b=$(brief --plan "$PLAN" --units U-01 --kind impl)
 expect_rules "impl gets the four hygiene rules" "$b" 1 1 1 1
@@ -101,8 +104,6 @@ has "gate repair is diagnosed first when its cause is unknown" "$g" "A gate repa
 ESTIMATE="The item's score is an estimate: more files or work than expected is not a reason to stop."
 b=$(brief --plan "$PLAN" --units U-03 --kind impl)
 has "impl rules treat the score as an estimate" "$b" "$ESTIMATE" 1
-sed -n '/^Standing rules:/,/Invoke a skill/p' "$b" > "$TMP/head"
-has "impl gets the scout rules once, before the reading rules" "$TMP/head" "$SCOUTS" 1
 expect_pause impl "$b"
 has "impl rules stop only to the advisors" "$b" "report \`Outcome: Needs decision\` (\`Blocked\` after two attempts)" 1
 has "impl return vocabulary has no replan" "$b" "<done|blocked|paused|needs-decision>" 2
@@ -130,7 +131,7 @@ has "plan-expand pause returns the rest as to expand" "$b" "then return the item
 has "plan-expand asks for Today, Approach and Tests" "$b" "Append below the brief fields: Today" 1
 has "plan-expand bans report pointers" "$b" "never \"detail in report-…\"" 1
 has "plan-expand gives one judged score" "$b" "one judged score for how" 1
-has "plan-expand splits an 8 or 13 at planning" "$b" "you would score 8 or 13 is split here into items scored 5 or less" 1
+has "plan-expand breaks an 8 or 13 into sub-items" "$b" "13 keeps its score and is broken here into sub-items scored 5 or less" 1
 has "plan-expand return names the items to expand" "$b" "To expand:" 1
 has "plan-expand sends a brief change to the owner" "$b" "Back to owner" 2
 has "plan-expand brief points at the unit section" "$b" "sed -En '/^### U-01 ·" 1
@@ -165,7 +166,7 @@ if [ -n "$r1" ] && [ "$r1" != "$r2" ]; then ok "reviews of two fix units of one 
 for kind in plan-brief plan-expand impl; do
   if out=$(echo x | "$SCRIPT" --plan "$PLAN" --units U-09 --kind "$kind" --round 99 2>&1); then
     bad "$kind accepted a unit without a plan section: [$out]"
-  elif [[ "$out" == *"no '### <ID> · ' section for U-09"* ]]; then
+  elif [[ "$out" == *"section for U-09"* ]]; then
     ok "$kind rejects a unit without a plan section"
   else
     bad "$kind missing section: [$out]"

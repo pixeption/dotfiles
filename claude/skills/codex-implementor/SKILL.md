@@ -1,7 +1,7 @@
 ---
 name: codex-implementor
 description: >-
-  Runs codex-family jobs through one codex-round script over OpenCode, falling back to the codex CLI: command runs (suites, baselines, gates, render batches) in a claimed lane, authoring at volume (cases, inventories, mechanical migrations) in place, and in-place implementation when Claude is out of usage. Use when the user asks to have codex run tests or commands, to implement with codex, or to delegate a unit to codex. For a review use codex-review.
+  Runs codex-family jobs through one codex-round script over OpenCode, falling back to the codex CLI: command runs (suites, baselines, gates, render batches) in a claimed lane, authoring at volume (new tests, cases, inventories, mechanical migrations) in place, and in-place implementation when Claude is out of usage. Use when the user asks to have codex run tests or commands, to implement with codex, or to delegate a unit to codex. For a review use codex-review.
 ---
 
 # Codex implementor
@@ -28,10 +28,11 @@ Exit 0 finished · 1 failed or refused · 2 usage · 3 codex unavailable; then r
 
 | model | id (opencode / codex) | default effort |
 |---|---|---|
-| sol **(default)** | `openai/gpt-6.1-sol-fast` / `gpt-6.1-sol` | **medium** |
+| sol **(default, standard tier)** | `openai/gpt-6.1-sol` / `gpt-6.1-sol` (`-fast` suffix opts into the priority tier) | **medium** |
 | luna | `openai/gpt-6-luna` / `gpt-6-luna` | max |
 
-Raise `-e` only when capability changes the outcome: `low|medium|high|xhigh|max` (codex also `ultra`).
+A round may spawn only the `scout` sub-agent (luna xhigh, read-only, no limit, OpenCode only — the CLI channel has
+none). Raise `-e` only when capability changes the outcome: `low|medium|high|xhigh|max` (codex also `ultra`).
 
 ## Resume or fresh
 

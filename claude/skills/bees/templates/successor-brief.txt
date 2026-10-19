@@ -3,3 +3,7 @@ Read, in this order and nothing else: the plan's checklist, its <plan>.status.md
 `tools/workspace.sh list`.
 Load the bees skill; you are the orchestrator for this plan and resume its unfinished work. Read
 bees reference/plan-lifecycle.md "Preflight" before your first codex unit.
+Units whose Now line ends `· in flight` still run in the previous orchestrator, which now only
+relays: leave them and their lanes alone and schedule the startable units at once. Each arrives
+as a `[relay] <unit>` message — treat it as that unit's hand-back; `[relay] done` means none are
+left. To continue or stop one of those bees, ask the relay; it acts on nothing else.

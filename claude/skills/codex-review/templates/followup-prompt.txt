@@ -1,6 +1,6 @@
 Continue in the existing review session. Repo at <sha>, unchanged since round <n>
 [or: changed — <what>]. The artifact changed as follows: <diff or section list>.
-Perform this round directly, without spawning sub-agents.
+Perform this round directly, spawning no sub-agent but `scout` for a source lookup.
 1. Verify each listed Open/Partial finding against the updated artifact: Fixed, Partial, Open or Regressed.
 2. Review the artifact delta and affected dependencies for new problems introduced, exposed or
    made relevant by these changes. Do not perform a fresh whole-artifact audit in this round.

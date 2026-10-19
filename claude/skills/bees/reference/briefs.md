@@ -78,7 +78,7 @@ because a lane must never wait on the owner. Reuse a matching `decision:` line f
 unless new evidence changes the question; otherwise, in order:
 
 1. `bee-opus-high`, read-only, `--kind advise`.
-2. If it cannot decide, Sol on the same brief: `codex-round advise -m openai/gpt-6.1-sol-fast -e
+2. If it cannot decide, Sol on the same brief: `codex-round advise -m openai/gpt-6.1-sol -e
    high` in a fresh session (never `-s` into the implementor or review loop), out-file
    `review-<unit>-advice-r<N>.txt`, so `bees-watch --dir` sees it.
 3. If neither decides: a `Blocked` `owner:` line; the lane is released or handed to the next ready

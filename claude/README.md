@@ -41,7 +41,6 @@ The skills shell out to tools that are not part of this repo:
 | Skill | Needs |
 |---|---|
 | `img-diff` | `node`, `npm ci` in the skill dir, `python3` with `pillow`, `numpy`, `scikit-image` |
-| `playwright-cli` | `npx playwright` |
 | `unity-cli` | `unity` CLI on `PATH` (the scripts prepend `~/.unity/bin`) |
 | `codex-review` | `codex` CLI |
 | `handoff` | `kitty` with remote control enabled |

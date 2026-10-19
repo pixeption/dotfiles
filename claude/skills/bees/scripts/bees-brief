@@ -10,8 +10,8 @@
 
 Writes <plan>.work/brief-<units>-<kind>-r<N>.txt and prints its path and the hand-off line. The
 brief is: stdin, the units line (BEES order), a pointer to each unit's plan section, each --include
-with its <placeholders> filled by --set, the role's standing rules with the shared scout rules
-(implementor and advisor) and reading rules after their first sentence, and its return contract
+with its <placeholders> filled by --set, the role's standing rules with the shared reading rules
+after their first sentence, and its return contract
 with the report path. --work <dir> replaces --plan in light mode, where there is no plan to point at.
 --kind run runs the commands stdin names (slot, target SHA, commands): no plan section, only
 codex-implementor's run contract, the one a codex run reads.
@@ -36,7 +36,6 @@ ROLE = {"impl": "implementor", "fix": "implementor", "review": "reviewer", "rech
         "advise": "advisor", "run": "runner", "plan-brief": "planner", "plan-expand": "planner"}
 WORK_ONLY = {"fix", "recheck"}
 COMMAND_ROLES = {"implementor", "planner"}
-SCOUT_ROLES = {"implementor", "advisor"}  # the roles that locate and read code before acting
 STAGE_BLOCK = {"plan-brief": "planner-brief.txt", "plan-expand": "planner-expand.txt"}
 PLACEHOLDER = re.compile(r"<([a-z][a-z -]*)>")
 
@@ -66,7 +65,16 @@ SPEC = {
 
 def spec_lines(plan, units, role, kind):
     return [SPEC.get(kind, SPEC.get(role)).format(plan=plan)] + \
-           [f"  sed -En '/^### {u} ·/,/^#{{1,3}} /p' {shlex.quote(str(plan))}" for u in units]
+           [line for u in units for line in section_lines(u, shlex.quote(str(plan)))]
+
+
+def section_lines(unit, plan):
+    """A sub-item `X.n` reads its item's shared context, then its own `####` section."""
+    if "." not in unit:
+        return [f"  sed -En '/^### {unit} ·/,/^#{{1,3}} /p' {plan}"]
+    item = unit.rsplit(".", 1)[0]
+    return [f"  sed -En '/^### {item} ·/,/^#{{1,4}} /p' {plan}",
+            f"  sed -En '/^#### {unit} ·/,/^#{{1,4}} /p' {plan}"]
 
 
 def has_label(text, label):
@@ -82,8 +90,7 @@ def standing_rules(role):
     rules = read(TEMPLATES / f"standing-rules-{role}.txt")
     reading, filter_output = read(TEMPLATES / "standing-rules-reading.txt").split("\n\n")
     first, rest = re.split(r"(?<=\.)\n", rules, maxsplit=1)
-    scouts = read(TEMPLATES / "standing-rules-scouts.txt") if role in SCOUT_ROLES else ""
-    shared = scouts + reading + ("\n" + filter_output.strip() if role in COMMAND_ROLES else "")
+    shared = reading + ("\n" + filter_output.strip() if role in COMMAND_ROLES else "")
     return f"{first}\n{shared}\n{rest}"
 
 
@@ -116,9 +123,9 @@ if a.plan and a.kind in WORK_ONLY:
     fail(f"--kind {a.kind} takes --work <plan>.work, not --plan: a fix unit has no plan section")
 if a.plan and a.kind != "run":
     plan_text = read(a.plan)
-    missing = [u for u in units if not re.search(rf"^### {re.escape(u)} · ", plan_text, re.M)]
+    missing = [u for u in units if not re.search(rf"^#{{3,4}} {re.escape(u)} · ", plan_text, re.M)]
     if missing:
-        fail(f"{a.plan}: no '### <ID> · ' section for {', '.join(missing)}")
+        fail(f"{a.plan}: no '### <ID> · ' or '#### <ID> · ' section for {', '.join(missing)}")
 role = ROLE[a.kind]
 work = (a.work or a.plan.with_suffix(".work")).resolve()
 name = f"{'_'.join(units)}-{a.kind}-r{a.round}"

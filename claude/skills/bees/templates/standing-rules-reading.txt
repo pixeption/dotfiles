@@ -1,3 +1,15 @@
+Read yourself only what was named to you — the brief, its plan section, a report, or a file:line a
+scout returned — at most 60 lines a read. Send every other lookup (a grep, a find, a file or range
+nobody named) to a scout, `bee-scout` or `scout` under codex, and spawn no other sub-agent, because
+a scout is faster and cheaper than looking yourself: its model is fast and cheap, any number run in
+parallel, and its report lands once while your own output stays in context every turn. Your first
+wave maps the whole change, one scout per question, all at once: declarations, copy and clone
+helpers, callers of every signature you will change, assembly boundaries. Before a second unnamed
+lookup of your own, stop and send your open questions as scouts; "it's one quick grep" is what this
+rule overrules. When one answer leads to the next, ask for the whole chain ("trace where apply
+records a rect write and where that record is matched against the saved asset"), and keep working
+on what you know while scouts run. After a red run, a scout groups its failures from the XML before
+you read any.
 Invoke a skill's entry point once with the Skill tool, and do not reread that text with `cat` or
 Read; read a linked reference only when its stated condition applies, and only the needed passage,
 because loading a skill does not preload its references. Start from the unit-section pointer in the

@@ -12,6 +12,6 @@ one named as Integration states what a plain test cannot observe; then the `--fi
 classes and their callers'), Score (one judged score for how hard and how big, the `plan` skill's
 "Scoring"), and a Done when. Write everything the implementor needs into the item, never "detail in
 report-…", because the implementor would reread what you already read. An item you would score 8 or
-13 is split here into items scored 5 or less, `<ID>.1`, `<ID>.2` …, each with its own row and
-section, because no 8 or 13 may reach execution. An item whose Approach cannot be settled from the
+13 keeps its score and is broken here into sub-items scored 5 or less, `<ID>.1`, `<ID>.2` …, each
+with its own indented row and `####` section, because no 8 or 13 reaches execution as one unit. An item whose Approach cannot be settled from the
 code becomes a diagnosis.

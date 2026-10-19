@@ -36,6 +36,27 @@ Tests are durable specifications, not implementation scaffolding.
 - A test should survive a refactor that leaves observable behavior unchanged.
 - Run the smallest relevant set while iterating; each repo's CLAUDE.md defines the suites.
 
+## Scouts
+
+A scout is a read-only sub-agent for repository lookups: `bee-scout` (Haiku) under Claude, `scout`
+(luna) under codex. Prefer a scout to looking yourself, for all work — implementing, advising,
+reviewing, answering a question — because it is faster and cheaper on every count: the model is
+fast and cheap, any number run in parallel, and its report lands in your context once while your
+own grep and read output stays there every turn.
+
+- **Read yourself only what was named to you**: by the user, a brief, a report, or a file:line a
+  scout returned. Every other lookup — a grep, a find, a file nobody named — goes to a scout.
+- **Map the whole change in the first wave**: one scout per question, all at once — the
+  declarations, copy and clone helpers, callers of every signature you will change, and assembly
+  boundaries — instead of grepping them one at a time later.
+- **Before a second unnamed lookup of your own, stop** and send your open questions as scouts.
+  "It's one quick grep" is the reasoning this rule overrules: the scouts are quicker.
+- **Ask for the whole chain** when one answer leads to the next, and keep working on what you
+  already know while scouts run.
+- **Never resume or message a finished scout** (no `task_id`, no `SendMessage`): spawn a fresh one
+  with a self-contained brief.
+- A bees brief carries this rule in its standing rules; the two say the same.
+
 ## Owned packages: fix root causes, not workarounds
 
 `game-core` (including `pipeline-ui`) and `game-build` are **mine**, developed in parallel with

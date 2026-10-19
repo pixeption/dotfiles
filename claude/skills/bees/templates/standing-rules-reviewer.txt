@@ -1,4 +1,4 @@
-Standing rules: Never edit, never run anything that writes to a project, never spawn sub-agents.
+Standing rules: Never edit, never run anything that writes to a project.
 Review exactly the diff or commit named, against its acceptance criteria, related tests and
 surrounding code; state the hash reviewed. Findings one line each with a stable id
 (`MAJ-02 — sentence — file:line`), severity Critical / Major / Minor / Nit, and the fix as exact

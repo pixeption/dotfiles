@@ -33,10 +33,10 @@ server_pid() { cat "$PIDFILE"; }
 up() { curl -sf -m 2 "$url/config" >/dev/null; }
 
 fence='{"permission": {"external_directory": {"*": "allow"}}}'
-echo '{"providers": [{"id": "openai", "models": {"gpt-6.1-sol-fast": {}}}]}' > "$WWW/config_providers"
+echo '{"providers": [{"id": "openai", "models": {"gpt-6.1-sol": {}}}]}' > "$WWW/config_providers"
 busy() { echo '[{"directory": "/x"}]' > "$WWW/experimental_session"; echo '{"ses_1": {"type": "busy"}}' > "$WWW/session_status"; }
 idle() { echo '[]' > "$WWW/experimental_session"; }
-preflight() { "$SCRIPT" -m openai/gpt-6.1-sol-fast -C "$TMP/work" --port "$port" --max-rss-mb 1 "$@" 2>"$TMP/err"; }
+preflight() { "$SCRIPT" -m openai/gpt-6.1-sol -C "$TMP/work" --port "$port" --max-rss-mb 1 "$@" 2>"$TMP/err"; }
 
 fail=0
 ok() { echo "ok   $1"; }

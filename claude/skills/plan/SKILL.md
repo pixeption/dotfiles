@@ -1,7 +1,7 @@
 ---
 name: plan
 description: >-
-  Formats structured Markdown plans, audits and reviews with summary tables, stable item IDs, scoring, staged items, linked replans, source links and the companion status file and log a fresh session resumes from. Use when writing, restructuring or deleting a structured Markdown deliverable with enumerated items, or when bees runs a plan.
+  Formats structured Markdown plans, audits and reviews with a checklist table, stable item IDs, scoring, staged items, sub-items, source links and the companion status file and log a fresh session resumes from. Use when writing, restructuring or deleting a structured Markdown deliverable with enumerated items, or when bees runs a plan.
 ---
 
 # Plan and audit format
@@ -27,10 +27,11 @@ Right under the title:
 changes after: the brief is the only owner-approved part of a plan and is frozen from then on. A
 plan the owner shaped in conversation says so in its header instead of a brief review.
 
-## Tables at the top
+## Checklist
 
-A summary table, then the checklist table, both right after the header — **never at the
-end**, even if a project's own `CLAUDE.md` says to end with a checklist.
+The checklist table, right after the header — **never at the end**, even if a project's own
+`CLAUDE.md` says to end with a checklist. It is the plan's only table of items: no summary table
+repeats it, and what an item fixes is its Today, not a column.
 
 Checklist columns for a plan:
 
@@ -39,26 +40,25 @@ Checklist columns for a plan:
 | `ID` | anchor link to the item's heading: `[STEP-01](#step-01--title-slug)` |
 | `Item` | one line |
 | `Pts` | score (below) |
-| `Route` | who implements it (a bees "Routing" bucket or a named agent/model); `-` outside bees |
 | `Depends` | hard dependencies only — IDs, or `-` — so scheduling does not serialize independent work |
 | `Status` | ☐ queued · 🟡 in progress · 🔴 blocked · ✅ `<count>` done — its filter's green count; the landed SHA is in the status file |
 
 An audit or review may use `ID | Severity | Item | Status` instead; the ID/anchor rules still hold.
 
-A plan holds at most ~20 checklist rows, so a fresh session reads its checklist and status file
-whole. Larger work is several plans.
+A plan aims at about 20 items, so a fresh session reads its checklist and status file whole — a
+guideline, not a cap; sub-item rows do not count toward it. Work is never split into several plans:
+a larger plan groups its work into items with sub-items ("Scoring").
 
-**Replanning an item mid-run** is the orchestrator's, on an advisor's decision: the new items go to
-`docs/plans/<plan>.<ID>.md` in this format, linked from the item's row, and share the parent's
-status file and log. The parent item is ✅ only when every row of the linked file is.
+**Replanning an item mid-run** is the orchestrator's, on an advisor's decision: the item gets new
+sub-items in place, numbered after any it has, so the plan stays one file.
 
 ## IDs and headings
 
 - Stable, category-prefixed, sequential: `BUG-01`, `PERF-01`, `STEP-01`. Never renumber; a new
-  item takes the next free number; a split item's parts are `STEP-08.1`, `STEP-08.2` ("Scoring").
-- Each item is a `### <ID> · <title>` heading. The checklist link targets GitHub's auto-slug:
+  item takes the next free number; an item's sub-items are `STEP-08.1`, `STEP-08.2` ("Scoring").
+- Each item is a `### <ID> · <title>` heading, each sub-item a `#### <ID> · <title>` under it. The checklist link targets GitHub's auto-slug:
   lowercase, spaces → `-`, most punctuation dropped, ` · ` and ` — ` each become `--`; the dot
-  goes too, so `### STEP-08.1 · Title` is `#step-081--title`.
+  goes too, so `#### STEP-08.1 · Title` is `#step-081--title`.
 - Done: `✅` in the checklist's Status cell, nowhere else. The heading never changes, so its
   anchor link stays valid.
 - A re-run of an audit adds a compact "Resolved since previous" table instead of rewriting history.
@@ -74,21 +74,33 @@ Score each item by judgment, one number for how hard and how big it is together 
 | 3 | one design choice inside one area, or routine work across many files |
 | 5 | several interacting parts or a non-obvious invariant, or a large change in one area |
 
-An item that would score 8 or 13 — an unknown cause, cross-area trade-offs, new architecture, or
-more than one agent can hold — is split at planning into items scored 5 or less, numbered after it:
-`STEP-08` becomes `STEP-08.1`, `STEP-08.2` …, which replace its row. Each is a normal checklist row
-with its own score, route, `Depends`, status and `### STEP-08.1 · <title>` section, built,
-reviewed, accepted and landed on its own; the parent's `### STEP-08` section keeps only the shared
-context. Split along a seam — contract or model first, then its callers; one screen, case or area
-at a time; a read-only diagnosis before the fix it scopes — keep code and its tests in one item,
-and never into items that need each other's uncommitted work. An item whose score you cannot name
-is a read-only diagnosis item (3) that returns the split.
+An item that scores 8 or 13 — an unknown cause, cross-area trade-offs, new architecture, or more
+than one agent can hold — keeps its row and score and is broken at planning into sub-items scored 5
+or less, `STEP-08.1`, `STEP-08.2` …, because a sub-item, not the item, is what one agent builds and
+one commit holds:
+
+- **Checklist:** an indented row under its item's, `| ↳ [STEP-08.1](#step-081--title) | … |`, with
+  its own `Pts`, `Depends` and `Status`. Its `Depends` names only what it waits on beyond its item's
+  row: a sibling or another item. The item is 🟡 once a sub-item starts and ✅ when it lands.
+- **Body:** a `#### STEP-08.1 · <title>` section under the item's: one line on what it delivers,
+  then its own Approach, Tests, Score and Done when, and a Today only where the item's does not
+  cover it. The item's section keeps the brief fields and the Today its sub-items share.
+- Each sub-item is built and accepted on its own, as one commit on its item's branch in the item's
+  lane, in order: it compiles and its filter is green there, while the item's own checks (such as
+  an unchanged corpus) need hold only when the item lands. The item lands once, squashed, after its
+  last sub-item, and is reviewed like any item, so a transition can span sub-items without
+  temporary bridges on the target.
+
+Break along a seam — contract or model first, then its callers; one screen, case or area at a time;
+a read-only diagnosis before the fix it scopes — keep code and its tests in one sub-item, and never
+into sub-items that need each other's uncommitted work. An item whose score you cannot name starts
+with a read-only diagnosis sub-item (3) that returns the rest.
 
 ## Item fields by stage
 
 A plan goes through `brief draft` (planner), `brief review` (codex, then the owner approves),
-`expand` (planner), `plan review` (codex, skipped at three items or fewer) and `ready`; bees "Lifecycle"
-holds the round caps. Each stage adds fields to its items
+`expand` (planner), `plan review` (codex, skipped at three items or fewer), `ready`, and `closed`
+at its green final gate; bees "Lifecycle" holds the round caps. Each stage adds fields to its items
 and none rewrites an earlier stage's. Fields are bold labels after the item's shared context, so an
 implementor reads its scope and its filter from the item alone. Each stage has a template to copy:
 `cat ~/.claude/skills/plan/templates/item-brief.md`,
@@ -110,7 +122,7 @@ carries its Outcome, Right and Wrong.
 | | **Tests** | one bullet per behaviour that proves the brief, edge and failure cases included, each naming its test class (new or existing) or, where no test fits, its command; then the `--filter` of those classes and their callers' (`--filter` matches classes, never a file name) |
 | | **Score** | the item's points ("Scoring") |
 | | **Done when** | the item's last line: its Tests pass and every named non-test acceptance check holds; an ordinary item's landed review is tracked separately in the status file and final gate, while a fix unit requires its clean recheck before landing (bees "Fixes") |
-| plan review | — | adds no field: codex, skipped for three items or fewer (bees "Planning a plan"), over all its items (scores, where any 8 or 13 is a High finding, then Tests against the brief, then Today and Approach against the source) |
+| plan review | — | adds no field: codex, skipped for three items or fewer (bees "Planning a plan"), over all its items (scores, where an 8 or 13 without sub-items, or a sub-item over 5, is a High finding, then Tests against the brief, then Today and Approach against the source) |
 
 - **The brief is the owner's one gate per plan**, frozen once approved. Expansion never edits it: a
   finding that would change an Outcome or an exclusion (a Wrong, or what is out of scope) goes to
@@ -132,8 +144,8 @@ Tests read output the other changes.
 
 ## Review, landing and the gate
 
-An item lands on green as **one commit** whose subject names its id, found with `git log --grep
-'<ID>'`; its landed commit is then reviewed (bees "Status and acceptance", why in nono4u's ADR-020).
+An item lands on green as **one commit** whose subject names its id (and whose body lists its
+sub-items), found with `git log --grep '<ID>'`; its landed commit is then reviewed (bees "Status and acceptance", why in nono4u's ADR-020).
 Review and landing are never their own rows. Plan, status and log edits ride in an item's landing
 or a docs-only stage, close or handoff commit; log lines are never committed alone.
 
@@ -146,7 +158,7 @@ the final gate's closes the plan, so it cannot close on a green suite alone:
 - [ ] Full suites green on the named target SHA, counts logged
 - [ ] Every covered item's review verdict, or `review: skipped, codex unavailable`, in the log
 - [ ] No open Critical or Major Fixes line; each open Minor line is a backlog row with priority `review`
-- [ ] Plan close (bees "Plan close"): report sent, plan files deleted, OpenCode server stopped or the reason it remains running reported
+- [ ] Plan close (bees "Plan close"): report sent, `Stage: closed` committed, OpenCode server stopped or the reason it remains running reported
 Done when: the close report is sent.
 ```
 
@@ -163,7 +175,7 @@ once, on a green final gate.
 
 A fresh session resumes from the checklist, `<plan>.status.md` and `tools/workspace.sh list`, and
 reads nothing else. The status file (bees "Status and acceptance") holds the stage, unfinished work
-and `## Rules`; the log is `<plan>.log.md`; both sit beside the plan, committed with it.
+only — a finished line is deleted, never struck — and `## Rules`; the log is `<plan>.log.md`; both sit beside the plan, committed with it.
 
 **Rules** are owner rules for this plan only, edited in place; a new rule names the one it replaces,
 so a reader never reconciles two. Never environment lines — machine checks are re-run per session
@@ -181,7 +193,7 @@ one test level later than it should have been):
 ```markdown
 - 2026-09-24 14:20 [STEP-05] accept: 412 green, UIStylePatchTests|UIApplyTests
 - 2026-09-24 14:40 [STEP-05] review: 3b73b3a clean (review-STEP-05-r1.txt)
-- 2026-09-24 15:02 decision: D8 STEP-07 replanned into STEP-07.1–07.3 in <plan>.STEP-07.md
+- 2026-09-24 15:02 decision: D8 STEP-07 replanned into sub-items STEP-07.1–07.3
 - 2026-09-24 16:40 [STEP-05] escape: UIStylePatchTests caught at GATE-1, fixed 9c1e2d0
 - 2026-09-24 17:10 [GATE-1] gate: 9c1e2d0 unity-suite GameCore 1204 · Game 2281 green
 ```
@@ -191,7 +203,8 @@ greps to hide superseded rounds.
 
 ## Deleting a plan
 
-A plan is deleted at its close (bees "Plan close").
+A plan is never deleted at its close: it stays, `Stage: closed`, until the owner asks to delete it,
+because its log and results are the record of what it measured and decided.
 "Delete a plan" means the plan **and every file that travels with it**: `<plan>.md`,
 `<plan>.log.md`, `<plan>.status.md`, any other `<plan>.*` beside it, and the gitignored `.work/` — without asking about
 each one. List what you deleted and say that `.work/` is not recoverable, since it is gitignored.

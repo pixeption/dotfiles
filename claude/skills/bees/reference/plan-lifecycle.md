@@ -29,7 +29,7 @@ fixes, never a round 3.
    `owner: approve the brief` line; the owner's approval writes `**Brief approved:**`, and the
    brief is frozen.
 3. `expand`: once per plan, over all its items (`--kind plan-expand`): Today, Approach, Tests,
-   Score (an 8 or 13 split into items ≤ 5), Done when — once the work it builds on has landed, so
+   Score (an 8 or 13 broken into sub-items ≤ 5), Done when — once the work it builds on has landed, so
    they are read from the tree the items will change.
 4. `plan review`: skipped when the plan has three items or fewer (GATE rows not counted).
    Otherwise codex round 1 (`codex-review` "Planning reviews under bees"), checking the Tests against
@@ -78,7 +78,7 @@ turns every external directory into an unanswered ask, denies a newly allowed on
 model id that exists:
 
 ```sh
-~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-6.1-sol-fast -C <repo the unit edits> --repo <each other repo the unit reads or edits>...
+~/.claude/skills/codex-implementor/scripts/opencode-preflight -m openai/gpt-6.1-sol -C <repo the unit edits> --repo <each other repo the unit reads or edits>...
 ```
 
 Exit 0 = the server is up, carries the fence, lists the model, and every `--repo` outside `-C` is
@@ -97,17 +97,16 @@ handed back and exited:
 2. Stop the OpenCode server only when no session is busy and no client is attached (the
    preflight's busy check, then its `pkill` line; `codex-round stop-server` once it exists);
    otherwise record why it remains running.
-3. Delete the gitignored `<plan>.work/` and record that it is not recoverable.
-4. Send the report.
-5. Make the one close commit by path, deleting `<plan>.md`, `.log.md`, `.status.md` and every
-   other tracked `<plan>.*`, with the report in the body. Subject:
-   `docs(plans): close <plan> — <one clause>`.
+3. Send the report.
+4. Make the one close commit by path: the status file's `Stage: closed` and the report under its
+   `## Report`, the report in the body too. Subject: `docs(plans): close <plan> — <one clause>`.
 
-Before step 5, Now names the next unfinished close step; after it no close action remains, and
+The plan's files and its `.work/` stay until the owner asks to delete them (`plan` skill "Deleting
+a plan"). Before step 4, Now names the next unfinished close step; after it no close action remains, and
 the close commit is the durable completion record.
 
 The report (about 10 lines) comes from the checklist, the status file and the log: the items
 landed with their SHAs (`git log --grep '<ID>'`); the findings and their fix units (the log's
-`review:` lines, the struck Fixes lines); the backlog rows added with priority `review`; the
+`review:` lines, the fix units' recheck `review:` lines); the backlog rows added with priority `review`; the
 rework count — findings whose fix changed an item that already depended on the faulty one and had
 landed; and whether the server was stopped or why it remains running.

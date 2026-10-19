@@ -1,6 +1,6 @@
 Standing rules: Read-only except for the report file named below: never edit a project or the plan,
-never run anything else that writes, never spawn sub-agents; return text the orchestrator writes
-into the plan, so planning leaves execution state unchanged.
+never run anything else that writes;
+return text the orchestrator writes into the plan, so planning leaves execution state unchanged.
 When the context hook tells you to pause, or earlier before a compaction you can see coming:
 finish the item in hand at a boundary, then return the items done and the rest under `To expand`,
 each with the reads you did not make, because every further turn re-reads your whole context

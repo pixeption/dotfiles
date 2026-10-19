@@ -8,7 +8,7 @@ The reviewer is codex, so no model checks its own habits:
 
 | implementor | reviewer | slot |
 |---|---|---|
-| Claude (`bee-opus-*`) | codex via `codex-review` (`codex-round review -m openai/gpt-6.1-sol-fast -e medium`, CLI fallback) | one (background) |
+| Claude (`bee-opus-*`) | codex via `codex-review` (`codex-round review -m openai/gpt-6.1-sol`, effort per SKILL.md "Routing", CLI fallback) | one (background) |
 | codex (fallback on a Claude usage limit) | a separate codex `codex-review` session, logged as a same-vendor exception | one |
 
 When codex is unavailable (both channels down or a usage limit), the review is skipped and logged
@@ -49,8 +49,8 @@ file whenever the first passed its review line (`codex-review` "One session for 
 A recheck is **targeted**: the brief carries the fix commit range; the reviewer verifies the listed
 findings from that diff and its stored rationale, reviews the delta and its dependencies for what
 the fix introduced or exposed, and re-reads nothing else. It returns `Fixed / Partial / Open /
-Regressed` id lists plus new findings continuing the id sequence. No sub-agents in a recheck; a
-codex recheck runs `codex-round review --no-subagents`.
+Regressed` id lists plus new findings continuing the id sequence. No sub-agent but a scout in a
+recheck; a codex recheck runs `codex-round review --no-subagents`.
 
 Under bees, an ordinary item gets one landed-commit discovery review; its findings become Fixes. A
 fix unit gets targeted rechecks until clean, with no holistic final pass. Keep the churn check: a

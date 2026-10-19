@@ -4,12 +4,12 @@
 # way (round-lib.sh) and leave the same files.
 #
 #   codex-round <implement|run|review|advise> -C <dir> -p <prompt-file> -o <out-file> [-u <unit>]...
-#               [--repo <dir>]... [-m openai/gpt-6.1-sol-fast] [-e medium] [-s <session>]
+#               [--repo <dir>]... [-m openai/gpt-6.1-sol] [-e medium] [-s <session>]
 #               [--no-subagents] [--title <t>] [--port 4096|--url <url>]
 #
 # Jobs: implement and run edit in place (OpenCode's default agent with --auto; CLI
 # danger-full-access, since they run in a claimed lane and drive Unity). review must end in
-# APPROVE/CHANGES_REQUIRED (agent review-discovery, review-followup with --no-subagents); advise is
+# APPROVE/CHANGES_REQUIRED (agent review-discovery, review-followup with --no-subagents: scouts only); advise is
 # the same read-only round without the verdict (agent review-followup); both CLI read-only.
 # -o is taken verbatim and refused when it already holds a round. -u labels the failed-round
 # `BEES: results=<unit>:blocked:-` line. --repo is a sibling the round touches outside -C, checked
@@ -97,7 +97,7 @@ case "$job" in
   *) die 2 "usage: codex-round <implement|run|review|advise> -C <dir> -p <prompt-file> -o <out-file> … (see --help)" ;;
 esac
 
-model="openai/gpt-6.1-sol-fast"   # the owner's default: the priority tier
+model="openai/gpt-6.1-sol"   # standard tier: fast (priority) mode is off; pass -m openai/gpt-6.1-sol-fast to opt in
 effort="medium"
 workdir=""; promptfile=""; outfile=""; session=""; port="4096"; url=""; title=""; subagents=1
 units=(); repos=()
@@ -133,7 +133,7 @@ case "$job" in
     role="$job"; sandbox=read-only
     agent=review-followup; [ "$job" = advise ] || [ -z "$subagents" ] || agent=review-discovery
     continue_line=120000      # a review resume rereads findings, not the repo: past the implementor's 100k
-    [ -n "$subagents" ] || continue_line=150000 ;;   # no sub-agents to brief, so the session may grow further
+    [ -n "$subagents" ] || continue_line=150000 ;;   # only scouts to brief, so the session may grow further
 esac
 
 outfile="$(mkdir -p "$(dirname "$outfile")" && cd "$(dirname "$outfile")" && pwd -P)/$(basename "$outfile")"
@@ -193,10 +193,10 @@ prompt="$(cat "$promptfile")"
 ${prompt}"
 
 if [ "$channel" = opencode ]; then
-  # The edit tool must be denied by the live server's agent (task too for review-followup): a server
-  # started before the config change would otherwise let a reviewer edit.
+  # The edit tool must be denied by the live server's agent (every sub-agent but scout too for
+  # review-followup): a server started before the config change would otherwise let a reviewer edit.
   [ -z "$agent" ] || curl -sf -m 10 "${url}/config" | jq -e --arg a "$agent" '
-      .agent[$a].permission.edit == "deny" and ($a != "review-followup" or .agent[$a].permission.task == "deny")' >/dev/null ||
+      .agent[$a].permission.edit == "deny" and ($a != "review-followup" or .agent[$a].permission.task == {"*": "deny", "scout": "allow"})' >/dev/null ||
     die 1 "server at ${url} lacks the required ${agent} permissions (started before the config change?); restart opencode serve and rerun"
   echo $$ > "${outfile}.pid"; printf '%s\n' "$workdir" > "${outfile}.cwd"; printf '%s\n' "$url" > "${outfile}.url"
   say "WATCH LIVE -> opencode attach ${url} --dir ${workdir}"

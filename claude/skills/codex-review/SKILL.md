@@ -15,7 +15,7 @@ default model `gpt-6.1-sol`.
 
 **OpenCode by default** (codex-implementor's `scripts/codex-round review`): `opencode run --agent review-discovery`
 against one persistent `opencode serve`, or `--agent review-followup` under `--no-subagents`. The
-edit tool is hard-denied, and `review-followup` also denies the task tool; Bash stays enabled, so
+edit tool is hard-denied, and `review-followup` also denies every sub-agent but `scout` (luna); Bash stays enabled, so
 read-only shell use is instruction-enforced — the reviewer can run a suite or a `unity command` to
 *check* a claim. The session is server-held with no TTL, which matters because applying findings
 between rounds routinely outlasts the CLI's 30-minute cache. **Read
@@ -32,7 +32,7 @@ limit): bees logs `review: skipped, codex unavailable`, per bees `reference/revi
 ```bash
 # round 1 — write the prompt to a file first ("Prompt shape")
 ~/.claude/skills/codex-implementor/scripts/codex-round review \
-  -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o "$W/review-<unit>-r1.txt"   # default openai/gpt-6.1-sol-fast / medium
+  -C <repo> -p "$T/r1-prompt.txt" -u <unit> -o "$W/review-<unit>-r1.txt"   # default openai/gpt-6.1-sol / medium
 # follow-up or recheck — same session, --no-subagents
 ~/.claude/skills/codex-implementor/scripts/codex-round review \
   -C <repo> -p "$T/r2-prompt.txt" -u <unit> -o "$W/review-<unit>-r2.txt" \
@@ -68,8 +68,8 @@ Two stages, each **one discovery round at `-e high`** and **at most one targeted
 - **Brief review**, for every plan, before the owner approves the brief: it checks consistency,
   dependencies and scores.
 - **Plan review** of the expansion (bees `reference/review.md` "Once per unit"), skipped when the
-  plan has three items or fewer (GATE rows not counted). It checks scores first — any item scored 8
-  or 13 is a High finding, since such an item is split at planning (`plan` skill "Scoring") — then
+  plan has three items or fewer (GATE rows not counted). It checks scores first — an item scored 8
+  or 13 without sub-items, or a sub-item over 5, is a High finding (`plan` skill "Scoring") — then
   the expansion against the owner-approved brief (`plan` skill "Item fields by stage"): each Outcome
   and Right is proven by a Tests bullet, no bullet falls outside the brief, none contradicts a
   Wrong, and Today and Approach match the source they name.
@@ -152,7 +152,7 @@ Three kinds of round, one session, no round cap — the loop ends on `APPROVE` f
    small). On a large artifact, give it explicit lenses — source compatibility,
    sequencing/dependencies, testability, completeness — and let its sub-agents divide them.
    Independent parallel reviews are separate loops; never merge their histories or id sequences.
-2. **Follow-up rounds — targeted, delta-only, no sub-agents.** One after any `CHANGES_REQUIRED`,
+2. **Follow-up rounds — targeted, delta-only, scouts only.** One after any `CHANGES_REQUIRED`,
    once you have dispositioned every Open or Partial finding.
 3. **Final pass — holistic.** Always the last word; work proceeds or is accepted on its `APPROVE`.
 
@@ -178,7 +178,7 @@ findings were only rejected — with each disposition, the repo SHA, and whether
 For an uncommitted artifact, snapshot it after each round (`cp <artifact> "$W/<unit>-reviewed.md"`)
 and send `diff -u` against the snapshot: without a diff the reviewer rereads the whole artifact.
 
-The reviewer does two jobs in the existing session, spawning nothing: **verify** each Open or
+The reviewer does two jobs in the existing session, spawning only scouts: **verify** each Open or
 Partial finding (Fixed / Partial / Open / Regressed; settled findings stay settled unless the
 change invalidates why), and **review the delta** and its dependencies for what the fixes
 introduced or exposed — no general audit of unchanged areas. An unusually large independent audit

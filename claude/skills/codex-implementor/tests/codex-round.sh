@@ -60,9 +60,9 @@ serve "$TMP/www" "$TMP/port" 0; srv=$!
 live="http://127.0.0.1:$(cat "$TMP/port")"
 dead="http://127.0.0.1:$(free_port)"
 fence='{"permission": {"external_directory": {"*": "allow"}},
-  "agent": {"review-discovery": {"permission": {"edit": "deny"}}, "review-followup": {"permission": {"edit": "deny", "task": "deny"}}}}'
+  "agent": {"review-discovery": {"permission": {"edit": "deny"}}, "review-followup": {"permission": {"edit": "deny", "task": {"*": "deny", "scout": "allow"}}}}}'
 echo "$fence" > "$TMP/www/config"
-echo '{"providers": [{"id": "openai", "models": {"gpt-6.1-sol-fast": {}}}]}' > "$TMP/www/config_providers"
+echo '{"providers": [{"id": "openai", "models": {"gpt-6.1-sol": {}}}]}' > "$TMP/www/config_providers"
 echo '[]' > "$TMP/www/permission"
 echo 'Brief.' > "$TMP/prompt"
 
@@ -100,7 +100,7 @@ for job in implement run review advise; do
   sandbox=danger-full-access; case $job in review|advise) sandbox=read-only ;; esac
   if round 0 "$job" --url "$dead" && [ "$(cat "$out")" = "$answer" ] && artifacts && [ ! -e "$out.url" ] &&
      [ "$(jq .context_tokens "$out.usage")" = 15 ] &&
-     grep -q -- "--sandbox $sandbox .*-m gpt-6.1-sol -c model_reasoning_effort=medium -c service_tier=priority " "$STUB_CALLS/codex" &&
+     grep -q -- "--sandbox $sandbox .*-m gpt-6.1-sol -c model_reasoning_effort=medium -c service_tier=default " "$STUB_CALLS/codex" &&
      grep -q '^serve' "$STUB_CALLS/opencode"
   then ok "$job on the CLI when the server cannot start"; else bad "$job on the CLI" "$(head -1 "$out" 2>/dev/null)"; fi
 done

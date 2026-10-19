@@ -29,5 +29,6 @@ it needs as `path:start-end`.>
 <paths, verbatim, or "none">
 
 <`cat` ~/.claude/skills/bees/templates/standing-rules-implementor.txt here, then
+the `## Scouts` section of ~/.claude/CLAUDE.md (`sed -n '/^## Scouts/,/^## [^S]/p'`), then
 ~/.claude/skills/bees/templates/return-implementor.txt with <report> filled as
 $W/report-<unit>-impl-r<N>.md; each once, never retyped.>
