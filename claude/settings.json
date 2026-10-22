@@ -1,6 +1,6 @@
 {
   "env": {
-    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/bees-budget"
+    "CLAUDE_CODE_PLUGIN_DIRS": "~/.claude/mods/bees-budget:~/.claude/mods/image-preview"
   },
   "attribution": {
     "commit": "",
