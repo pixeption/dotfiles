@@ -15,6 +15,22 @@
     "defaultMode": "auto"
   },
   "model": "sonnet",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/skills/handoff/scripts/context-nudge"
+          },
+          {
+            "type": "command",
+            "command": "~/.claude/skills/bees/scripts/bee-context-nudge"
+          }
+        ]
+      }
+    ]
+  },
   "enableArtifact": false,
   "statusLine": {
     "type": "command",
@@ -46,7 +62,7 @@
   },
   "autoCompactWindow": 600000,
   "skipWorkflowUsageWarning": true,
-  "theme": "dark",
+  "theme": "auto",
   "autoCompactEnabled": true,
   "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,

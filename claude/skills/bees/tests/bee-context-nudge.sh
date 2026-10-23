@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Offline test for bee-context-nudge, the implementor bees' PostToolUse context hook. Each case builds
+# Offline test for bee-context-nudge, every sub-agent's PostToolUse context hook. Each case builds
 # a project dir with a main transcript and <sid>/subagents/agent-<id>.jsonl in the real shape (several
 # lines per message.id, one repeated usage), pipes a hook input to the script with its own TMPDIR and
 # asserts the exact hookSpecificOutput. Lock cases hold the per-agent lock from a helper process that
@@ -33,9 +33,9 @@ call() { # call <agent|""> [VAR=value …]: runs the hook; sets $out and $code
       + if $a == "" then {} else {agent_id: $a, agent_type: "bee-opus-low"} end' \
     | env TMPDIR="$case_dir/tmp" "$@" "$SCRIPT" 2>&1); code=$?
 }
-warn() { jq -nc --arg t "Context at $1k: finish the current step; if more than a few steps of this unit remain, plan to pause at $2k." \
+warn() { jq -nc --arg t "Context at $1k: finish the current step; if more than a few steps of your task remain, plan to stop at $2k." \
   '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $t}}'; }
-pause() { jq -nc --arg t "Context at $1k: stop at the next safe point and pause as your standing rules say." \
+pause() { jq -nc --arg t "Context at $1k: stop at the next safe point and return what is done and what remains, or pause as your standing rules say if you have them." \
   '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $t}}'; }
 expect() { # expect <label> <want-json|"">: compares the last call's output and exit 0
   local got; got=$(jq -c . <<<"$out" 2>/dev/null || echo "$out")
@@ -54,7 +54,7 @@ open(sys.argv[2], "w").write("ready\n"); open(sys.argv[3]).read()' "$(lock_file 
   read -r _ < "$case_dir/ready"
 }
 
-new_case orchestrator; respond A 210000
+new_case orchestrator; respond A 230000
 call ""; expect orchestrator ""
 
 new_case no-transcript
@@ -62,68 +62,68 @@ call A; expect no-transcript ""
 if [ -z "$(ls -A "$case_dir/tmp")" ]; then echo "ok   no-transcript no state file"; else echo "FAIL no-transcript left $(ls "$case_dir/tmp")"; fail=1; fi
 
 new_case boundaries
-respond A 199000; call A; expect "dry-run 199k" ""
-respond A 199999; call A; expect "boundaries 199,999" ""
-respond A 200000; call A; expect "boundaries 200,000" "$(warn 200 250)"
-respond A 249999; call A; expect "boundaries 249,999" ""
-respond A 250000; call A; expect "boundaries 250,000" "$(pause 250)"
+respond A 184000; call A; expect "dry-run 184k" ""
+respond A 184999; call A; expect "boundaries 184,999" ""
+respond A 185000; call A; expect "boundaries 185,000" "$(warn 185 220)"
+respond A 219999; call A; expect "boundaries 219,999" ""
+respond A 220000; call A; expect "boundaries 220,000" "$(pause 220)"
 
 new_case one-response
-respond A 210000 3; call A; expect one-response "$(warn 210 250)"
+respond A 200000 3; call A; expect one-response "$(warn 200 220)"
 
 new_case warn-once
-respond A 210000; call A; expect "warn-once first" "$(warn 210 250)"
-respond A 210000; call A; expect "warn-once second" ""
+respond A 200000; call A; expect "warn-once first" "$(warn 200 220)"
+respond A 200000; call A; expect "warn-once second" ""
 
 new_case pause-once
-respond A 210000; call A; expect "pause-once 210k" "$(warn 210 250)"
-respond A 260000; call A; expect "pause-once 260k" "$(pause 260)"
-respond A 260000; call A; expect "pause-once 260k again" ""
+respond A 200000; call A; expect "pause-once 200k" "$(warn 200 220)"
+respond A 230000; call A; expect "pause-once 230k" "$(pause 230)"
+respond A 230000; call A; expect "pause-once 230k again" ""
 
 new_case jump
-respond A 260000; call A; expect "jump first" "$(pause 260)"
-respond A 260000; call A; expect "jump second" ""
+respond A 230000; call A; expect "jump first" "$(pause 230)"
+respond A 230000; call A; expect "jump second" ""
 
 new_case lagging
 respond A 140000; call A; expect "lagging 140k" ""
-respond A 210000; call A; expect "lagging 210k" "$(warn 210 250)"
+respond A 200000; call A; expect "lagging 200k" "$(warn 200 220)"
 
 new_case per-agent
-respond A 260000; respond B 210000
-call A; expect "per-agent A" "$(pause 260)"
-call B; expect "per-agent B" "$(warn 210 250)"
+respond A 230000; respond B 200000
+call A; expect "per-agent A" "$(pause 230)"
+call B; expect "per-agent B" "$(warn 200 220)"
 
 new_case thresholds
 respond A 40000; call A BEE_NUDGE_WARN=30000 BEE_NUDGE_PAUSE=45000; expect thresholds "$(warn 40 45)"
 
 new_case owner-exited
-respond A 260000; hold_lock A exit; wait "$holder"
-call A; expect "owner-exited next call" "$(pause 260)"
+respond A 230000; hold_lock A exit; wait "$holder"
+call A; expect "owner-exited next call" "$(pause 230)"
 call A; expect "owner-exited later call" ""
 
 new_case owner-running
-respond A 260000; hold_lock A
+respond A 230000; hold_lock A
 before=$(state); call A; expect owner-running ""
 if [ "$(state)" == "$before" ]; then echo "ok   owner-running state unchanged"; else echo "FAIL owner-running changed state"; fail=1; fi
 echo > "$case_dir/release"; wait "$holder"
 
 new_case contended
-respond A 260000; hold_lock A
+respond A 230000; hold_lock A
 call A; expect "contended first" ""
 call A; expect "contended second" ""
 echo > "$case_dir/release"; wait "$holder"
-call A; expect "contended after release" "$(pause 260)"
+call A; expect "contended after release" "$(pause 230)"
 call A; expect "contended later" ""
 
 new_case no-warn-after-pause
-respond A 260000; call A; expect "no-warn-after-pause pause" "$(pause 260)"
-respond A 210000; call A; expect "no-warn-after-pause 210k" ""
+respond A 230000; call A; expect "no-warn-after-pause pause" "$(pause 230)"
+respond A 200000; call A; expect "no-warn-after-pause 200k" ""
 
 # SA-02 contract: the hook's pause text defers to the standing rules and names no role's outcome, so
-# every implementor brief must define a hook-triggered pause with Outcome: Paused and a paused BEES
+# every implementor brief must define a hook-triggered pause with Outcome: Handoff and a handoff BEES
 # entry, and no context figure.
 printf '# P\n\n### X-01 · unit\n\nBody.\n' > "$TMP/plan.md"
-pause_text=$(pause 250 | jq -r .hookSpecificOutput.additionalContext)
+pause_text=$(pause 200 | jq -r .hookSpecificOutput.additionalContext)
 for kind in impl fix; do
   if [ $kind == impl ]; then where=(--plan "$TMP/plan.md"); in="Objective: contract."
   else where=(--work "$TMP/plan.work"); in=$'Fixes: x\nFilter: f\nReview: r'; fi
@@ -132,7 +132,7 @@ for kind in impl fix; do
   missing=""
   [[ $pause_text == *"your standing rules"* && $pause_text != *"Outcome"* ]] || missing+=" hook-text"
   grep -q "^Standing rules:" "$brief" || missing+=" standing-rules"
-  tr '\n' ' ' < "$brief" | grep -q 'When the context hook tells you to pause, .*report `Outcome: Paused`, end with `BEES: results=<unit>:paused:-' || missing+=" hook-pause"
+  tr '\n' ' ' < "$brief" | grep -q 'When the context hook tells you to pause, .*report `Outcome: Handoff`, end with `BEES: results=<unit>:handoff:<handoff file>' || missing+=" hook-pause"
   if grep -Eo '[0-9]+k\b' "$brief"; then missing+=" context-figure"; fi
   if [ -z "$missing" ]; then echo "ok   brief-contract $kind"; else echo "FAIL brief-contract $kind:$missing"; fail=1; fi
 done

@@ -157,7 +157,7 @@ the final gate's closes the plan, so it cannot close on a green suite alone:
 ```text
 - [ ] Full suites green on the named target SHA, counts logged
 - [ ] Every covered item's review verdict, or `review: skipped, codex unavailable`, in the log
-- [ ] No open Critical or Major Fixes line; each open Minor line is a backlog row with priority `review`
+- [ ] No open Critical or Major Fixes line
 - [ ] Plan close (bees "Plan close"): report sent, `Stage: closed` committed, OpenCode server stopped or the reason it remains running reported
 Done when: the close report is sent.
 ```

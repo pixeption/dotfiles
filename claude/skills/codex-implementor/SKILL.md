@@ -31,7 +31,7 @@ Exit 0 finished · 1 failed or refused · 2 usage · 3 codex unavailable; then r
 | sol **(default, standard tier)** | `openai/gpt-6.1-sol` / `gpt-6.1-sol` (`-fast` suffix opts into the priority tier) | **medium** |
 | luna | `openai/gpt-6-luna` / `gpt-6-luna` | max |
 
-A round may spawn only the `scout` sub-agent (luna xhigh, read-only, no limit, OpenCode only — the CLI channel has
+A round may spawn only the `scout` sub-agent (luna-fast medium, read-only, no limit, OpenCode only — the CLI channel has
 none). Raise `-e` only when capability changes the outcome: `low|medium|high|xhigh|max` (codex also `ultra`).
 
 ## Resume or fresh

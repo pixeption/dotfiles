@@ -24,8 +24,7 @@ The lane is `reuse`d before dispatch because the bee only claims it.
   `brief draft` and `expand` stages ("Item fields by stage"), each adding its stage block
   (`templates/planner-brief.txt`, `templates/planner-expand.txt`), so one block owns each stage.
 - A `--plan` unit without a `### <ID> · ` section fails the run, so every pointer resolves.
-- A run (a gate's suites, a baseline) is a codex run (SKILL.md "Routing"); briefed to a Claude bee
-  when codex is unavailable, it is `--kind run --units GATE-<n>`, stdin naming the slot, target SHA
+- A run (a gate's suites, a baseline) is `--kind run --units GATE-<n>`, stdin naming the slot, target SHA
   and commands, carrying codex-implementor's `templates/run-contract.md` and no plan section.
 - `--kind fix` and `--kind recheck` take `--work <plan>.work`, since a fix unit has no section. A
   review-finding fix's stdin carries `Fixes:`, `Review:` (report, finding ids) and `Filter:` (the
@@ -36,18 +35,18 @@ The lane is `reuse`d before dispatch because the bee only claims it.
   filled by `--set`; an unfilled one fails the run.
 - Light mode: `--work <scratchpad dir>` instead of `--plan`, with the unit's acceptance and all
   required verification on stdin, because no plan section supplies them.
-- A codex brief follows codex-implementor's `templates/brief-implement.md`, or `brief-run.md`.
 
 ## Continue or spawn
 
 - **Continue** while the mod allows it and the next unit routes to the same agent and area:
-  SendMessage to a Claude bee, `-s <session>` to a codex session; the brief is the delta.
-- **Re-brief inside the cache clock or not at all** (5 minutes Claude, 30 codex, from its report):
+  SendMessage to a Claude bee; the brief is the delta.
+- **Re-brief inside the cache clock or not at all** (5 minutes, from its report):
   after it the next turn re-writes the whole context, so decide and answer in the same turn.
 - **Spawn fresh** otherwise: the mod refuses the agent, another agent, area, resource or repo, or a
   review of its own work. A retiring holder's last message may start `[bees:handover]` to pass the
-  refusal. A paused agent's successor is a fresh agent on the same item, briefed from its pause
-  report — never a replan or a split.
+  refusal. A `handoff` result's successor is a fresh agent of the same type on the same unit at the next
+  round, holding its slot by handover, briefed with `Piece: continue from <handoff file>` — never a
+  replan, a split or a decision taken for it.
 
 ## Scout briefs
 
@@ -78,13 +77,9 @@ because a lane must never wait on the owner. Reuse a matching `decision:` line f
 unless new evidence changes the question; otherwise, in order:
 
 1. `bee-opus-high`, read-only, `--kind advise`.
-2. If it cannot decide, Sol on the same brief: `codex-round advise -m openai/gpt-6.1-sol -e
-   high` in a fresh session (never `-s` into the implementor or review loop), out-file
-   `review-<unit>-advice-r<N>.txt`, so `bees-watch --dir` sees it.
-3. If neither decides: a `Blocked` `owner:` line; the lane is released or handed to the next ready
+2. If it cannot decide: a `Blocked` `owner:` line; the lane is released or handed to the next ready
    item, and other work continues.
 
 An advisor decides only within the approved brief and the owner's rules; a question needing either
-changed comes back `Cannot decide`. Log each answer `- <date> [<ID>] decision: <answer> (advisor
-<opus|sol>, <report or out-file>)`, then re-brief per "Continue or spawn" with the STOP report and
-the decision. A unit blocked again after an advised way through goes to the next step of the chain.
+changed comes back `Cannot decide`. Log each answer `- <date> [<ID>] decision: <answer> (<report>)`, then re-brief per "Continue or spawn" with the STOP report and
+the decision. A unit blocked again after an advised way through gets a `Blocked` `owner:` line.

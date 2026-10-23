@@ -4,12 +4,11 @@ Read before briefing any reviewer or choosing one.
 
 ## Pairing
 
-The reviewer is codex, so no model checks its own habits:
+Codex only reviews (SKILL.md "Routing"), so no model checks its own habits:
 
 | implementor | reviewer | slot |
 |---|---|---|
 | Claude (`bee-opus-*`) | codex via `codex-review` (`codex-round review -m openai/gpt-6.1-sol`, effort per SKILL.md "Routing", CLI fallback) | one (background) |
-| codex (fallback on a Claude usage limit) | a separate codex `codex-review` session, logged as a same-vendor exception | one |
 
 When codex is unavailable (both channels down or a usage limit), the review is skipped and logged
 `review: skipped, codex unavailable`.

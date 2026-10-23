@@ -44,7 +44,7 @@ test('a warm bee at the continue line is refused', async ($, on) => {
 })
 
 test('a bee at the retire line is refused', async ($, on) => {
-  hive(on, { tokens: 250_000 })
+  hive(on, { tokens: 200_000 })
   await stepAs($, 'a1')
   const sent = await send($)
   expect(sent.isDelivered).toBe(false)
@@ -54,13 +54,13 @@ test('a bee at the retire line is refused', async ($, on) => {
 })
 
 test('a bee just under the retire line gets the continue-line refusal', async ($, on) => {
-  hive(on, { tokens: 249_999 })
+  hive(on, { tokens: 199_999 })
   await stepAs($, 'a1')
   expect((await send($)).reason).toMatch(/continue line/)
 })
 
 test('a handover message reaches a bee past the retire line', async ($, on) => {
-  hive(on, { tokens: 250_000 })
+  hive(on, { tokens: 200_000 })
   await stepAs($, 'a1')
   expect((await send($, '[bees:handover] stop at a safe point')).isDelivered).toBe(true)
 })

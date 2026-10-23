@@ -106,7 +106,7 @@ b=$(brief --plan "$PLAN" --units U-03 --kind impl)
 has "impl rules treat the score as an estimate" "$b" "$ESTIMATE" 1
 expect_pause impl "$b"
 has "impl rules stop only to the advisors" "$b" "report \`Outcome: Needs decision\` (\`Blocked\` after two attempts)" 1
-has "impl return vocabulary has no replan" "$b" "<done|blocked|paused|needs-decision>" 2
+has "impl return vocabulary has no replan" "$b" "<done|blocked|handoff|needs-decision>" 2
 has "impl brief has no Sizing field" "$b" "Sizing" 0
 has "impl brief derives start and filter from the section" "$b" "start from the files and symbols its Today and Approach name" 1
 has "impl brief carries no Start at" "$b" "Start at" 0

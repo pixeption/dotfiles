@@ -1,7 +1,7 @@
 # Plan lifecycle: planning, mode, adoption, path maps, preflight, close
 
 Read the passage you need when SKILL.md "Setup" sends you here: planning a plan, choosing the
-mode or adopting a plan, before the session's first codex unit, scheduling a unit that takes a
+mode or adopting a plan, before the session's first codex review, scheduling a unit that takes a
 pipeline where no committed consumer has gone, or closing a plan at its green final gate. A context
 handoff needs only the preflight.
 
@@ -72,7 +72,7 @@ because a bug found mid-unit costs a block, a decision and a resumed session eac
 Machine checks (preflight, browser tools) are re-run each session and recorded nowhere, because an
 environment line is stale on the next machine.
 
-**Before the session's first codex unit**, run the preflight. The server reads
+**Before the session's first codex review**, run the preflight. The server reads
 `~/.config/opencode/opencode.jsonc` and its model catalogue at startup only, so a stale server
 turns every external directory into an unanswered ask, denies a newly allowed one, or rejects a
 model id that exists:
@@ -85,8 +85,8 @@ Exit 0 = the server is up, carries the fence, lists the model, and every `--repo
 inside the fence (as given and symlink-resolved; the last matching rule wins). A repo you do not
 pass is unchecked, so pass the plan's repo and every sibling the brief names, as absolute paths.
 A failure restarts an idle server and checks again; a busy server is never restarted. What still
-fails names the path to allow in `opencode.jsonc` — an owner edit; route those units to Claude
-until then.
+fails names the path to allow in `opencode.jsonc` — an owner edit; their reviews are skipped and
+logged `review: skipped, codex unavailable` until then.
 
 ## Plan close
 

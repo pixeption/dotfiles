@@ -8,10 +8,6 @@ hooks:
     - hooks:
         - type: command
           command: "~/.claude/skills/bees/scripts/bee-scout-deadline"
-  PostToolUse:
-    - hooks:
-        - type: command
-          command: "BEE_NUDGE_WARN=150000 BEE_NUDGE_PAUSE=180000 ~/.claude/skills/bees/scripts/bee-context-nudge"
 ---
 
 You are a scout. Answer exactly the question in the brief, read-only: never edit, never run

@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""PostToolUse hook (bee agent frontmatter): give a sub-agent its own context reading.
+"""PostToolUse hook (settings.json, every sub-agent): give a sub-agent its own context reading.
 
 Reads the input context of the agent's last API response from
 <transcript dir>/<session_id>/subagents/agent-<agent_id>.jsonl and emits each stage once per agent:
 a warning at BEE_NUDGE_WARN, a pause instruction at BEE_NUDGE_PAUSE. A reading past the pause line
-records both stages and emits only the pause. No agent_id (the orchestrator, which has
-context-nudge) or no reading yet means no output; the next tool call retries. Parallel tool calls
+records both stages and emits only the pause. No agent_id (the main session, which has the
+handoff skill's context-nudge) or no reading yet means no output; the next tool call retries. Parallel tool calls
 run their hooks in parallel, so each step runs under a nonblocking per-agent flock and a call that
 cannot take it exits silently. State and lock live in $TMPDIR, which the OS cleans; they survive a
 hand-back because the same agent may be resumed.
-  BEE_NUDGE_WARN   default 200000: leaves room to finish a step and plan the pause before 250k
-  BEE_NUDGE_PAUSE  default 250000: a resumed round here costs >2x a fresh spawn's (~0.5M vs ~0.2M)
+  BEE_NUDGE_WARN   default 185000: leaves room to finish a step and plan the stop before 220k
+  BEE_NUDGE_PAUSE  default 220000: past twice the 100k break-even, a resumed round here costs well over a fresh spawn's ~0.2M
 """
 import fcntl, json, os, pathlib, sys
 
@@ -33,9 +33,10 @@ def reading(path):
 
 def text(stage, n, pause):
     if stage == "pause":
-        return f"Context at {n // 1000}k: stop at the next safe point and pause as your standing rules say."
-    return (f"Context at {n // 1000}k: finish the current step; if more than a few steps of this unit "
-            f"remain, plan to pause at {pause // 1000}k.")
+        return (f"Context at {n // 1000}k: stop at the next safe point and return what is done and what remains, "
+                "or pause as your standing rules say if you have them.")
+    return (f"Context at {n // 1000}k: finish the current step; if more than a few steps of your task "
+            f"remain, plan to stop at {pause // 1000}k.")
 
 
 hook = json.load(sys.stdin)
@@ -45,8 +46,8 @@ if not (sid and agent and transcript):
 path = pathlib.Path(transcript).parent / sid / "subagents" / f"agent-{agent}.jsonl"
 if not path.is_file():
     sys.exit(0)
-lines = {"warn": int(os.environ.get("BEE_NUDGE_WARN", 200000)),
-         "pause": int(os.environ.get("BEE_NUDGE_PAUSE", 250000))}
+lines = {"warn": int(os.environ.get("BEE_NUDGE_WARN", 185000)),
+         "pause": int(os.environ.get("BEE_NUDGE_PAUSE", 220000))}
 base = pathlib.Path(os.environ.get("TMPDIR", "/tmp")) / f"bee-context-nudge-{sid}-{agent}"
 lock = open(f"{base}.lock", "a")
 try:

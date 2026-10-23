@@ -6,9 +6,10 @@ Read when the context hook fires.
 
 The orchestrator pays its context every turn like any agent, and compaction's summary is lossy in
 ways nobody chose. It hands off to a fresh orchestrator — one role, chained — only when its
-context runs out, when the context hook fires: the `PostToolUse` hook (`scripts/context-nudge`)
-injects "Context at <n>k: … hand off" once per session. Finish the step in hand (a landing, a
-dispatch, a consult), then hand off; running units keep running. The hook reads the transcript,
+context runs out, when the context hook fires: the global `PostToolUse` hook (handoff skill's
+`scripts/context-nudge`) injects "Context at <n>k: … hand off" once per session. Finish the step in hand (a landing, a
+dispatch, a consult) and start nothing new, but hand off only at the safe point the "Checklist"
+names; running units keep running. The hook reads the transcript,
 which can lag a turn: if it lags, act on the next.
 
 ## Checklist

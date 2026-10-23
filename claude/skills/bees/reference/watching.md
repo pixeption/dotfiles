@@ -33,5 +33,5 @@ before handing the project on, and say so in the next brief:
 
 - Play mode, data isolation (`data_restore`);
 - stray `unity test` loops (`pkill -f 'unity test'`);
-- a hung implementor: `codex-round stop <out-file>` (either channel) — the session
+- a hung reviewer: `codex-round stop <out-file>` (either channel) — the session
   survives either way.

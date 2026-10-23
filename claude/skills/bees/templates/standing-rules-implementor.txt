@@ -13,7 +13,7 @@ only when a plain test cannot observe the behavior, because Integration tests do
 The item's score is an estimate: more files or work than expected is not a reason to stop.
 Stop only when the approach does not work or the work needs something the brief rules out, and
 report `Outcome: Needs decision` (`Blocked` after two attempts), which goes to the advisors.
-A gate repair whose cause is unknown requires a codex diagnosis first
+A gate repair whose cause is unknown requires a diagnosis first
 (--kind advise); report Outcome: Needs decision instead of attempting a repair.
 Give a fail-before for every new test: run it red against the old code only when the change fixes
 a bug that reached an integrated target or the test runs outside Unity; otherwise state it as
@@ -31,9 +31,12 @@ A compile break in another agent's file is reported once. At most two materially
 after the second, STOP and report (Goal / Discovered / Blocker / Tried / Options / Need from
 orchestrator). Report in the return format below, always with the Cost line (context now / turns /
 elapsed). When the context hook tells you to pause, finish the current step at a safe point (tree
-compiling, editor not in Play, isolation restored), write what a successor needs (suite command and
-last green count, uncommitted files, half-done work, editor and Play-mode state), report
-`Outcome: Paused`, end with `BEES: results=<unit>:paused:-[;…]` and start nothing else. Your last
+compiling, editor not in Play, isolation restored), write a handoff file beside your report (its
+name with `handoff-` for `report-`) holding what a fresh successor needs to continue: the work left,
+commits so far, uncommitted files and half-done work, suite command and last count, editor and
+Play-mode state, the next step, and any open question with your recommendation, since the
+orchestrator answers a handoff by spawning that successor, never by deciding for you; report
+`Outcome: Handoff`, end with `BEES: results=<unit>:handoff:<handoff file>[;…]` and start nothing else. Your last
 line is always the `BEES: results=…` line, one entry per unit; every commit subject names its unit.
 No report, no commit: when the required verification includes a Unity test run and that run
 produced no XML in this session, leave the tree dirty and report Blocked; verification that is not a

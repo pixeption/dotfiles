@@ -1,7 +1,7 @@
 ---
 name: handoff
 description: >-
-  Spawns a fresh Claude Code session in a new kitty tab and hands it the current work as its first prompt, instead of writing a handoff document; this session stays open. Use when the user wants to "hand off", "continue in a new/fresh session", "start a clean session and keep going", or "pass this to another session".
+  Spawns a fresh Claude Code session in a new kitty tab and hands it the current work as its first prompt, instead of writing a handoff document; this session stays open. Use when the user mentions a "handoff" or wants to "hand off", "continue in a new/fresh session", "start a clean session and keep going" or "pass this to another session", or when the context hook says to hand off.
 ---
 
 # Handoff to a fresh session
@@ -9,6 +9,13 @@ description: >-
 Spawn a new interactive Claude Code session in a kitty tab whose first prompt is the handoff
 message, so it starts working at once. The user takes over the new tab; **this session stays open**
 as a fallback.
+
+## When the context hook fires
+
+A global `PostToolUse` hook ([scripts/context-nudge](scripts/context-nudge)) injects "Context at
+<n>k: … hand off" once per session, because a fresh session costs less than carrying a long context
+every turn. Finish the step in hand and start nothing new, then hand off below without asking — the
+user already chose this. A bees orchestrator follows bees reference/handoff.md "Checklist" instead.
 
 ## Prerequisites
 

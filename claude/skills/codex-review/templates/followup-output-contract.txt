@@ -1,6 +1,7 @@
 ## Fix verification
-- F24 — Fixed — why, from the updated artifact and established facts
-- F26 — Partial — what remains and the required correction
+A Fixed finding is its id and status only: no reason, no evidence. Keep Partial, Open and Regressed to one sentence.
+- F24 — Fixed
+- F26 — Partial — what remains and the required correction (one sentence)
 ## New findings
 ### F27 — Med
 Claim / Evidence / Impact / Fix (exact text)
