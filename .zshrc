@@ -39,6 +39,7 @@ alias lz=lazygit
 alias nv=nvim
 alias bu="brew upgrade"
 alias cc=claude
+alias cc2="CLAUDE_CONFIG_DIR=~/.claude-2 claude"
 alias ocs="~/.config/sh/opencode-sessions --attach"
 bindkey "^U" backward-kill-line
 # bindkey '^I' autosuggest-accept
