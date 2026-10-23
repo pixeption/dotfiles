@@ -9,13 +9,13 @@
     // itself. Bash remains available; the review prompt, not an OS sandbox, constrains it to
     // read-only commands.
     "agent": {
-        // The one sub-agent codex rounds may spawn: a read-only lookup on luna, sharing bee-scout's
+        // The one sub-agent codex rounds may spawn: a read-only lookup on luna in fast (priority) mode, sharing bee-scout's
         // prompt. Unlike bee-scout it has no time or step limit.
         "scout": {
             "mode": "subagent",
             "description": "Read-only repository lookups: maps the code a task will touch, finds where things are when you are unsure where to look, traces call paths, quotes code, groups a run's failures. Returns a compact report.",
-            "model": "openai/gpt-6-luna",
-            "variant": "xhigh",
+            "model": "openai/gpt-6-luna-fast",
+            "variant": "medium",
             "prompt": "{file:~/.claude/agents/bee-scout.md}",
             "permission": {
                 "edit": "deny",
